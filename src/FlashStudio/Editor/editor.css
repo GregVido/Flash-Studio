@@ -1,0 +1,8 @@
+html, body, #editor {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color-scheme: dark;
+  background: #121418;
+}

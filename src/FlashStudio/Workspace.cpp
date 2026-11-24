@@ -1,0 +1,1971 @@
+#include "Workspace.hpp"
+#include "CodeColors.hpp"
+#include "UiStyle.hpp"
+#include "ResourceIds.h"
+
+#include <Windows.h>
+#include <shobjidl.h>
+#include <microsoft.ui.xaml.window.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
+#include <format>
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <set>
+#include <utility>
+
+namespace studio
+{
+using namespace winrt;
+using namespace ui;
+using namespace Microsoft::UI;
+using namespace Microsoft::UI::Xaml;
+using namespace Microsoft::UI::Xaml::Controls;
+using namespace Microsoft::UI::Xaml::Controls::Primitives;
+using namespace Microsoft::UI::Xaml::Input;
+using namespace Microsoft::UI::Xaml::Media;
+using namespace Microsoft::UI::Xaml::Media::Imaging;
+using namespace Windows::Storage;
+using namespace Windows::Storage::Streams;
+using Windows::Foundation::IInspectable;
+
+namespace
+{
+constexpr std::size_t tags_per_page = 64;
+
+const std::array<std::pair<flash::Category, wchar_t>, 10> filters{{
+    {flash::Category::timeline, L'\uE81E'}, {flash::Category::scripts, L'\uE943'},
+    {flash::Category::images, L'\uEB9F'}, {flash::Category::shapes, L'\uE81E'},
+    {flash::Category::sounds, L'\uE8D6'}, {flash::Category::text, L'\uE8D2'},
+    {flash::Category::fonts, L'\uE8D2'}, {flash::Category::sprites, L'\uE819'},
+    {flash::Category::binary, L'\uE7C3'}, {flash::Category::other, L'\uE712'}
+}};
+
+HWND hwnd(const Window& window)
+{
+    HWND handle{};
+    check_hresult(window.as<IWindowNative>()->get_WindowHandle(&handle));
+    return handle;
+}
+
+fire_and_forget load_logo(BitmapImage bitmap)
+{
+    const auto module = GetModuleHandleW(nullptr);
+    const auto resource = FindResourceW(module, MAKEINTRESOURCEW(FLASH_STUDIO_LOGO), RT_RCDATA);
+    if (!resource)
+        co_return;
+    const auto handle = LoadResource(module, resource);
+    const auto* data = static_cast<const std::uint8_t*>(handle ? LockResource(handle) : nullptr);
+    if (!data)
+        co_return;
+    try
+    {
+        InMemoryRandomAccessStream stream;
+        DataWriter writer(stream);
+        writer.WriteBytes(array_view(data, data + SizeofResource(module, resource)));
+        co_await writer.StoreAsync();
+        writer.DetachStream();
+        stream.Seek(0);
+        co_await bitmap.SetSourceAsync(stream);
+    }
+    catch (const hresult_error&) {}
+}
+
+enum class DocumentFormat { uncompressed = 1, compressed, xml };
+
+std::optional<std::filesystem::path> dialog(const Window& window, bool save, std::wstring_view extension,
+    std::wstring_view suggested = {}, DocumentFormat* format = nullptr, bool folder = false, bool raster = false, bool vector = false)
+{
+    auto picker = create_instance<IFileDialog>(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog);
+    const std::wstring wildcard = L"*" + std::wstring(extension);
+    COMDLG_FILTERSPEC types[]{
+        {extension == L".swf" ? tr(L"Animation Flash") : tr(L"Fichiers correspondants"), wildcard.c_str()},
+        {tr(L"Tous les fichiers"), L"*.*"}
+    };
+    const COMDLG_FILTERSPEC movie_types[]{
+        {tr(L"SWF décompressé (FWS)"), L"*.swf"},
+        {tr(L"SWF compressé (CWS)"), L"*.swf"},
+        {tr(L"Document XML Flash Studio"), L"*.xml"}
+    };
+    const COMDLG_FILTERSPEC open_types[]{
+        {tr(L"Fichiers SWF et XML"), L"*.swf;*.xml"},
+        {tr(L"Tous les fichiers"), L"*.*"}
+    };
+    const COMDLG_FILTERSPEC image_types[]{
+        {tr(L"Image SVG"), L"*.svg"}, {tr(L"Image PNG"), L"*.png"}, {tr(L"Image BMP"), L"*.bmp"},
+        {tr(L"Image JPEG"), L"*.jpg"}, {tr(L"Image TIFF"), L"*.tiff"}
+    };
+    if (folder)
+        check_hresult(picker->SetTitle(tr(L"Choisir le dossier d’export")));
+    else if (raster)
+        check_hresult(picker->SetFileTypes(vector ? 5 : 4, image_types + (vector ? 0 : 1)));
+    else if (format)
+        check_hresult(picker->SetFileTypes(3, movie_types));
+    else if (!save && extension == L".swf")
+        check_hresult(picker->SetFileTypes(2, open_types));
+    else
+        check_hresult(picker->SetFileTypes(extension.empty() ? 1 : 2, extension.empty() ? types + 1 : types));
+    DWORD options{};
+    check_hresult(picker->GetOptions(&options));
+    check_hresult(picker->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST |
+        (save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST) | (format || raster ? FOS_STRICTFILETYPES : 0) |
+        (folder ? FOS_PICKFOLDERS : 0)));
+    if (save && !extension.empty())
+    {
+        if (!format)
+            check_hresult(picker->SetDefaultExtension(wildcard.c_str() + 2));
+        const std::wstring name(suggested);
+        check_hresult(picker->SetFileName(name.c_str()));
+        if (format)
+            check_hresult(picker->SetFileTypeIndex(static_cast<unsigned>(*format)));
+    }
+    const auto result = picker->Show(hwnd(window));
+    if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED))
+        return {};
+    check_hresult(result);
+    com_ptr<IShellItem> item;
+    check_hresult(picker->GetResult(item.put()));
+    PWSTR path{};
+    check_hresult(item->GetDisplayName(SIGDN_FILESYSPATH, &path));
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> storage(path, CoTaskMemFree);
+    std::filesystem::path destination(path);
+    if (format)
+    {
+        UINT selected{};
+        check_hresult(picker->GetFileTypeIndex(&selected));
+        *format = static_cast<DocumentFormat>(selected);
+        if (lower(destination.extension().wstring()) == L".xml")
+            *format = DocumentFormat::xml;
+    }
+    return destination;
+}
+
+bool is_abc(unsigned code) { return code == 72 || code == 82; }
+bool is_text(unsigned code) { return code == 11 || code == 33 || code == 37 || code == 77; }
+}
+
+void Workspace::start(const std::filesystem::path& initial_file, std::optional<std::size_t> initial_tag)
+{
+    ui_thread_ = GetCurrentThreadId();
+    window_ = Window();
+    window_.Title(L"Flash Studio");
+    window_.Closed([this](auto&&, auto&&)
+    {
+        closed_ = true;
+        if (source_web_)
+            source_web_.Close();
+        close_frame_player();
+        if (thumbnails_cancel_)
+            thumbnails_cancel_->store(true, std::memory_order_relaxed);
+    });
+    build();
+    for (const auto& [kind, width, height] : {std::array{ICON_BIG, SM_CXICON, SM_CYICON},
+        std::array{ICON_SMALL, SM_CXSMICON, SM_CYSMICON}})
+    {
+        if (const auto icon = LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(FLASH_STUDIO_ICON), IMAGE_ICON,
+            GetSystemMetrics(width), GetSystemMetrics(height), LR_SHARED))
+            SendMessageW(hwnd(window_), WM_SETICON, kind, reinterpret_cast<LPARAM>(icon));
+    }
+    const auto app_window = window_.AppWindow();
+    app_window.Resize({1320, 830});
+    window_.Activate();
+    if (!initial_file.empty())
+        open_file(initial_file, initial_tag);
+}
+
+void Workspace::build()
+{
+    root_ = Grid();
+    root_.RequestedTheme(ElementTheme::Dark);
+    root_.Background(brush(base));
+    root_.AllowDrop(true);
+    root_.DragOver([](auto&&, const DragEventArgs& args)
+    {
+        if (args.DataView().Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::StorageItems()))
+            args.AcceptedOperation(Windows::ApplicationModel::DataTransfer::DataPackageOperation::Copy);
+    });
+    root_.Drop([this](auto&&, const DragEventArgs& args) { drop(args); });
+    row(root_, 42, GridUnitType::Pixel);
+    row(root_);
+    row(root_);
+    row(root_, 1, GridUnitType::Star);
+    row(root_);
+
+    Border title_bar;
+    title_bar.Background(brush(base));
+    auto brand = horizontal(10);
+    brand.Margin(pad(20, 0, 0, 0));
+    brand.VerticalAlignment(VerticalAlignment::Center);
+    BitmapImage logo;
+    load_logo(logo);
+    Image header_logo;
+    header_logo.Width(24);
+    header_logo.Height(24);
+    header_logo.Source(logo);
+    brand.Children().Append(header_logo);
+    brand.Children().Append(label(L"Flash Studio", 14, primary, true));
+    title_bar.Child(brand);
+    place(root_, title_bar, 0);
+
+    Grid header;
+    header.Background(brush(panel));
+    header.Padding(pad(20, 11, 18, 11));
+    header.ColumnSpacing(16);
+    column(header, 1, GridUnitType::Star);
+    column(header, 1, GridUnitType::Auto);
+    column(header, 1, GridUnitType::Auto);
+    auto document = StackPanel();
+    document.Spacing(4);
+    file_name_ = label(tr(L"Explorateur SWF"), 19, primary, true);
+    file_info_ = label(tr(L"Ouvrez une animation Flash"), 12, secondary);
+    document.Children().Append(file_name_);
+    document.Children().Append(file_info_);
+    place(header, document, 0);
+    build_modes(header);
+
+    auto actions = horizontal(8);
+    actions.VerticalAlignment(VerticalAlignment::Center);
+    open_ = Button();
+    open_.Content(icon_label(L'\uE838', tr(L"Ouvrir"), base));
+    open_.Background(brush(accent));
+    open_.Padding(pad(14, 8, 14, 8));
+    open_.Click([this](auto&&, auto&&) { open_dialog(); });
+    build_documents();
+    save_ = Button();
+    save_.Content(icon_label(L'\uE74E', tr(L"Enregistrer sous")));
+    save_.Padding(pad(14, 8, 14, 8));
+    save_.Click([this](auto&&, auto&&) { save_movie(); });
+    save_.IsEnabled(false);
+    actions.Children().Append(open_);
+    actions.Children().Append(recent_);
+    actions.Children().Append(save_);
+    global_search_ = Button();
+    global_search_.Content(glyph(L'\uE721', 16));
+    global_search_.Padding(pad(11, 8, 11, 8));
+    global_search_.IsEnabled(false);
+    Automation::AutomationProperties::SetName(global_search_, tr(L"Rechercher dans le SWF"));
+    ToolTipService::SetToolTip(global_search_, box_value(tr(L"Rechercher dans le SWF (Ctrl+Maj+F)")));
+    global_search_.Click([this](auto&&, auto&&) { show_global_search(); });
+    actions.Children().Append(global_search_);
+    DropDownButton language_menu;
+    language_menu.Content(glyph(L'\uE774', 16));
+    language_menu.Padding(pad(9, 8, 9, 8));
+    Automation::AutomationProperties::SetName(language_menu, tr(L"Langue de l’application"));
+    ToolTipService::SetToolTip(language_menu, box_value(tr(L"Langue de l’application")));
+    MenuFlyout languages;
+    for (const auto& [choice, name] : {std::pair{Language::english, L"English"}, std::pair{Language::french, L"Français"}})
+    {
+        RadioMenuFlyoutItem item;
+        item.Text(name);
+        item.GroupName(L"FlashStudioLanguage");
+        item.IsChecked(language() == choice);
+        item.Click([this, choice](auto&&, auto&&)
+        {
+            try
+            {
+                save_language(choice);
+                if (language() != choice)
+                    status(tr(L"Langue enregistrée. Redémarrez Flash Studio pour l’appliquer."));
+            }
+            catch (const std::exception&) { status(tr(L"Impossible d’enregistrer la langue de l’application."), true); }
+        });
+        languages.Items().Append(item);
+    }
+    language_menu.Flyout(languages);
+    actions.Children().Append(language_menu);
+    place(header, actions, 0, 2);
+    place(root_, header, 1);
+
+    KeyboardAccelerator shortcut;
+    shortcut.Key(Windows::System::VirtualKey::O);
+    shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control);
+    open_.KeyboardAccelerators().Append(shortcut);
+    KeyboardAccelerator save_shortcut;
+    save_shortcut.Key(Windows::System::VirtualKey::S);
+    save_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
+    save_.KeyboardAccelerators().Append(save_shortcut);
+    KeyboardAccelerator find_shortcut;
+    find_shortcut.Key(Windows::System::VirtualKey::F);
+    find_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control);
+    find_shortcut.Invoked([this](auto&&, const KeyboardAcceleratorInvokedEventArgs& args)
+    {
+        if (!movie_ || source_session_)
+            return;
+        const auto input = mode_ == Mode::scripts ? script_search_ : mode_ == Mode::resources ? gallery_search_ : search_;
+        input.Focus(FocusState::Keyboard);
+        input.SelectAll();
+        args.Handled(true);
+    });
+    root_.KeyboardAccelerators().Append(find_shortcut);
+    KeyboardAccelerator global_shortcut;
+    global_shortcut.Key(Windows::System::VirtualKey::F);
+    global_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
+    global_search_.KeyboardAccelerators().Append(global_shortcut);
+
+    workarea_ = Border();
+    workarea_.BorderThickness(pad(0, 1, 0, 1));
+    workarea_.BorderBrush(brush(stroke));
+    Grid content;
+    const auto side_column = column(content, 246);
+    column(content, 1.42, GridUnitType::Star);
+    column(content, 1, GridUnitType::Star);
+    root_.SizeChanged([this, side_column](auto&&, const SizeChangedEventArgs& args)
+    {
+        side_column.Width({args.NewSize().Width < 975 ? 188.0 : 246.0, GridUnitType::Pixel});
+        update_layout();
+    });
+    workarea_.Child(content);
+    place(root_, workarea_, 3);
+
+    Grid sidebar;
+    sidebar.Background(brush(panel));
+    sidebar.Padding(pad(12, 19, 12, 12));
+    row(sidebar);
+    row(sidebar, 1, GridUnitType::Star);
+    sidebar_title_ = label(tr(L"Bibliothèque"), 15, primary, true);
+    sidebar_title_.Margin(pad(9, 0, 0, 13));
+    place(sidebar, sidebar_title_, 0);
+    categories_ = ListView();
+    categories_.SelectionMode(ListViewSelectionMode::Single);
+    Automation::AutomationProperties::SetName(categories_, tr(L"Catégories de tags"));
+    categories_.SelectionChanged([this](auto&&, auto&&)
+    {
+        if (refreshing_)
+            return;
+        if (mode_ == Mode::resources)
+            refresh_gallery();
+        else if (mode_ == Mode::tags)
+            refresh_tags();
+    });
+    place(sidebar, categories_, 1);
+    build_script_browser(sidebar);
+    place(content, sidebar, 0);
+
+    listing_ = Border();
+    listing_.BorderBrush(brush(stroke));
+    listing_.BorderThickness(pad(1, 0, 1, 0));
+    listing_.Background(brush(base));
+    Grid results;
+    row(results);
+    row(results);
+    row(results, 1, GridUnitType::Star);
+    row(results);
+    auto controls = StackPanel();
+    controls.Spacing(10);
+    controls.Margin(pad(17, 18, 17, 12));
+    list_count_ = label(L"Tags", 15, primary, true);
+    controls.Children().Append(list_count_);
+    search_ = TextBox();
+    search_.PlaceholderText(tr(L"Rechercher un tag…"));
+    search_.MaxLength(256);
+    Automation::AutomationProperties::SetName(search_, tr(L"Rechercher un tag"));
+    search_.TextChanged([this](auto&&, auto&&) { refresh_tags(); });
+    controls.Children().Append(search_);
+    place(results, controls, 0);
+    place(results, divider(), 1);
+    tags_ = ListView();
+    tags_.SelectionMode(ListViewSelectionMode::Single);
+    tags_.Padding(pad(7, 5, 7, 5));
+    Automation::AutomationProperties::SetName(tags_, tr(L"Tags du fichier"));
+    tags_.SelectionChanged([this](auto&&, auto&&)
+    {
+        if (refreshing_)
+            return;
+        const auto index = tags_.SelectedIndex();
+        const auto slot = page_start_ + static_cast<std::size_t>(std::max(index, 0));
+        select_tag(index >= 0 && slot < page_end_ ? std::optional{matches_[slot]} : std::nullopt);
+    });
+    place(results, tags_, 2);
+    empty_list_ = label(tr(L"Aucun tag correspondant"), 13, secondary);
+    empty_list_.Margin(pad(18, 20, 12, 0));
+    empty_list_.VerticalAlignment(VerticalAlignment::Top);
+    empty_list_.Visibility(Visibility::Collapsed);
+    place(results, empty_list_, 2);
+    auto pagination = horizontal(8);
+    pagination.Margin(pad(13, 6, 13, 10));
+    previous_page_ = Button();
+    previous_page_.Content(box_value(tr(L"Précédent")));
+    previous_page_.Click([this](auto&&, auto&&) { if (page_) show_page(page_ - 1); });
+    next_page_ = Button();
+    next_page_.Content(box_value(tr(L"Suivant")));
+    next_page_.Click([this](auto&&, auto&&) { if (page_end_ < matches_.size()) show_page(page_ + 1); });
+    page_label_ = label(L"", 12, secondary);
+    page_label_.VerticalAlignment(VerticalAlignment::Center);
+    pagination.Children().Append(previous_page_);
+    pagination.Children().Append(next_page_);
+    pagination.Children().Append(page_label_);
+    place(results, pagination, 3);
+    listing_.Child(results);
+    place(content, listing_, 0, 1);
+    build_gallery();
+    place(content, gallery_, 0, 1);
+
+    inspector_ = Grid();
+    inspector_.Background(brush(panel));
+    row(inspector_);
+    row(inspector_);
+    row(inspector_);
+    row(inspector_, 1, GridUnitType::Star);
+    Grid detail;
+    detail.Padding(pad(19, 16, 16, 13));
+    column(detail, 1, GridUnitType::Star);
+    auto info = StackPanel();
+    info.Spacing(5);
+    detail_title_ = label(tr(L"Aperçu du fichier"), 20, primary, true);
+    detail_meta_ = label(tr(L"Sélectionnez un tag pour l’inspecter"), 12, secondary);
+    info.Children().Append(detail_title_);
+    info.Children().Append(detail_meta_);
+    place(detail, info, 0);
+    export_ = DropDownButton();
+    export_.Content(box_value(tr(L"Exporter")));
+    export_.VerticalAlignment(VerticalAlignment::Center);
+    MenuFlyout options;
+    const auto add_export = [&](std::wstring_view title, Export format)
+    {
+        MenuFlyoutItem item;
+        item.Text(title);
+        item.Click([this, format](auto&&, auto&&) { export_tag(format); });
+        options.Items().Append(item);
+        return item;
+    };
+    export_asset_ = add_export(tr(L"Ressource sélectionnée"), Export::asset);
+    export_raw_ = add_export(tr(L"Contenu brut du tag"), Export::raw);
+    options.Items().Append(MenuFlyoutSeparator());
+    export_source_ = add_export(tr(L"Source ActionScript"), Export::source);
+    export_assembly_ = add_export(tr(L"Instructions désassemblées"), Export::instructions);
+    export_pcode_ = add_export(tr(L"P-code de la méthode"), Export::pcode);
+    export_graph_ = add_export(tr(L"Graphe de contrôle de la méthode (.dot)"), Export::graph);
+    convert_image_ = MenuFlyoutItem();
+    convert_image_.Text(tr(L"Exporter le visuel…"));
+    convert_image_.Click([this](auto&&, auto&&) { export_image(); });
+    options.Items().Append(convert_image_);
+    animation_export_ = MenuFlyoutSubItem();
+    animation_export_.Text(tr(L"Exporter le sprite animé"));
+    for (const auto& [title, format] : {std::pair{L"GIF…", flash::AnimationFormat::gif},
+        std::pair{tr(L"PNG animé (APNG)…"), flash::AnimationFormat::apng}, std::pair{tr(L"SVG animé…"), flash::AnimationFormat::svg}})
+    {
+        MenuFlyoutItem item;
+        item.Text(title);
+        item.Click([this, format](auto&&, auto&&) { export_animation(format); });
+        animation_export_.Items().Append(item);
+    }
+    options.Items().Append(animation_export_);
+    options.Items().Append(MenuFlyoutSeparator());
+    MenuFlyoutItem all_resources;
+    all_resources.Text(tr(L"Toutes les ressources…"));
+    all_resources.Click([this](auto&&, auto&&) { export_all(); });
+    options.Items().Append(all_resources);
+    MenuFlyoutItem batch;
+    batch.Text(tr(L"Exporter les visuels par lot…"));
+    batch.Click([this](auto&&, auto&&) { choose_visual_batch(); });
+    options.Items().Append(batch);
+    MenuFlyoutItem project;
+    project.Text(tr(L"Exporter le projet…"));
+    project.Click([this](auto&&, auto&&) { export_all(true); });
+    options.Items().Append(project);
+    export_.Flyout(options);
+    export_.IsEnabled(false);
+    actions.Children().Append(export_);
+    place(inspector_, detail, 0);
+
+    Grid bar;
+    column(bar, 1, GridUnitType::Star);
+    column(bar, 1, GridUnitType::Auto);
+    bar.Background(brush(base));
+    bar.Padding(pad(13, 8, 13, 8));
+    auto views = horizontal(3);
+    const std::wstring_view captions[]{tr(L"Détails"), L"ActionScript", L"Instructions", L"Hex", tr(L"Scène")};
+    for (std::size_t i = 0; i < tabs_.size(); ++i)
+    {
+        auto& tab = tabs_[i];
+        tab.Content(box_value(hstring(captions[i])));
+        tab.FontSize(12);
+        tab.Padding(pad(9, 6, 9, 6));
+        tab.IsChecked(i == 0);
+        tab.Click([this, i](auto&&, auto&&) { set_view(static_cast<View>(i)); });
+        views.Children().Append(tab);
+    }
+    place(bar, views, 0);
+    auto view_actions = horizontal(5);
+    replace_ = Button();
+    replace_.Content(box_value(tr(L"Remplacer…")));
+    replace_.FontSize(12);
+    replace_.Visibility(Visibility::Collapsed);
+    Automation::AutomationProperties::SetName(replace_, tr(L"Remplacer les données binaires"));
+    replace_.Click([this](auto&&, auto&&) { edit_tag(); });
+    view_actions.Children().Append(replace_);
+    source_edit_ = Button();
+    source_edit_.Content(box_value(tr(L"Éditer le code")));
+    source_edit_.FontSize(12);
+    source_edit_.Visibility(Visibility::Collapsed);
+    source_edit_.Click([this](auto&&, auto&&) { edit_class(); });
+    view_actions.Children().Append(source_edit_);
+    toggle_outline_ = ToggleButton();
+    toggle_outline_.Content(box_value(tr(L"Membres")));
+    toggle_outline_.FontSize(12);
+    toggle_outline_.IsChecked(true);
+    toggle_outline_.Click([this](auto&&, auto&&) { update_layout(); });
+    view_actions.Children().Append(toggle_outline_);
+    place(bar, view_actions, 0, 1);
+    place(inspector_, bar, 1);
+
+    abc_tools_ = Grid();
+    abc_tools_.Visibility(Visibility::Collapsed);
+    abc_tools_.Padding(pad(12, 8, 12, 2));
+    abc_tools_.ColumnSpacing(8);
+    column(abc_tools_, 1, GridUnitType::Star);
+    column(abc_tools_, 1.4, GridUnitType::Star);
+    column(abc_tools_, 1, GridUnitType::Auto);
+    abc_owner_ = ComboBox();
+    abc_owner_.PlaceholderText(tr(L"Classe ou script"));
+    abc_owner_.HorizontalAlignment(HorizontalAlignment::Stretch);
+    abc_owner_.IsTextSearchEnabled(true);
+    Automation::AutomationProperties::SetName(abc_owner_, tr(L"Classe ou script ABC"));
+    abc_owner_.SelectionChanged([this](auto&&, auto&&)
+    {
+        const auto group = abc_owner_.SelectedIndex();
+        if (refreshing_ || !abc_ || group < 0)
+            return;
+        show_abc_methods(static_cast<std::size_t>(group), {});
+        show_selection();
+    });
+    place(abc_tools_, abc_owner_, 0, 0);
+    abc_method_list_ = ComboBox();
+    abc_method_list_.PlaceholderText(tr(L"Méthode"));
+    abc_method_list_.HorizontalAlignment(HorizontalAlignment::Stretch);
+    abc_method_list_.IsTextSearchEnabled(true);
+    Automation::AutomationProperties::SetName(abc_method_list_, tr(L"Méthode ABC"));
+    abc_method_list_.SelectionChanged([this](auto&&, auto&&)
+    {
+        if (refreshing_ || !abc_)
+            return;
+        const auto group = abc_owner_.SelectedIndex(), item = abc_method_list_.SelectedIndex();
+        if (group < 0 || item < 0)
+            return;
+        abc_method_ = abc_groups_.at(static_cast<std::size_t>(group)).methods.at(static_cast<std::size_t>(item));
+        update_abc_visibility();
+        show_selection();
+    });
+    place(abc_tools_, abc_method_list_, 0, 1);
+    DropDownButton abc_actions;
+    abc_actions.Content(box_value(tr(L"Modifier ABC")));
+    MenuFlyout abc_menu;
+    edit_class_ = MenuFlyoutItem();
+    edit_class_.Text(tr(L"Éditer la classe ActionScript…"));
+    edit_class_.Click([this](auto&&, auto&&) { edit_class(); });
+    abc_menu.Items().Append(edit_class_);
+    edit_pcode_ = MenuFlyoutItem();
+    edit_pcode_.Text(tr(L"Éditer le P-code…"));
+    edit_pcode_.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::method); });
+    abc_menu.Items().Append(edit_pcode_);
+    edit_simplified_ = MenuFlyoutItem();
+    edit_simplified_.Text(tr(L"Nettoyer le P-code de la méthode…"));
+    edit_simplified_.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::simplify); });
+    abc_menu.Items().Append(edit_simplified_);
+    MenuFlyoutItem constant;
+    constant.Text(tr(L"Modifier une constante chaîne…"));
+    constant.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::pool_string); });
+    abc_menu.Items().Append(constant);
+    MenuFlyoutItem find_constant;
+    find_constant.Text(tr(L"Rechercher dans les constantes ABC…"));
+    find_constant.Click([this](auto&&, auto&&) { show_global_search(flash::SearchArea::constants); });
+    abc_menu.Items().Append(find_constant);
+    MenuFlyoutItem replace_module;
+    replace_module.Text(tr(L"Remplacer le bloc ABC…"));
+    replace_module.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::import); });
+    abc_menu.Items().Append(replace_module);
+    abc_actions.Flyout(abc_menu);
+    place(abc_tools_, abc_actions, 0, 2);
+    place(inspector_, abc_tools_, 2);
+
+    Grid preview;
+    output_ = TextBox();
+    output_.Margin(pad(12));
+    output_.FontFamily(FontFamily(L"Consolas"));
+    output_.FontSize(13);
+    output_.IsReadOnly(true);
+    output_.AcceptsReturn(true);
+    output_.TextWrapping(TextWrapping::NoWrap);
+    output_.Background(brush(base));
+    output_.BorderBrush(brush(stroke));
+    output_.Padding(pad(14));
+    ScrollViewer::SetHorizontalScrollBarVisibility(output_, ScrollBarVisibility::Auto);
+    ScrollViewer::SetVerticalScrollBarVisibility(output_, ScrollBarVisibility::Auto);
+    Automation::AutomationProperties::SetName(output_, tr(L"Contenu du tag sélectionné"));
+    code_ = RichTextBlock();
+    code_.FontFamily(FontFamily(L"Consolas"));
+    code_.FontSize(13);
+    code_.Foreground(brush(primary));
+    code_.TextWrapping(TextWrapping::NoWrap);
+    code_.IsTextSelectionEnabled(true);
+    code_.LineHeight(20);
+    code_.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+    code_.Padding(pad(14, 11, 14, 20));
+    Automation::AutomationProperties::SetName(code_, tr(L"Code de la méthode sélectionnée"));
+    Grid editor_grid;
+    column(editor_grid, 1, GridUnitType::Auto);
+    column(editor_grid, 1, GridUnitType::Star);
+    line_numbers_ = label(L"", 12, secondary);
+    line_numbers_.FontFamily(FontFamily(L"Consolas"));
+    line_numbers_.LineHeight(20);
+    line_numbers_.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+    line_numbers_.TextAlignment(TextAlignment::Right);
+    line_numbers_.Padding(pad(12, 11, 9, 20));
+    Automation::AutomationProperties::SetAccessibilityView(line_numbers_, Automation::Peers::AccessibilityView::Raw);
+    place(editor_grid, line_numbers_, 0);
+    place(editor_grid, code_, 0, 1);
+    code_view_ = ScrollViewer();
+    code_view_.Margin(pad(12));
+    code_view_.Background(brush(base));
+    code_view_.HorizontalScrollBarVisibility(ScrollBarVisibility::Auto);
+    code_view_.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    code_view_.Content(editor_grid);
+    code_view_.Visibility(Visibility::Collapsed);
+    progress_ = ProgressRing();
+    progress_.Width(34);
+    progress_.Height(34);
+    progress_.HorizontalAlignment(HorizontalAlignment::Center);
+    progress_.VerticalAlignment(VerticalAlignment::Center);
+    progress_.Visibility(Visibility::Collapsed);
+    image_ = Image();
+    image_.Stretch(Stretch::Uniform);
+    image_.Margin(pad(18));
+    picture_view_ = ScrollViewer();
+    picture_view_.Margin(pad(12));
+    picture_view_.Background(brush(base));
+    picture_view_.HorizontalScrollBarVisibility(ScrollBarVisibility::Auto);
+    picture_view_.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    picture_view_.HorizontalScrollMode(ScrollMode::Auto);
+    picture_view_.VerticalScrollMode(ScrollMode::Auto);
+    picture_view_.ZoomMode(ZoomMode::Enabled);
+    picture_view_.MinZoomFactor(0.5f);
+    picture_view_.MaxZoomFactor(6.0f);
+    picture_view_.Content(image_);
+    picture_view_.Visibility(Visibility::Collapsed);
+    picture_view_.SizeChanged([this](auto&&, const SizeChangedEventArgs& size)
+    {
+        image_.MaxWidth(std::max(1.0, static_cast<double>(size.NewSize().Width) - 36));
+        image_.MaxHeight(std::max(1.0, static_cast<double>(size.NewSize().Height) - 36));
+    });
+    Automation::AutomationProperties::SetName(picture_view_, tr(L"Aperçu de la ressource, zoomable"));
+    audio_ = MediaPlayerElement();
+    audio_.AreTransportControlsEnabled(true);
+    audio_.AutoPlay(false);
+    audio_.Height(170);
+    audio_.VerticalAlignment(VerticalAlignment::Center);
+    audio_.Margin(pad(20));
+    audio_.Visibility(Visibility::Collapsed);
+    Automation::AutomationProperties::SetName(audio_, tr(L"Écouter le son sélectionné"));
+    preview_error_ = label(L"", 13, danger);
+    preview_error_.Margin(pad(16));
+    preview_error_.TextWrapping(TextWrapping::Wrap);
+    preview_error_.VerticalAlignment(VerticalAlignment::Center);
+    preview_error_.Visibility(Visibility::Collapsed);
+    preview.Children().Append(output_);
+    preview.Children().Append(code_view_);
+    preview.Children().Append(picture_view_);
+    preview.Children().Append(audio_);
+    preview.Children().Append(preview_error_);
+    preview.Children().Append(progress_);
+    build_source_editor(preview);
+    build_outline(preview);
+    place(inspector_, preview, 3);
+    build_frame_player();
+    place(content, inspector_, 0, 2);
+
+    empty_ = Border();
+    empty_.Background(brush(base));
+    empty_.BorderBrush(brush(stroke));
+    empty_.BorderThickness(pad(0, 1, 0, 1));
+    StackPanel welcome;
+    welcome.Spacing(14);
+    welcome.HorizontalAlignment(HorizontalAlignment::Center);
+    welcome.VerticalAlignment(VerticalAlignment::Center);
+    Image emblem;
+    emblem.Width(84);
+    emblem.Height(84);
+    emblem.HorizontalAlignment(HorizontalAlignment::Center);
+    emblem.Source(logo);
+    welcome.Children().Append(emblem);
+    auto question = label(tr(L"Ouvrir une animation Flash"), 26, primary, true);
+    question.HorizontalAlignment(HorizontalAlignment::Center);
+    welcome.Children().Append(question);
+    auto instructions = label(tr(L"Glissez un fichier .swf dans cette fenêtre"), 14, secondary);
+    instructions.HorizontalAlignment(HorizontalAlignment::Center);
+    welcome.Children().Append(instructions);
+    Button choose;
+    choose.Content(icon_label(L'\uE838', tr(L"Parcourir les fichiers")));
+    choose.HorizontalAlignment(HorizontalAlignment::Center);
+    choose.Margin(pad(0, 7, 0, 0));
+    choose.Click([this](auto&&, auto&&) { open_dialog(); });
+    welcome.Children().Append(choose);
+    empty_.Child(welcome);
+    place(root_, empty_, 3);
+    workarea_.Visibility(Visibility::Collapsed);
+
+    auto footer = horizontal(8);
+    footer.Background(brush(panel));
+    footer.Padding(pad(20, 9, 16, 9));
+    status_icon_ = label(L"●", 12, accent);
+    status_ = label(tr(L"Prêt"), 12, secondary);
+    footer.Children().Append(status_icon_);
+    footer.Children().Append(status_);
+    place(root_, footer, 4);
+    window_.Content(root_);
+    window_.ExtendsContentIntoTitleBar(true);
+    window_.SetTitleBar(title_bar);
+    const auto caption = window_.AppWindow().TitleBar();
+    caption.ButtonForegroundColor(color(primary));
+    caption.ButtonInactiveForegroundColor(color(secondary));
+    caption.ButtonBackgroundColor(Windows::UI::Color{0, 0, 0, 0});
+    caption.ButtonInactiveBackgroundColor(Windows::UI::Color{0, 0, 0, 0});
+    caption.ButtonHoverBackgroundColor(color(surface));
+}
+
+void Workspace::status(std::wstring_view message, bool error)
+{
+    status_.Text(error ? localized_error(message) : std::wstring(message));
+    status_icon_.Foreground(brush(error ? danger : accent));
+    status_.Foreground(brush(error ? danger : secondary));
+}
+
+void Workspace::open_dialog()
+{
+    if (busy_)
+        return;
+    try
+    {
+        if (const auto path = dialog(window_, false, L".swf"))
+            open_file(*path);
+    }
+    catch (const hresult_error& error)
+    {
+        status(error.message(), true);
+    }
+}
+
+fire_and_forget Workspace::drop(DragEventArgs args)
+{
+    auto lifetime = shared_from_this();
+    const auto deferral = args.GetDeferral();
+    try
+    {
+        const auto items = co_await args.DataView().GetStorageItemsAsync();
+        for (const auto& item : items)
+        {
+            if (closed_)
+                break;
+            const auto file = item.try_as<StorageFile>();
+            if (file)
+                co_await open_file(std::filesystem::path(file.Path().c_str()));
+            else
+                status(tr(L"Déposez un fichier SWF."), true);
+        }
+    }
+    catch (const hresult_error& error)
+    {
+        if (!closed_)
+            status(error.message(), true);
+    }
+    deferral.Complete();
+}
+
+Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag)
+{
+    if (busy_ || closed_)
+        co_return;
+    auto lifetime = shared_from_this();
+    std::error_code path_error;
+    if (auto absolute = std::filesystem::absolute(path, path_error); !path_error)
+        path = absolute.lexically_normal();
+    for (std::size_t index = 0; index < documents_.size(); ++index)
+        if (CompareStringOrdinal(documents_[index].path.c_str(), -1, path.c_str(), -1, TRUE) == CSTR_EQUAL)
+        {
+            activate_document(index);
+            remember_recent(path);
+            co_return;
+        }
+    busy_ = true;
+    open_.IsEnabled(false);
+    save_.IsEnabled(false);
+    documents_bar_.IsEnabled(false);
+    replace_.IsEnabled(false);
+    status(tr(L"Lecture de ") + path.filename().wstring() + L"…");
+    const apartment_context ui;
+    co_await resume_background();
+    std::shared_ptr<flash::Movie> movie;
+    std::vector<Row> rows;
+    std::wstring problem;
+    try
+    {
+        const auto extension = lower(path.extension().wstring());
+        movie = std::make_shared<flash::Movie>(extension == L".xml" ?
+            flash::Movie::import_xml(flash::read_file(path)) : flash::Movie::open(path));
+        rows = index_rows(*movie);
+    }
+    catch (const std::exception& error) { problem = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    busy_ = false;
+    open_.IsEnabled(true);
+    documents_bar_.IsEnabled(true);
+    replace_.IsEnabled(true);
+    if (problem.empty())
+    {
+        remember_recent(path);
+        if (initial_tag && *initial_tag >= movie->tags().size())
+            problem = tr(L"Index du tag hors limites.");
+        add_document(std::move(path), std::move(movie), std::move(rows), problem.empty() ? initial_tag : std::nullopt);
+        status(tr(L"Fichier ouvert"));
+    }
+    if (!problem.empty())
+        status(problem, true);
+    save_.IsEnabled(static_cast<bool>(movie_));
+}
+
+void Workspace::update_document()
+{
+    const auto& header = movie_->header();
+    file_name_.Text(file_.filename().wstring());
+    file_info_.Text(format_message(L"SWF {}  ·  {}WS  ·  {:g} × {:g} px  ·  {:g} i/s",
+        header.version, static_cast<wchar_t>(header.compression),
+        (static_cast<double>(header.right) - header.left) / 20.0,
+        (static_cast<double>(header.bottom) - header.top) / 20.0, header.frames_per_second));
+    window_.Title(L"Flash Studio — " + file_.filename().wstring());
+    if (active_document_)
+    {
+        auto& document = documents_[*active_document_];
+        document.path = file_;
+        document.tab.Header(box_value(hstring(file_.filename().wstring())));
+        ToolTipService::SetToolTip(document.tab, box_value(hstring(file_.wstring())));
+    }
+    empty_.Visibility(Visibility::Collapsed);
+    workarea_.Visibility(Visibility::Visible);
+    global_search_.IsEnabled(true);
+    document_class_.Visibility(movie_->document_class() ? Visibility::Visible : Visibility::Collapsed);
+    reset_explorer();
+    {
+        const UpdatingSelection updating(refreshing_);
+        selected_.reset();
+        abc_.reset();
+        abc_method_.reset();
+        search_.Text(L"");
+    }
+    switch_mode(mode_);
+}
+
+std::optional<flash::Category> Workspace::category_filter() const
+{
+    const auto index = categories_.SelectedIndex();
+    return index > 0 ? std::optional(category_filters_[index - 1]) : std::nullopt;
+}
+
+void Workspace::populate_categories()
+{
+    const UpdatingSelection updating(refreshing_);
+    categories_.Items().Clear();
+    category_filters_.clear();
+    const bool gallery = mode_ == Mode::resources;
+    categories_.Items().Append(icon_label(L'\uE8A9', gallery ? tr(L"Tout afficher") : tr(L"Tous les tags")));
+    std::array<std::size_t, filters.size()> counts{};
+    for (const auto& tag : movie_->tags())
+        if (!gallery || resource(tag))
+            ++counts[static_cast<std::size_t>(tag.category)];
+    for (const auto& [category, icon] : filters)
+    {
+        const auto count = counts[static_cast<std::size_t>(category)];
+        if (gallery && count == 0)
+            continue;
+        category_filters_.push_back(category);
+        categories_.Items().Append(icon_label(icon, std::format(L"{}  {}", tr(flash::category_name(category).data()), count)));
+    }
+    const auto restore = gallery && previous_category_ ? std::ranges::find(category_filters_, *previous_category_) : category_filters_.end();
+    categories_.SelectedIndex(restore == category_filters_.end() ? 0 : static_cast<int>(restore - category_filters_.begin()) + 1);
+}
+
+std::vector<Workspace::Row> Workspace::index_rows(const flash::Movie& movie)
+{
+    std::vector<Row> rows;
+    rows.reserve(movie.tags().size());
+    for (std::size_t index = 0; index < movie.tags().size(); ++index)
+    {
+        const auto& tag = movie.tags()[index];
+        auto title = widen(flash::tag_name(tag.code));
+        if (tag.character_id)
+            title += std::format(L"  #{}", *tag.character_id);
+        if (!tag.name.empty())
+        {
+            auto name = widen(tag.name);
+            for (auto& character : name)
+                if (character < 32 || character == 127)
+                    character = L' ';
+            title += L"  ·  " + name;
+        }
+        auto search_key = lower(title);
+        // WinUI #11226: equal boxed values can trap the UI Automation sibling walker.
+        title = std::format(L"{:05}  {}{}", index, tag.parent ? L"↳ " : L"", title);
+        rows.push_back({std::move(title), std::move(search_key)});
+    }
+    return rows;
+}
+
+void Workspace::refresh_tags()
+{
+    if (!movie_ || refreshing_ || mode_ != Mode::tags)
+        return;
+    matches_.clear();
+    matches_.reserve(movie_->tags().size());
+    const auto category = category_filter();
+    const auto query = lower(search_.Text().c_str());
+    const auto numeric = number(query);
+    std::size_t page = 0;
+    for (std::size_t i = 0; i < movie_->tags().size(); ++i)
+    {
+        const auto& tag = movie_->tags()[i];
+        if (category && tag.category != category)
+            continue;
+        if (!query.empty() && numeric != i && numeric != tag.code &&
+            indexed_rows_[i].search_key.find(query) == std::wstring::npos)
+            continue;
+        if (selected_ == i)
+            page = matches_.size() / tags_per_page;
+        matches_.push_back(i);
+    }
+    empty_list_.Visibility(matches_.empty() ? Visibility::Visible : Visibility::Collapsed);
+    list_count_.Text(std::format(L"Tags  ·  {}", matches_.size()));
+    show_page(page);
+}
+
+void Workspace::show_page(std::size_t page)
+{
+    page_ = page;
+    page_start_ = page * tags_per_page;
+    page_end_ = std::min(page_start_ + tags_per_page, matches_.size());
+    std::vector<IInspectable> rows;
+    rows.reserve(page_end_ - page_start_);
+    int restore = -1;
+    for (std::size_t i = page_start_; i < page_end_; ++i)
+    {
+        const auto index = matches_[i];
+        if (selected_ == index)
+            restore = static_cast<int>(i - page_start_);
+        rows.push_back(box_value(hstring(indexed_rows_[index].title)));
+    }
+    {
+        const UpdatingSelection updating(refreshing_);
+        tags_.ItemsSource(single_threaded_observable_vector<IInspectable>(std::move(rows)));
+        tags_.SelectedIndex(restore);
+        if (restore >= 0)
+            tags_.ScrollIntoView(tags_.SelectedItem());
+    }
+    previous_page_.IsEnabled(page_ != 0);
+    next_page_.IsEnabled(page_end_ != matches_.size());
+    page_label_.Text(matches_.empty() ? L"" : std::format(L"{}–{} / {}", page_start_ + 1, page_end_, matches_.size()));
+    if (restore < 0)
+        select_tag(std::nullopt);
+}
+
+void Workspace::select_tag(std::optional<std::size_t> index, std::optional<View> desired_view)
+{
+    if (!movie_)
+        return;
+    const bool changed = selected_ != index;
+    selected_ = index;
+    if (changed)
+    {
+        abc_.reset();
+        abc_method_.reset();
+        abc_groups_.clear();
+    }
+    auto next = view_;
+    bool script = false, can_replace = false, scene = !index;
+    if (index)
+    {
+        const auto& tag = movie_->tags()[*index];
+        scene = tag.code == 39;
+        script = is_abc(tag.code) || flash::has_avm1_actions(*movie_, *index);
+        can_replace = (tag.code == 87 && tag.size >= 6) || tag.code == 37 || tag.code == 77;
+        replace_.Content(box_value(tag.code == 87 ? tr(L"Remplacer…") : tr(L"Modifier…")));
+        Automation::AutomationProperties::SetName(replace_, tag.code == 87 ? tr(L"Remplacer les données binaires") : tr(L"Modifier le texte"));
+        detail_title_.Text(widen(flash::tag_name(tag.code)));
+        detail_meta_.Text(format_message(L"Tag {}  ·  0x{:X}  ·  {} octets", *index, tag.offset, tag.size));
+    }
+    else
+    {
+        detail_title_.Text(tr(L"Aperçu du fichier"));
+        detail_meta_.Text(tr(L"Sélectionnez un tag pour l’inspecter"));
+    }
+    export_.IsEnabled(!busy_);
+    export_asset_.IsEnabled(index.has_value());
+    export_raw_.IsEnabled(index.has_value());
+    animation_export_.IsEnabled(index && movie_->tags()[*index].code == 39);
+    export_source_.IsEnabled(script);
+    export_assembly_.IsEnabled(script);
+    tabs_[1].IsEnabled(script);
+    tabs_[2].IsEnabled(script);
+    tabs_[3].IsEnabled(index.has_value());
+    tabs_[4].IsEnabled(scene);
+    for (std::size_t i = 0; i < tabs_.size(); ++i)
+        tabs_[i].Visibility(mode_ != Mode::tags && !tabs_[i].IsEnabled() ? Visibility::Collapsed : Visibility::Visible);
+    if (view_ == View::frame && !scene)
+        next = View::details;
+    replace_.Visibility(can_replace ? Visibility::Visible : Visibility::Collapsed);
+    if (!index || (!script && (view_ == View::source || view_ == View::instructions)))
+        next = View::details;
+    if (changed && script && next == View::details)
+        next = View::source;
+    if (changed && index && scene)
+        next = View::frame;
+    update_layout();
+    set_view(desired_view.value_or(next));
+}
+
+void Workspace::set_view(View view)
+{
+    if (source_session_)
+        return;
+    view_ = view;
+    convert_image_.IsEnabled(movie_ && (view == View::frame || (selected_ && flash::is_visual_tag(movie_->tags()[*selected_].code))));
+    for (std::size_t i = 0; i < tabs_.size(); ++i)
+        tabs_[i].IsChecked(i == static_cast<std::size_t>(view));
+    frame_bar_.Visibility(view == View::frame ? Visibility::Visible : Visibility::Collapsed);
+    update_abc_visibility();
+    const auto type = selected_script_ ? script_entries_[*selected_script_].type : std::nullopt;
+    if (type && abc_)
+    {
+        const auto& info = abc_->classes()[*type];
+        detail_title_.Text(widen(info.qualified));
+        detail_meta_.Text(format_message(L"{}  /  {} membres  /  ABC {}.{}", info.interface_type ? L"Interface" : tr(L"Classe"),
+            info.members.size(), abc_->major_version(), abc_->minor_version()));
+    }
+    else if (view != View::frame && movie_)
+    {
+        if (selected_)
+        {
+            const auto& tag = movie_->tags()[*selected_];
+            detail_meta_.Text(format_message(L"Tag {}  ·  0x{:X}  ·  {} octets", *selected_, tag.offset, tag.size));
+        }
+        else
+            detail_meta_.Text(tr(L"Sélectionnez un tag pour l’inspecter"));
+    }
+    show_selection();
+}
+
+void Workspace::show_code(std::string_view text, bool instructions)
+{
+    const auto code = widen(text);
+    if (code.size() > 150'000)
+    {
+        output_.Text(code);
+        return;
+    }
+    const auto lines = std::ranges::count(code, L'\n') + (code.empty() || code.back() != L'\n');
+    std::wstring numbers;
+    for (std::ptrdiff_t i = 1; i <= lines; ++i)
+    {
+        numbers += std::to_wstring(i);
+        numbers += L'\n';
+    }
+    line_numbers_.Text(numbers);
+    code_.Blocks().Clear();
+    std::set<std::wstring, std::less<>> known_types;
+    if (!instructions)
+    {
+        for (const auto& entry : script_entries_)
+            if (entry.type)
+                known_types.insert(entry.name);
+        std::wstring_view line = code;
+        while (!line.empty())
+        {
+            const auto end = line.find(L'\n');
+            const auto current = line.substr(0, end);
+            const auto first = current.find_first_not_of(L" \t");
+            if (first != std::wstring_view::npos && current.substr(first).starts_with(L"import "))
+            {
+                const auto target = current.substr(first + 7, current.find(L';', first) - first - 7);
+                const auto separator = target.rfind(L'.');
+                const auto name = target.substr(separator == std::wstring_view::npos ? 0 : separator + 1);
+                if (!name.empty() && name.front() >= L'A' && name.front() <= L'Z')
+                    known_types.emplace(name);
+            }
+            if (end == std::wstring_view::npos)
+                break;
+            line.remove_prefix(end + 1);
+        }
+    }
+    const auto is_type = [&](std::wstring_view identifier) { return known_types.contains(identifier); };
+    code_.Blocks().Append(color_code(code, instructions, instructions ? CodeReference{} : code_references(code), is_type));
+    code_view_.Visibility(Visibility::Visible);
+    output_.Visibility(Visibility::Collapsed);
+}
+
+void Workspace::update_abc_visibility()
+{
+    const auto has_abc = movie_ && selected_ && is_abc(movie_->tags()[*selected_].code);
+    const auto editing = has_abc && (view_ == View::source || view_ == View::instructions);
+    const auto has_body = abc_ && abc_method_ && abc_->methods().at(*abc_method_).code_size.has_value();
+    abc_tools_.Visibility(editing ? Visibility::Visible : Visibility::Collapsed);
+    const bool class_open = mode_ == Mode::scripts && selected_script_ && script_entries_[*selected_script_].type;
+    source_edit_.Visibility(class_open && view_ == View::source && !source_session_ ? Visibility::Visible : Visibility::Collapsed);
+    edit_class_.Visibility(class_open ? Visibility::Visible : Visibility::Collapsed);
+    abc_owner_.Visibility(class_open ? Visibility::Collapsed : Visibility::Visible);
+    abc_method_list_.Visibility(class_open ? Visibility::Collapsed : Visibility::Visible);
+    abc_owner_.IsEnabled(static_cast<bool>(abc_));
+    abc_method_list_.IsEnabled(static_cast<bool>(abc_));
+    edit_pcode_.IsEnabled(has_body);
+    edit_simplified_.IsEnabled(has_body && abc_->methods()[*abc_method_].handlers == 0);
+    export_pcode_.IsEnabled(has_body);
+    export_graph_.IsEnabled(has_body);
+    if (class_open)
+        export_assembly_.IsEnabled(has_body);
+}
+
+void Workspace::configure_abc(std::shared_ptr<const flash::AbcModule> module, unsigned method)
+{
+    const UpdatingSelection updating(refreshing_);
+    abc_ = std::move(module);
+    abc_groups_.clear();
+    std::map<std::string, std::vector<unsigned>> classes;
+    for (const auto& item : abc_->methods())
+        classes[item.owner].push_back(item.id);
+    std::size_t active_group = 0;
+    abc_owner_.Items().Clear();
+    for (auto& [name, methods] : classes)
+    {
+        if (std::ranges::find(methods, method) != methods.end())
+            active_group = abc_groups_.size();
+        abc_owner_.Items().Append(box_value(hstring(name.empty() ? tr(L"Scripts et méthodes libres") : widen(name))));
+        abc_groups_.push_back({name, std::move(methods)});
+    }
+    abc_owner_.SelectedIndex(abc_groups_.empty() ? -1 : static_cast<int>(active_group));
+    if (!abc_groups_.empty())
+        show_abc_methods(active_group, method);
+    update_abc_visibility();
+}
+
+void Workspace::show_abc_methods(std::size_t group, std::optional<unsigned> selected)
+{
+    const UpdatingSelection updating(refreshing_);
+    const auto& methods = abc_groups_.at(group).methods;
+    const auto items = abc_method_list_.Items();
+    items.Clear();
+    const auto chosen = selected ? std::ranges::find(methods, *selected) :
+        std::ranges::find_if(methods, [&](unsigned id) { return abc_->methods()[id].code_size.has_value(); });
+    const auto index = chosen == methods.end() ? 0 : static_cast<int>(chosen - methods.begin());
+    for (const auto id : methods)
+    {
+        const auto& method = abc_->methods()[id];
+        items.Append(box_value(hstring(std::format(L"{:04}  {}", id, widen(method.name)))));
+    }
+    abc_method_list_.SelectedIndex(index);
+    abc_method_ = methods.at(index);
+    update_abc_visibility();
+}
+
+void Workspace::preview_problem(std::uint64_t version, std::wstring_view message)
+{
+    if (GetCurrentThreadId() != ui_thread_ || closed_ || version != preview_version_)
+        return;
+    preview_error_.Text(localized_error(message));
+    preview_error_.Visibility(Visibility::Visible);
+    progress_.IsActive(false);
+    progress_.Visibility(Visibility::Collapsed);
+}
+
+fire_and_forget Workspace::show_selection()
+{
+    if (source_session_)
+        co_return;
+    auto lifetime = shared_from_this();
+    if (view_ == View::frame && movie_)
+    {
+        open_frame_player();
+        co_return;
+    }
+    close_frame_player();
+    const auto version = ++preview_version_;
+    const auto target_line = std::exchange(next_code_line_, std::nullopt);
+    try
+    {
+        picture_view_.Visibility(Visibility::Collapsed);
+        image_.Source(nullptr);
+        if (audio_.Visibility() == Visibility::Visible)
+        {
+            audio_.Source(nullptr);
+            audio_.Visibility(Visibility::Collapsed);
+        }
+        code_view_.Visibility(Visibility::Collapsed);
+        preview_error_.Visibility(Visibility::Collapsed);
+        progress_.Visibility(Visibility::Collapsed);
+        progress_.IsActive(false);
+        output_.Visibility(Visibility::Visible);
+        if (!movie_)
+            co_return;
+        if (!selected_)
+        {
+            if (mode_ == Mode::scripts)
+            {
+                detail_title_.Text(L"ActionScript");
+                detail_meta_.Text(tr(L"Ouvrez un package pour afficher ses classes."));
+                output_.Text(L"");
+                output_.Visibility(Visibility::Collapsed);
+            }
+            else
+                output_.Text(widen(flash::summarize(*movie_)));
+            co_return;
+        }
+        const auto movie = movie_;
+        const auto selected = selected_;
+        const auto index = selected.value_or(0);
+        const auto view = view_;
+        const auto& tag = movie->tags()[index];
+        auto abc = abc_;
+        auto method = abc_method_;
+        const auto type = selected_script_ ? script_entries_[*selected_script_].type : std::nullopt;
+        if (view == View::hex)
+        {
+            output_.Text(widen(flash::hex_dump(movie->data(index))));
+            co_return;
+        }
+        if (view == View::details)
+        {
+            output_.Text(widen(flash::inspect(*movie, index)));
+            if (tag.category != flash::Category::images && tag.category != flash::Category::shapes &&
+                !is_text(tag.code) && tag.code != 14)
+                co_return;
+        }
+        else
+            output_.Text(L"");
+        progress_.Visibility(Visibility::Visible);
+        progress_.IsActive(true);
+        const apartment_context ui;
+        co_await resume_background();
+        std::optional<flash::Asset> asset;
+        std::string text, failure;
+        std::vector<std::size_t> member_lines;
+        try
+        {
+            if ((view == View::source || view == View::instructions) && is_abc(tag.code))
+            {
+                if (!abc)
+                    abc = std::make_shared<const flash::AbcModule>(flash::abc_bytecode(*movie, index));
+                if (!type && !method && !abc->methods().empty())
+                {
+                    const auto found = std::ranges::find_if(abc->methods(), [](const flash::AbcMethod& item) { return item.code_size.has_value(); });
+                    method = found == abc->methods().end() ? abc->methods().front().id : found->id;
+                }
+                if (type && view == View::source)
+                {
+                    auto source = abc->decompile_class(*type);
+                    text = std::move(source.text);
+                    member_lines = std::move(source.member_lines);
+                }
+                else if (type && !method)
+                    text = "; Choisissez une méthode dans le panneau Membres.";
+                else if (!method)
+                    text = "Le bloc ABC ne contient aucune méthode.";
+                else if (view == View::source)
+                    text = abc->decompile(*method);
+                else
+                {
+                    try { text = abc->pcode(*method); }
+                    catch (const std::runtime_error&) { text = abc->disassemble(*method); }
+                }
+            }
+            else if (view == View::source)
+                text = flash::decompile(*movie, index);
+            else if (view == View::instructions)
+                text = flash::disassemble(*movie, index);
+            else if (is_text(tag.code))
+            {
+                const auto extracted = flash::extract_text(*movie, index);
+                text = flash::inspect(*movie, index) + "\n" + extracted;
+            }
+            else
+                asset = flash::extract(*movie, index);
+        }
+        catch (const std::exception& error) { failure = error.what(); }
+        co_await ui;
+        if (closed_ || version != preview_version_)
+            co_return;
+        try
+        {
+            if (abc && abc != abc_)
+                configure_abc(std::move(abc), method.value_or(0));
+            if (!type && abc_ && method && (view == View::source || view == View::instructions))
+            {
+                const auto& info = abc_->methods().at(*method);
+                detail_meta_.Text(format_message(L"ABC {}.{}  ·  {} méthodes  ·  {}",
+                    abc_->major_version(), abc_->minor_version(), abc_->methods().size(), widen(info.signature)));
+            }
+            if (!failure.empty())
+                output_.Text(widen((view == View::details ? flash::inspect(*movie, index) + '\n' : "") + failure));
+            else if (!text.empty())
+            {
+                if (view == View::source || view == View::instructions)
+                {
+                    show_code(text, view == View::instructions);
+                    if (type && view == View::source)
+                        member_lines_ = std::move(member_lines);
+                    root_.DispatcherQueue().TryEnqueue([this, lifetime, version, target_line, class_source = type && view == View::source]
+                    {
+                        if (!closed_ && version == preview_version_)
+                        {
+                            if (!target_line && class_source && members_.SelectedIndex() >= 0)
+                                jump_to_member();
+                            else
+                                jump_to_code_line(target_line.value_or(1));
+                        }
+                    });
+                }
+                else
+                    output_.Text(widen(text));
+            }
+            else if (asset && (asset->extension == L".wav" || asset->extension == L".mp3"))
+            {
+                InMemoryRandomAccessStream stream;
+                DataWriter writer(stream);
+                writer.WriteBytes(asset->bytes);
+                co_await writer.StoreAsync();
+                writer.DetachStream();
+                stream.Seek(0);
+                if (closed_ || version != preview_version_)
+                    co_return;
+                const auto mime = asset->extension == L".wav" ? L"audio/wav" : L"audio/mpeg";
+                audio_.Source(Windows::Media::Core::MediaSource::CreateFromStream(stream, mime));
+                audio_.Visibility(Visibility::Visible);
+                output_.Visibility(Visibility::Collapsed);
+            }
+            else if (asset && (asset->extension == L".png" || asset->extension == L".jpg" ||
+                asset->extension == L".gif" || asset->extension == L".svg"))
+            {
+                InMemoryRandomAccessStream stream;
+                DataWriter writer(stream);
+                writer.WriteBytes(asset->bytes);
+                co_await writer.StoreAsync();
+                writer.DetachStream();
+                stream.Seek(0);
+                ImageSource source{nullptr};
+                if (asset->extension == L".svg")
+                {
+                    SvgImageSource svg;
+                    if (co_await svg.SetSourceAsync(stream) != SvgImageSourceLoadStatus::Success)
+                        throw hresult_error(E_FAIL, tr(L"Impossible d’afficher la forme SVG."));
+                    source = svg;
+                }
+                else
+                {
+                    BitmapImage bitmap;
+                    bitmap.DecodePixelWidth(1200);
+                    co_await bitmap.SetSourceAsync(stream);
+                    source = bitmap;
+                }
+                if (closed_ || version != preview_version_)
+                    co_return;
+                image_.Source(source);
+                picture_view_.Visibility(Visibility::Visible);
+                picture_view_.ChangeView(0.0, 0.0, 1.0f, true);
+                output_.Visibility(Visibility::Collapsed);
+            }
+        }
+        catch (const hresult_error& error)
+        {
+            if (closed_ || version != preview_version_)
+                co_return;
+            preview_error_.Text(error.message());
+            preview_error_.Visibility(Visibility::Visible);
+        }
+        progress_.IsActive(false);
+        progress_.Visibility(Visibility::Collapsed);
+    }
+    catch (const hresult_error& error)
+    {
+        preview_problem(version, error.message());
+    }
+    catch (const std::exception& error)
+    {
+        preview_problem(version, widen(error.what()));
+    }
+}
+
+fire_and_forget Workspace::export_tag(Export format)
+{
+    if (!selected_ || !movie_)
+        co_return;
+    auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto index = *selected_;
+    const auto& tag = movie->tags()[index];
+    if (format == Export::asset && (tag.code == 39 || (tag.category == flash::Category::shapes && flash::is_visual_tag(tag.code))))
+    {
+        export_image();
+        co_return;
+    }
+    const auto abc = abc_;
+    const auto method = abc_method_;
+    const auto type = selected_script_ ? script_entries_[*selected_script_].type : std::nullopt;
+    const apartment_context ui;
+    try
+    {
+        co_await resume_background();
+        std::optional<flash::Asset> asset;
+        std::wstring extension = L".bin";
+        std::string content;
+        std::wstring failure;
+        try
+        {
+            if (format == Export::asset)
+            {
+                asset = flash::extract(*movie, index);
+                if (asset)
+                    extension = asset->extension;
+                else
+                    failure = tr(L"Ce tag peut être exporté en contenu brut.");
+            }
+            else if (format == Export::pcode || format == Export::graph)
+            {
+                if (!abc || !method)
+                    throw std::runtime_error("Sélectionnez une méthode ABC qui possède un corps.");
+                extension = format == Export::pcode ? L".pcode" : L".dot";
+                content = format == Export::pcode ? abc->pcode(*method) : abc->flow_graph(*method);
+            }
+            else if (format == Export::source || format == Export::instructions)
+            {
+                extension = format == Export::source ? L".as" : L".txt";
+                if (abc && type && format == Export::source)
+                    content = abc->decompile_class(*type).text;
+                else if (abc && method)
+                    content = format == Export::source ? abc->decompile(*method) : abc->disassemble(*method);
+                else
+                    content = format == Export::source ? flash::decompile(*movie, index) : flash::disassemble(*movie, index);
+            }
+        }
+        catch (const std::exception& error) { failure = widen(error.what()); }
+        co_await ui;
+        if (closed_)
+            co_return;
+        if (!failure.empty())
+        {
+            status(failure, true);
+            co_return;
+        }
+        const auto name = std::format(L"{}-{}{}{}", type && format == Export::source ?
+            widen(abc->classes()[*type].name) : widen(flash::tag_name(movie->tags()[index].code)), index,
+            (format == Export::pcode || format == Export::graph) && method ? format_message(L"-méthode-{}", *method) : L"", extension);
+        const auto destination = dialog(window_, true, extension, name);
+        if (!destination)
+            co_return;
+        co_await resume_background();
+        try
+        {
+            if (asset)
+                flash::write_file(*destination, asset->bytes);
+            else if (format == Export::raw)
+                flash::write_file(*destination, movie->data(index));
+            else
+                flash::write_text(*destination, content);
+        }
+        catch (const std::exception& error) { failure = widen(error.what()); }
+        co_await ui;
+        if (!closed_)
+            status(failure.empty() ? tr(L"Exporté : ") + destination->filename().wstring() : failure, !failure.empty());
+    }
+    catch (const hresult_error& error)
+    {
+        if (!closed_)
+            status(error.message(), true);
+    }
+}
+
+Windows::Foundation::IAsyncOperation<double> Workspace::choose_export_scale()
+{
+    NumberBox scale;
+    scale.Header(box_value(tr(L"Taille en pourcentage")));
+    scale.Minimum(12.5);
+    scale.Maximum(800);
+    scale.SmallChange(25);
+    scale.LargeChange(100);
+    scale.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Inline);
+    scale.Value(export_scale_ * 100);
+    ContentDialog prompt;
+    prompt.XamlRoot(root_.XamlRoot());
+    prompt.Title(box_value(tr(L"Taille de l’export")));
+    prompt.PrimaryButtonText(tr(L"Continuer"));
+    prompt.CloseButtonText(tr(L"Annuler"));
+    prompt.Content(scale);
+    if (co_await prompt.ShowAsync() != ContentDialogResult::Primary || closed_ || !std::isfinite(scale.Value()))
+        co_return 0;
+    export_scale_ = scale.Value() / 100;
+    co_return export_scale_;
+}
+
+fire_and_forget Workspace::export_image()
+{
+    if (!movie_ || busy_ || (!selected_ && view_ != View::frame))
+        co_return;
+    auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto index = selected_;
+    const auto scene = view_ == View::frame;
+    const auto frame = scene ? displayed_frame() : 1u;
+    const auto vector = scene || movie->tags()[*index].category != flash::Category::images;
+    double scale = 1;
+    const apartment_context ui;
+    std::optional<std::filesystem::path> target;
+    try
+    {
+        if (scene || movie->tags()[*index].category == flash::Category::shapes || movie->tags()[*index].code == 39)
+        {
+            scale = co_await choose_export_scale();
+            if (!scale || movie_ != movie)
+                co_return;
+        }
+        const auto name = scene ? format_message(L"scene-{}", frame) : format_message(L"ressource-{}", *index);
+        target = dialog(window_, true, vector ? L".svg" : L".png", name, nullptr, false, true, vector);
+    }
+    catch (const hresult_error& error) { status(error.message(), true); }
+    if (!target)
+        co_return;
+    co_await resume_background();
+    std::wstring failure;
+    unsigned omitted = 0;
+    try
+    {
+        auto asset = scene ? flash::render_frame(*movie, frame, index) : flash::FramePreview{flash::visual_asset(*movie, *index), 0};
+        omitted = asset.omitted;
+        const auto converted = flash::convert_image(asset.image, target->extension().wstring(), scale);
+        flash::write_file(*target, converted.bytes);
+    }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (!closed_)
+        status(failure.empty() ? tr(L"Image exportée dans ") + target->filename().wstring() +
+            (omitted ? format_message(L" · {} éléments ou effets omis", omitted) : L"") : failure, !failure.empty());
+}
+
+fire_and_forget Workspace::export_animation(flash::AnimationFormat format)
+{
+    if (!movie_ || busy_ || !selected_ || movie_->tags()[*selected_].code != 39)
+        co_return;
+    const auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto index = *selected_;
+    const auto extension = flash::animation_extension(format);
+    try
+    {
+        const auto scale = co_await choose_export_scale();
+        if (!scale || movie_ != movie)
+            co_return;
+        auto path = dialog(window_, true, extension, std::format(L"sprite-{}", movie->tags()[index].character_id.value_or(0)));
+        if (!path)
+            co_return;
+        if (lower(path->extension().wstring()) != extension)
+        {
+            status(format_message(L"Choisissez un nom de fichier avec l’extension {}.", extension), true);
+            co_return;
+        }
+        status(tr(L"Export du sprite animé en cours…"));
+        const apartment_context ui;
+        co_await resume_background();
+        unsigned omitted = 0;
+        std::wstring failure;
+        try
+        {
+            const auto animation = flash::export_sprite_animation(*movie, index, format, scale);
+            flash::write_file(*path, animation.image.bytes);
+            omitted = animation.frames_with_omissions;
+        }
+        catch (const std::exception& error) { failure = widen(error.what()); }
+        co_await ui;
+        if (!closed_ && movie == movie_)
+            status(failure.empty() ? tr(L"Animation exportée dans ") + path->filename().wstring() +
+                (omitted ? format_message(L" · {} images avec des éléments ou effets omis", omitted) : L"") : failure, !failure.empty());
+    }
+    catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
+}
+
+fire_and_forget Workspace::save_movie()
+{
+    if (!movie_ || busy_)
+        co_return;
+    auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    try
+    {
+        auto format = movie->header().compression == 'C' ? DocumentFormat::compressed : DocumentFormat::uncompressed;
+        const auto destination = dialog(window_, true, L".swf", file_.stem().wstring() + tr(L"-copie"), &format);
+        if (!destination)
+            co_return;
+        const apartment_context ui;
+        co_await resume_background();
+        std::wstring failure;
+        try
+        {
+            switch (format)
+            {
+            case DocumentFormat::uncompressed: flash::write_file(*destination, movie->uncompressed()); break;
+            case DocumentFormat::compressed: flash::write_file(*destination, movie->compressed()); break;
+            case DocumentFormat::xml: flash::write_text(*destination, movie->export_xml()); break;
+            }
+        }
+        catch (const std::exception& error) { failure = widen(error.what()); }
+        co_await ui;
+        if (!closed_)
+            status(failure.empty() ? tr(L"SWF enregistré : ") + destination->filename().wstring() : failure, !failure.empty());
+    }
+    catch (const hresult_error& error)
+    {
+        if (!closed_)
+            status(error.message(), true);
+    }
+}
+
+fire_and_forget Workspace::choose_visual_batch()
+{
+    if (!movie_ || busy_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    try
+    {
+        ComboBox formats;
+        formats.Header(box_value(tr(L"Format de destination")));
+        const wchar_t* labels[]{L"PNG", tr(L"SVG · ressources vectorielles"), L"BMP", L"JPEG", L"TIFF"};
+        constexpr const wchar_t* extensions[]{L".png", L".svg", L".bmp", L".jpg", L".tiff"};
+        for (const auto label : labels)
+            formats.Items().Append(box_value(hstring(label)));
+        formats.SelectedIndex(0);
+        formats.HorizontalAlignment(HorizontalAlignment::Stretch);
+        ContentDialog prompt;
+        prompt.XamlRoot(root_.XamlRoot());
+        prompt.Title(box_value(tr(L"Exporter les visuels")));
+        prompt.Content(formats);
+        prompt.PrimaryButtonText(tr(L"Choisir le dossier…"));
+        prompt.CloseButtonText(tr(L"Annuler"));
+        if (co_await prompt.ShowAsync() == ContentDialogResult::Primary && !closed_ && formats.SelectedIndex() >= 0)
+            export_all(false, extensions[formats.SelectedIndex()]);
+    }
+    catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
+}
+
+fire_and_forget Workspace::export_all(bool project, std::wstring visual_format)
+{
+    if (!movie_ || busy_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    std::optional<std::filesystem::path> destination;
+    try { destination = dialog(window_, false, L"", {}, nullptr, true); }
+    catch (const hresult_error& error) { status(error.message(), true); }
+    if (!destination)
+        co_return;
+    const auto name = file_.stem().wstring() + (!visual_format.empty() ? tr(L"-visuels-") + visual_format.substr(1) :
+        project ? tr(L"-projet") : tr(L"-ressources"));
+    auto target = *destination / name;
+    busy_ = true;
+    export_.IsEnabled(false);
+    status(project ? tr(L"Export du projet…") : tr(L"Export des ressources…"));
+    const apartment_context ui;
+    co_await resume_background();
+    std::wstring failure;
+    flash::ExportReport report;
+    try
+    {
+        for (unsigned sequence = 2; !std::filesystem::create_directory(target); ++sequence)
+            target = *destination / std::format(L"{}-{}", name, sequence);
+        report = !visual_format.empty() ? flash::export_visuals(*movie, target, visual_format) :
+            project ? flash::export_project(*movie, target) : flash::export_all(*movie, target);
+    }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    busy_ = false;
+    export_.IsEnabled(true);
+    if (!failure.empty())
+        status(failure, true);
+    else
+        status(format_message(L"{} fichiers exportés dans {} · {} tags en échec", report.files,
+            target.filename().wstring(), report.failed), report.failed != 0);
+}
+
+fire_and_forget Workspace::edit_abc(AbcEdit operation)
+{
+    if (busy_ || !movie_ || !selected_ || !is_abc(movie_->tags()[*selected_].code))
+        co_return;
+    auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto abc = abc_;
+    const auto tag = *selected_;
+    const auto method = abc_method_;
+    const auto method_edit = operation == AbcEdit::method || operation == AbcEdit::simplify;
+    const auto script = selected_script_ ? std::optional(script_entries_[*selected_script_].qualified) : std::nullopt;
+    if (operation != AbcEdit::import && !abc)
+        co_return;
+    std::optional<std::filesystem::path> input, target;
+    flash::Bytes compiled;
+    try
+    {
+        if (operation == AbcEdit::import)
+            input = dialog(window_, false, L".abc");
+        else
+        {
+            TextBox editor;
+            editor.AcceptsReturn(true);
+            editor.FontFamily(FontFamily(L"Consolas"));
+            editor.TextWrapping(TextWrapping::NoWrap);
+            editor.MinWidth(500);
+            editor.Height(290);
+            editor.MaxLength(1'000'000);
+            ScrollViewer::SetHorizontalScrollBarVisibility(editor, ScrollBarVisibility::Auto);
+            ScrollViewer::SetVerticalScrollBarVisibility(editor, ScrollBarVisibility::Auto);
+            ContentDialog prompt;
+            prompt.XamlRoot(root_.XamlRoot());
+            prompt.PrimaryButtonText(tr(L"Valider"));
+            prompt.CloseButtonText(tr(L"Annuler"));
+            NumberBox id{nullptr};
+            StackPanel content_panel;
+            content_panel.Spacing(8);
+            if (method_edit)
+            {
+                if (!method)
+                    co_return;
+                editor.IsSpellCheckEnabled(false);
+                editor.IsTextPredictionEnabled(false);
+                prompt.Title(box_value(operation == AbcEdit::simplify ? tr(L"Vérifier le P-code nettoyé") : tr(L"Éditer le P-code")));
+                editor.Text(widen(abc->pcode(*method, operation == AbcEdit::simplify)));
+                Automation::AutomationProperties::SetName(editor, tr(L"Instructions AVM2 assemblables"));
+            }
+            else
+            {
+                if (abc->strings().size() < 2)
+                {
+                    status(tr(L"Le bloc ABC ne contient pas de constante chaîne modifiable."), true);
+                    co_return;
+                }
+                prompt.Title(box_value(tr(L"Modifier une constante ABC")));
+                id = NumberBox();
+                id.Header(box_value(tr(L"Index de la constante")));
+                id.Minimum(1);
+                id.Maximum(static_cast<double>(abc->strings().size() - 1));
+                id.Value(1);
+                id.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Compact);
+                editor.Text(widen(abc->strings()[1]));
+                Automation::AutomationProperties::SetName(editor, tr(L"Valeur de la constante"));
+                id.ValueChanged([abc, editor](auto&&, const NumberBoxValueChangedEventArgs& args)
+                {
+                    const auto value = args.NewValue();
+                    if (std::isfinite(value) && value >= 1 && value < static_cast<double>(abc->strings().size()))
+                        editor.Text(widen(abc->strings()[static_cast<std::size_t>(value)]));
+                });
+                content_panel.Children().Append(id);
+            }
+            auto error = label(L"", 12, danger);
+            error.TextWrapping(TextWrapping::Wrap);
+            content_panel.Children().Append(editor);
+            content_panel.Children().Append(error);
+            prompt.Content(content_panel);
+            prompt.PrimaryButtonClick([&compiled, method_edit, abc, method, editor, id, error](
+                auto&&, const ContentDialogButtonClickEventArgs& args)
+            {
+                try
+                {
+                    const auto text = to_string(editor.Text());
+                    if (method_edit)
+                        compiled = abc->replace_method(*method, text);
+                    else
+                    {
+                        const auto value = id.Value();
+                        if (!std::isfinite(value) || value < 1 || value >= static_cast<double>(abc->strings().size()) ||
+                            std::trunc(value) != value)
+                            throw std::runtime_error("Sélectionnez un index de constante entier.");
+                        compiled = abc->replace_string(static_cast<unsigned>(value), text);
+                    }
+                }
+                catch (const std::exception& problem)
+                {
+                    error.Text(localized_error(widen(problem.what())));
+                    args.Cancel(true);
+                }
+            });
+            if (co_await prompt.ShowAsync() != ContentDialogResult::Primary || closed_ || movie_ != movie)
+                co_return;
+        }
+        if (operation != AbcEdit::import || input)
+            target = dialog(window_, true, L".swf", file_.stem().wstring() + L"-abc.swf");
+    }
+    catch (const hresult_error& error) { status(error.message(), true); }
+    catch (const std::exception& error) { status(widen(error.what()), true); }
+    if (!target)
+        co_return;
+    busy_ = true;
+    open_.IsEnabled(false);
+    save_.IsEnabled(false);
+    status(tr(L"Validation du bloc ABC…"));
+    const apartment_context ui;
+    co_await resume_background();
+    std::shared_ptr<flash::Movie> result;
+    std::vector<Row> rows;
+    std::wstring failure;
+    try
+    {
+        if (operation == AbcEdit::import)
+            compiled = flash::read_file(*input);
+        result = std::make_shared<flash::Movie>(flash::replace_abc(*movie, tag, compiled));
+        rows = index_rows(*result);
+        flash::write_file(*target, result->uncompressed());
+    }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    busy_ = false;
+    open_.IsEnabled(true);
+    save_.IsEnabled(true);
+    if (!result || !failure.empty())
+    {
+        status(failure, true);
+        co_return;
+    }
+    movie_ = std::move(result);
+    indexed_rows_ = std::move(rows);
+    file_ = *target;
+    update_document();
+    if (script && mode_ == Mode::scripts)
+        edited_script_ = ScriptSelection{tag, *script, operation == AbcEdit::import ? std::nullopt : method};
+    else if (mode_ == Mode::tags)
+    {
+        select_tag(tag);
+        if (operation != AbcEdit::import)
+            abc_method_ = method;
+        refresh_tags();
+        set_view(View::instructions);
+    }
+    status(tr(L"Bloc ABC modifié dans ") + target->filename().wstring());
+}
+
+bool Workspace::find_class_compiler(bool prompt)
+{
+    if (std::filesystem::is_regular_file(class_compiler_))
+        return true;
+    class_compiler_.clear();
+    std::array<wchar_t, 32768> path{};
+    const auto used = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+    if (used && used < path.size())
+    {
+        const auto folder = std::filesystem::path(path.data()).parent_path();
+        for (const auto& candidate : {folder / L"tools" / L"as3" / L"asc.jar", folder / L"asc.jar"})
+            if (std::filesystem::is_regular_file(candidate))
+            {
+                class_compiler_ = candidate;
+                return true;
+            }
+    }
+    if (prompt)
+    {
+        status(tr(L"Sélectionnez asc.jar pour la compilation ActionScript."));
+        if (const auto compiler = dialog(window_, false, L".jar"))
+        {
+            class_compiler_ = *compiler;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<std::filesystem::path> Workspace::class_output_path(const std::filesystem::path& original)
+{
+    const auto output = dialog(window_, true, L".swf", original.stem().wstring() + tr(L"-classe"));
+    if (output && (lower(output->extension().wstring()) != L".swf" ||
+        CompareStringOrdinal(output->c_str(), -1, original.c_str(), -1, TRUE) == CSTR_EQUAL ||
+        (std::filesystem::exists(*output) && std::filesystem::equivalent(*output, original))))
+        throw std::runtime_error("Choisissez une copie avec un nom de fichier SWF différent.");
+    return output;
+}
+
+fire_and_forget Workspace::edit_tag()
+{
+    if (!movie_ || !selected_ || busy_)
+        co_return;
+    auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto index = *selected_;
+    std::optional<std::filesystem::path> replacement, destination;
+    std::optional<std::string> text;
+    try
+    {
+        if (movie->tags()[index].code == 87)
+        {
+            replacement = dialog(window_, false, L"");
+            if (!replacement)
+                co_return;
+        }
+        else
+        {
+            TextBox editor;
+            editor.AcceptsReturn(true);
+            editor.TextWrapping(TextWrapping::Wrap);
+            editor.MaxLength(500'000);
+            editor.Height(230);
+            editor.Text(widen(flash::extract_text(*movie, index)));
+            Automation::AutomationProperties::SetName(editor, tr(L"Nouveau texte"));
+            ContentDialog prompt;
+            prompt.XamlRoot(root_.XamlRoot());
+            prompt.Title(box_value(tr(L"Modifier le texte")));
+            prompt.PrimaryButtonText(tr(L"Continuer"));
+            prompt.CloseButtonText(tr(L"Annuler"));
+            prompt.Content(editor);
+            if (co_await prompt.ShowAsync() != ContentDialogResult::Primary || closed_ || movie_ != movie)
+                co_return;
+            text = to_string(editor.Text());
+        }
+        destination = dialog(window_, true, L".swf", file_.stem().wstring() + tr(L"-modifie.swf"));
+    }
+    catch (const hresult_error& error)
+    {
+        status(error.message(), true);
+    }
+    catch (const std::exception& error)
+    {
+        status(widen(error.what()), true);
+    }
+    if (!destination)
+        co_return;
+    busy_ = true;
+    open_.IsEnabled(false);
+    save_.IsEnabled(false);
+    replace_.IsEnabled(false);
+    status(tr(L"Modification du SWF…"));
+    const apartment_context ui;
+    co_await resume_background();
+    std::shared_ptr<flash::Movie> updated;
+    std::vector<Row> rows;
+    std::wstring failure;
+    try
+    {
+        updated = std::make_shared<flash::Movie>(text ? movie->replace_text(index, *text) :
+            movie->replace_binary(index, flash::read_file(*replacement)));
+        rows = index_rows(*updated);
+        flash::write_file(*destination, updated->uncompressed());
+    }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    busy_ = false;
+    open_.IsEnabled(true);
+    save_.IsEnabled(true);
+    replace_.IsEnabled(true);
+    if (failure.empty())
+    {
+        movie_ = std::move(updated);
+        indexed_rows_ = std::move(rows);
+        file_ = *destination;
+        update_document();
+        status(tr(L"SWF modifié et enregistré"));
+    }
+    else
+        status(failure, true);
+}
+}

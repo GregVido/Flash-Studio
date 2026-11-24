@@ -1,0 +1,7 @@
+.vs/
+artifacts/
+src/FlashStudio/Editor/node_modules/
+*.user
+*.VC.db
+__pycache__/
+*.swf

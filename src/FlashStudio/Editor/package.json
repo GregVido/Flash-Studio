@@ -1,0 +1,18 @@
+{
+  "name": "flashstudio-as3-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild vendor-entry.js --bundle --format=esm --minify --target=es2022 --legal-comments=none --outfile=vendor/codemirror.js"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.18.6",
+    "@codemirror/language": "6.11.3",
+    "@codemirror/lint": "6.9.8",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@lezer/highlight": "1.2.1",
+    "codemirror": "6.0.2",
+    "esbuild": "0.25.5"
+  }
+}

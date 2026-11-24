@@ -1,0 +1,4 @@
+#include "ResourceIds.h"
+
+FLASH_STUDIO_ICON ICON "Assets\\FlashStudio.ico"
+FLASH_STUDIO_LOGO RCDATA "Assets\\FlashStudio.png"

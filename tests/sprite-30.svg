@@ -1,0 +1,2874 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="41.9494" height="51.6615" viewBox="-534 -544 838.988 1033.23">
+<g visibility="visible">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.027027027027;1" values="visible;hidden;hidden"/>
+
+<g transform="matrix(1 0 0 1 30 230)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -106 233)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -465 -334)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.027027027027;0.0540540540541;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(1 0 0 1 -93 203)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -20 173)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.03084 0 0 1.03084 -460 -328)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.0540540540541;0.0810810810811;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(1 0 0 1 -13 203)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -58 165)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -465 -334)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.0810810810811;0.108108108108;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(1 0 0 1 65 167)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -116 179)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.03311 0 0 1.03311 -459 -330)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.108108108108;0.135135135135;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.996567 -0.0794525 0.0794525 0.996567 80 189)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.987137 0.156586 -0.156586 0.987137 -128 154)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.04498 0 0 1.04498 -457 -315)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.135135135135;0.162162162162;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.994064 -0.10553 0.10553 0.994064 72 201)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.995865 0.0876312 -0.0876312 0.995865 -138 115)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.1308 0 0 1.1308 -464 -322)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.162162162162;0.189189189189;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.994598 -0.100571 0.100571 0.994598 72 214)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.976089 -0.212784 0.212784 0.976089 -102 148)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.21472 0 0 1.21472 -480 -338)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.189189189189;0.216216216216;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.993149 -0.113556 0.113556 0.993149 64 222)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -75 130)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.13417 0 0 1.13417 -462 -324)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.216216216216;0.243243243243;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.991516 -0.126694 0.126694 0.991516 -40 222)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.995056 -0.0960236 0.0960236 0.995056 -7 137)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.06194 0 0 1.06194 -458 -318)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.243243243243;0.27027027027;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(1 0 0 1 -91 196)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.987793 -0.152512 0.152512 0.987793 -6 183)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1.03711 0 0 1.03711 -461 -329)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.27027027027;0.297297297297;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.801697 0.595108 -0.595108 0.801697 -73 146)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.672913 0.737274 -0.737274 0.672913 9 141)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -258)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.904694 -0.389709 0.389709 0.904694 -534 -167)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.297297297297;0.324324324324;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.982208 -0.182312 0.182312 0.982208 46 318)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.922134 -0.383072 0.383072 0.922134 102 338)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -171)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.881149 0.468887 -0.468887 0.881149 -311 -418)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.324324324324;0.351351351351;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 241)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.870605 0.48912 -0.48912 0.870605 -178 -460)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.351351351351;0.378378378378;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 205)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 236)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.870605 0.48912 -0.48912 0.870605 -178 -460)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.378378378378;0.405405405405;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 217)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 224)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.895309 0.441895 -0.441895 0.895309 -193 -454)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.405405405405;0.432432432432;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 233)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 208)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.946289 0.317047 -0.317047 0.946289 -227 -435)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.432432432432;0.459459459459;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 253)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 188)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.974075 0.215591 -0.215591 0.974075 -252 -416)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.459459459459;0.486486486486;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 273)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 168)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.918488 0.391006 -0.391006 0.918488 -206 -447)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.486486486486;0.513513513514;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.974716 0.216629 -0.216629 0.974716 29 253)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.962677 0.267517 -0.267517 0.962677 -105 184)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.902435 0.427017 -0.427017 0.902435 -197 -453)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.513513513514;0.540540540541;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(-0.228851 0.970245 -0.970245 -0.228851 -182 191)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.289627 0.950211 -0.950211 -0.289627 -214 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.926865 0.370453 -0.370453 0.926865 -213 -396)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.540540540541;0.567567567568;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.0305328 0.995575 -0.995575 0.0305328 -194 185)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.600845 0.789703 -0.789703 -0.600845 -199 99)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.936035 0.346405 -0.346405 0.936035 -219 -393)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.567567567568;0.594594594595;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.215851 0.971741 -0.971741 0.215851 -203 183)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.751541 0.646896 -0.646896 -0.751541 -194 111)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.943298 0.325867 -0.325867 0.943298 -224 -390)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.594594594595;0.621621621622;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.40593 0.908188 -0.908188 0.40593 -212 183)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.885406 0.444778 -0.444778 -0.885406 -191 127)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.931519 0.358459 -0.358459 0.931519 -215 -395)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.621621621622;0.648648648649;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.082962 0.990295 -0.990295 0.082962 -196 185)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.809387 0.570709 -0.570709 -0.809387 -193 117)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.931427 0.358719 -0.358719 0.931427 -215 -395)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.648648648649;0.675675675676;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(-0.193909 0.97377 -0.97377 -0.193909 -183 191)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(-0.64621 0.749481 -0.749481 -0.64621 -198 102)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -156)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.902435 0.427017 -0.427017 0.902435 -197 -405)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.675675675676;0.702702702703;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.976669 0.176941 -0.176941 0.976669 47 254)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.949005 0.276138 -0.276138 0.949005 -91 223)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.826172 0.559616 -0.559616 0.826172 -156 -451)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.702702702703;0.72972972973;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.956192 -0.261459 0.261459 0.956192 23 215)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 201)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -246)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.916046 0.394119 -0.394119 0.916046 -221 -492)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.72972972973;0.756756756757;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.844559 -0.514908 0.514908 0.844559 42 203)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -288)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.927536 0.365982 -0.365982 0.927536 -243 -531)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.756756756757;0.783783783784;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.873611 -0.461578 0.461578 0.873611 60 214)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -312)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.944214 0.320007 -0.320007 0.944214 -264 -544)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.783783783784;0.810810810811;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.873611 -0.461578 0.461578 0.873611 84 217)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -312)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.952499 0.294128 -0.294128 0.952499 -271 -540)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.810810810811;0.837837837838;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.873611 -0.461578 0.461578 0.873611 69 208)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -312)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.944321 0.319077 -0.319077 0.944321 -262 -544)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.837837837838;0.864864864865;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.873611 -0.461578 0.461578 0.873611 57 199)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -294)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.922699 0.376541 -0.376541 0.922699 -246 -536)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.864864864865;0.891891891892;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.926041 -0.343338 0.343338 0.926041 54 232)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -264)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.903061 0.421097 -0.421097 0.903061 -233 -512)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.891891891892;0.918918918919;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.926041 -0.343338 0.343338 0.926041 39 241)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.977798 0.140945 -0.140945 0.977798 -95 216)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -262 -228)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.870911 0.483597 -0.483597 0.870911 -195 -485)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.918918918919;0.945945945946;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.987991 -1.52588e-05 1.52588e-05 0.996033 30 230)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M103 85L75 15Q63 -1 44 0L21 3Q6 6 2 14Q-1 22 1 29L3 37L21 101L21 105Q28 116 40 120L64 124L91 121Q109 113 107 100L103 85Z"/>
+</g>
+<g transform="matrix(1 0 0 1 21 18)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M16 0L11 0Q0 3 0 9L1 16L4 30L13 58L22 73L33 77L41 76Q51 74 51 69L51 62L37 14Q33 1 16 0Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.987991 1.52588e-05 0 0.998993 -106 234)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M151 117L148 102L136 64Q120 22 98 11Q75 0 48 0Q8 3 2 28Q-3 53 7 83L26 130Q36 153 53 159L72 164L126 164Q145 161 149 146L151 117Z"/>
+</g>
+<g transform="matrix(1 0 0 1 24 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M54 2L36 0L27 0Q2 3 1 23Q-1 43 5 62Q21 114 65 114Q89 111 89 98L87 74L77 37L69 16Q63 5 54 2Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -263 -186)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.998184 1.52588e-05 0 0.99527 -466 -334)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.945945945946;0.972972972973;1" values="hidden;visible;hidden;hidden"/>
+
+<g transform="matrix(0.770111 0 0 0.770111 126 206)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M144 11Q120 -1 91 0Q33 1 10 63Q-9 110 7 150Q23 192 67 204L108 203Q136 190 154 134Q173 79 173 57Q174 23 144 11Z"/>
+</g>
+<g transform="matrix(1 0 0 1 63 31)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M81 6L63 0Q43 -1 30 23Q-25 126 22 151Q39 157 51 141L73 95L91 40Q95 13 81 6Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 25 19)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M33 150Q28 143 25 129Q19 101 33 68Q49 31 64 17Q77 4 94 6L53 4Q22 14 8 56Q-4 94 1 115Q7 136 33 150Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -263 -126)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 26 182)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M144 11Q120 -1 91 0Q33 1 10 63Q-9 110 7 150Q23 192 67 204L108 203Q136 190 154 134Q173 79 173 57Q174 23 144 11Z"/>
+</g>
+<g transform="matrix(1 0 0 1 63 31)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M81 6L63 0Q43 -1 30 23Q-25 126 22 151Q39 157 51 141L73 95L91 40Q95 13 81 6Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 25 19)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M33 150Q28 143 25 129Q19 101 33 68Q49 31 64 17Q77 4 94 6L53 4Q22 14 8 56Q-4 94 1 115Q7 136 33 150Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.998184 1.52588e-05 0 0.99527 -466 -274)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+
+<g visibility="hidden">
+<animate attributeName="visibility" calcMode="discrete" dur="1.48s" repeatCount="indefinite" keyTimes="0;0.972972972973;1" values="hidden;visible;visible"/>
+
+<g transform="matrix(0.770111 0 0 0.770111 126 206)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M144 11Q120 -1 91 0Q33 1 10 63Q-9 110 7 150Q23 192 67 204L108 203Q136 190 154 134Q173 79 173 57Q174 23 144 11Z"/>
+</g>
+<g transform="matrix(1 0 0 1 63 31)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M81 6L63 0Q43 -1 30 23Q-25 126 22 151Q39 157 51 141L73 95L91 40Q95 13 81 6Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 25 19)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M33 150Q28 143 25 129Q19 101 33 68Q49 31 64 17Q77 4 94 6L53 4Q22 14 8 56Q-4 94 1 115Q7 136 33 150Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 -263 -126)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M527 247Q527 145 450 73Q373 0 264 0Q155 0 78 73Q1 145 1 247Q1 349 78 422Q155 494 264 494Q373 494 450 422Q527 349 527 247Z"/>
+</g>
+<g transform="matrix(1 0 0 1 28 20)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFD4B3" fill-opacity="1" fill-rule="evenodd" d="M463 158Q443 102 397 61Q350 21 285 6L231 0Q177 0 129 22Q82 44 49 83Q16 122 5 174Q-8 236 13 292Q34 348 80 388Q126 429 191 444L244 450Q299 449 346 428Q393 406 426 367Q459 328 471 276Q483 214 463 158Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 207 40)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFEDDC" fill-opacity="1" fill-rule="evenodd" d="M238 61Q202 22 150 0Q83 21 42 73Q1 126 0 196Q2 274 52 330Q103 386 184 400Q225 377 253 341Q281 304 292 256Q303 201 288 151Q273 100 238 61Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 26 182)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M144 11Q120 -1 91 0Q33 1 10 63Q-9 110 7 150Q23 192 67 204L108 203Q136 190 154 134Q173 79 173 57Q174 23 144 11Z"/>
+</g>
+<g transform="matrix(1 0 0 1 63 31)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M81 6L63 0Q43 -1 30 23Q-25 126 22 151Q39 157 51 141L73 95L91 40Q95 13 81 6Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 25 19)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M33 150Q28 143 25 129Q19 101 33 68Q49 31 64 17Q77 4 94 6L53 4Q22 14 8 56Q-4 94 1 115Q7 136 33 150Z"/>
+</g>
+</g>
+</g>
+<g transform="matrix(0.998184 1.52588e-05 0 0.99527 -466 -274)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M452 143Q449 125 439 118Q417 97 406 75L391 42L384 24Q378 17 371 16L333 2L318 0L297 4L276 12L239 28L201 44Q177 53 169 62L161 78L159 104L155 148L149 186L82 200L23 205L9 204L4 203Q-2 203 1 208L15 220Q64 256 87 282L117 327L131 356L147 370L159 358Q179 333 202 318L242 296L259 290Q288 281 291 267L293 252Q293 243 313 244Q372 239 401 221Q430 202 441 184Q455 160 452 143Z"/>
+</g>
+<g transform="matrix(1 0 0 1 176 81)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#00C7FF" fill-opacity="1" fill-rule="evenodd" d="M107 42L5 0L2 14L3 20L1 48L1 110L30 123Q49 132 69 144Q89 156 103 170L105 160L103 154Q98 147 107 144L106 105L106 62L107 42Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 282 29)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#0077DE" fill-opacity="1" fill-rule="evenodd" d="M103 61Q90 39 87 24L77 8L65 0L66 28Q65 45 50 63Q36 81 1 94L0 131L0 170L1 196L9 195L21 196L36 196Q78 195 100 183Q123 171 132 155L145 132Q154 111 133 96L103 61Z"/>
+</g>
+</g>
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M331 21L339 34Q345 47 341 66Q337 84 307 103L300 107L280 111L265 109L220 91Q194 79 185 69L178 79L175 85L193 92L235 108L277 125L287 126L293 125L318 112Q337 100 349 78Q361 55 349 25L338 20L331 21Z"/>
+<path fill="#000000" fill-opacity="1" fill-rule="evenodd" d="M287 119L277 125L277 150L277 198L277 231L285 235L287 119Z"/>
+</g>
+<g transform="matrix(1 0 0 1 42 25)" opacity="1">
+<g transform="matrix(1 0 0 1 0 0)" opacity="1">
+
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M297 3L295 3L281 0L269 1L263 3L245 9L206 23L165 37Q147 43 141 53L186 73L239 95Q279 81 293 64Q307 46 306 30L297 3Z"/>
+<path fill="#FFFFFF" fill-opacity="1" fill-rule="evenodd" d="M9 192Q-3 192 1 196L15 206Q39 221 68 250L107 300Q119 282 147 267Q175 252 199 243L225 234L239 224L194 190Q163 168 135 156L135 168L93 179L42 188L9 192Z"/>
+</g>
+</g>
+</g>
+</g>
+</svg>
