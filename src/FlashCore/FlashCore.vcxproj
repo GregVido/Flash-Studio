@@ -52,6 +52,7 @@
     <ClCompile Include="Avm1.cpp" />
     <ClCompile Include="Avm2.cpp" />
     <ClCompile Include="Avm2Code.cpp" />
+    <ClCompile Include="Avm2StringEval.cpp" />
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="..\..\third_party\zlib\adler32.c;..\..\third_party\zlib\deflate.c;..\..\third_party\zlib\inffast.c;..\..\third_party\zlib\inflate.c;..\..\third_party\zlib\inftrees.c;..\..\third_party\zlib\trees.c;..\..\third_party\zlib\zutil.c">
       <WarningLevel>Level3</WarningLevel>
@@ -63,6 +64,7 @@
     <ClInclude Include="Compression.hpp" />
     <ClInclude Include="ActionScript.hpp" />
     <ClInclude Include="Avm2Code.hpp" />
+    <ClInclude Include="Avm2StringEval.hpp" />
     <ClInclude Include="Abc.hpp" />
     <ClInclude Include="ClassEditing.hpp" />
     <ClInclude Include="Search.hpp" />

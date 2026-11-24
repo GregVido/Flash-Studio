@@ -925,13 +925,51 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
         auto result = flash::deobfuscate_as3(*input, tag, type);
         report = result.report;
         if (result.movie)
-        {
             cleaned = std::make_shared<flash::Movie>(std::move(*result.movie));
-            rows = index_rows(*cleaned);
-        }
     }
     catch (const std::exception& error) { problem = widen(error.what()); }
     co_await ui;
+    if (closed_)
+        co_return;
+    bool simplify_strings = false;
+    if (problem.empty())
+    {
+        try
+        {
+            ContentDialog prompt;
+            prompt.XamlRoot(root_.XamlRoot());
+            prompt.Title(box_value(tr(L"Simplifier les chaînes ?")));
+            auto message = label(tr(L"Remplacer les appels aux décodeurs reconnus par les chaînes qu’ils renvoient ? Flash Studio évalue les calculs compatibles sans lancer le SWF."));
+            message.TextWrapping(TextWrapping::WrapWholeWords);
+            message.TextTrimming(TextTrimming::None);
+            prompt.Content(message);
+            prompt.PrimaryButtonText(tr(L"Simplifier les chaînes"));
+            prompt.CloseButtonText(tr(L"Garder les appels"));
+            prompt.DefaultButton(ContentDialogButton::Close);
+            simplify_strings = co_await prompt.ShowAsync() == ContentDialogResult::Primary;
+        }
+        catch (const hresult_error& error) { problem = error.message(); }
+    }
+    if (closed_)
+        co_return;
+    if (problem.empty() && (cleaned || simplify_strings))
+    {
+        co_await resume_background();
+        try
+        {
+            if (simplify_strings)
+            {
+                auto simplified = flash::simplify_as3_strings(cleaned ? *cleaned : *input, tag, type);
+                if (simplified.movie)
+                    cleaned = std::make_shared<flash::Movie>(std::move(*simplified.movie));
+                report.resolved_strings = simplified.report.resolved_strings;
+            }
+            if (cleaned)
+                rows = index_rows(*cleaned);
+        }
+        catch (const std::exception& error) { problem = widen(error.what()); }
+        co_await ui;
+    }
     if (closed_)
         co_return;
     if (!cleaned || !problem.empty())
@@ -985,8 +1023,11 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
         open_script_target(*target);
     else if (mode_ != Mode::scripts)
         switch_mode(Mode::scripts);
-    status(format_message(L"{} méthodes nettoyées · {} branchements constants simplifiés · {} méthodes ignorées",
-        report.changed_methods, report.constant_branches, report.skipped_methods));
+    auto summary = format_message(L"{} méthodes nettoyées · {} branchements constants simplifiés · {} méthodes ignorées",
+        report.changed_methods, report.constant_branches, report.skipped_methods);
+    if (simplify_strings)
+        summary += format_message(L" · {} appels remplacés par des chaînes", report.resolved_strings);
+    status(summary);
 }
 
 void Workspace::update_document()

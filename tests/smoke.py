@@ -305,6 +305,52 @@ def check(exe, folder, asc=None):
         run("class-edit", created, "1", "demo.Panel", source, rejected, asc / "asc.jar", ok=False)
         assert not rejected.exists()
 
+        decoder = folder / "Decoder.as"
+        decoder.write_text("""package messages {
+    public class Decoder {
+        public static function reveal(first:int, second:int):String {
+            return String.fromCharCode(first, second);
+        }
+    }
+}""", encoding="utf-8")
+        with_decoder = folder / "Décodeur de chaînes.swf"
+        run("class-new", empty_as3, "messages.Decoder", decoder, with_decoder, asc / "asc.jar")
+        caller = folder / "StringCaller.as"
+        caller.write_text("""package demo {
+    import messages.Decoder;
+    public class StringCaller {
+        public function text():String { return Decoder.reveal(79, 75); }
+        public function dynamicText(code:int):String { return Decoder.reveal(code, 75); }
+        public function nested():Function {
+            return function():String { return Decoder.reveal(72, 73); };
+        }
+    }
+}""", encoding="utf-8")
+        with_calls = folder / "Appels au décodeur.swf"
+        run("class-new", with_decoder, "demo.StringCaller", caller, with_calls, asc / "asc.jar")
+        original = with_calls.read_bytes()
+        cleaned_calls = folder / "Chaînes résolues.swf"
+        assert "Decoder.reveal" in run("abc-class", with_calls, "1", "0")
+        assert "2 appels remplacés" in run("deobfuscate", with_calls, cleaned_calls, "1", "0", "--strings")
+        assert with_calls.read_bytes() == original
+        resolved = run("abc-class", cleaned_calls, "1", "0")
+        assert 'return "OK";' in resolved and 'return "HI";' in resolved and "return Decoder.reveal(" in resolved
+        assert "0 en échec" in run("abc-audit", cleaned_calls, "1")
+
+        source.write_text("""package demo {
+    public class Probe {
+        public function make():Function {
+            var captured:int = 42;
+            return function():int { return captured; };
+        }
+    }
+}""", encoding="utf-8")
+        closures = folder / "Fonction imbriquée.swf"
+        run("class-new", empty_as3, "demo.Probe", source, closures, asc / "asc.jar")
+        nested = run("abc-class", closures, "1", "0")
+        assert "function():int" in nested and "return captured;" in nested and "Corps AVM2 non reconstruit" not in nested
+        recompile(nested, "asc-fermeture")
+
     abc_header = b"\x00\x00\x00\x00Probe\x00"
     class_suffix = tag(76, struct.pack("<HH", 1, 0) + b"demo.Probe\x00") + tag(1) + tag(0)
     class_body = class_header + tag(82, abc_header + class_abc) + class_suffix
@@ -658,6 +704,19 @@ returnvalue
     recompile(catch_source, "asc-exceptions")
 
     catch_code = loop_pcode.read_text(encoding="utf-8")
+    region = catch_code[catch_code.index("debut:"):catch_code.index("suite:")].replace("gestion:", "rescue:")
+    second_region = (region.replace("debut", "next_start").replace("fin", "next_end")
+                     .replace("rescue", "next_rescue").replace("suite", "complete").replace("newcatch 0", "newcatch 1"))
+    two_catches = catch_code[:catch_code.index("debut:")].replace(
+        ".exception debut fin gestion 0 0", ".exception debut fin rescue 0 0\n.exception next_start next_end next_rescue 0 0")
+    two_catches += region + "suite: nop\n" + second_region + "complete: getlocal1\nreturnvalue\n"
+    loop_pcode.write_text(two_catches, encoding="utf-8")
+    twice = folder / "Exceptions successives.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, twice)
+    both_blocks = run("abc-class", twice, "0", "0")
+    assert both_blocks.count("catch (error:*)") == 2
+    recompile(both_blocks, "asc-exceptions-successives")
+
     opaque_code = catch_code.replace(".locals 3", ".locals 5").replace(
         "getlocal0\npushscope\ndebut: pushbyte 4",
         "pushfalse\npushtrue\nswap\njump stores\npushbyte 99\npop\npushnull\npop\n"

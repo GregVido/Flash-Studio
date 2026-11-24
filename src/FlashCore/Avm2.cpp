@@ -1,11 +1,15 @@
 #include "ActionScript.hpp"
 #include "Avm2Code.hpp"
+#include "Avm2StringEval.hpp"
 #include "Abc.hpp"
 
 #include <array>
+#include <cmath>
 #include <iterator>
 #include <map>
 #include <set>
+#include <utility>
+#include <variant>
 #include <Windows.h>
 
 namespace flash::script
@@ -14,7 +18,7 @@ namespace
 {
 struct Multiname
 {
-    unsigned kind{}, string{}, ns{}, base{};
+    unsigned kind{}, string{}, ns{}, base{}, set{};
     std::vector<unsigned> types;
 };
 
@@ -46,6 +50,28 @@ struct ScriptTraits
 {
     std::vector<unsigned> classes;
     bool class_only = true;
+};
+
+using CapturedVariables = std::map<unsigned, std::string>;
+using DecoderName = std::pair<std::string, std::string>;
+struct StringDecoders
+{
+    std::map<DecoderName, StringDecoder> methods;
+    std::map<std::pair<DecoderName, std::vector<std::int32_t>>, std::optional<std::string>> cache;
+
+    const std::optional<std::string>& evaluate(const DecoderName& name, const std::vector<std::int32_t>& arguments)
+    {
+        static const std::optional<std::string> unresolved;
+        const auto candidate = methods.find(name);
+        if (candidate == methods.end())
+            return unresolved;
+        const auto key = std::pair{name, arguments};
+        if (const auto cached = cache.find(key); cached != cache.end())
+            return cached->second;
+        if (cache.size() >= 4096)
+            return unresolved;
+        return cache.try_emplace(key, candidate->second.evaluate(arguments)).first->second;
+    }
 };
 
 struct SourceNames
@@ -118,7 +144,7 @@ void pool(Reader& input, std::vector<T>& values, Read read)
 }
 
 template<typename T>
-const T& at(const std::vector<T>& values, unsigned index)
+const T& at(const std::vector<T>& values, std::size_t index)
 {
     if (index >= values.size())
         throw std::runtime_error("Indice de table ABC invalide.");
@@ -244,7 +270,8 @@ public:
     Bytes replace_method(unsigned method, std::string_view assembly) const;
     Bytes replace_string(unsigned index, std::string_view text) const;
     std::size_t obfuscated_methods() const;
-    AbcDeobfuscation deobfuscate(std::optional<std::size_t> type) const;
+    AbcDeobfuscation deobfuscate(std::optional<std::size_t> type, StringDecoders* decoders = nullptr) const;
+    void register_string_decoders(StringDecoders& decoders, const std::map<std::string, std::size_t>& class_counts) const;
     std::vector<AbcMethod> catalog() const;
     AbcClassSource render_class(std::size_t index) const;
     unsigned major() const { return major_; }
@@ -263,24 +290,33 @@ private:
         std::vector<ActivationSlot>* slots = nullptr);
     void label(unsigned method, std::string text);
     void assembly(const Body& body, Output& out) const;
-    void source(const Body& body, Output& out, SourceNames* names = nullptr, std::string_view static_owner = {}) const;
+    void source(const Body& body, Output& out, SourceNames* names = nullptr, std::string_view static_owner = {},
+        const CapturedVariables* captured = nullptr, unsigned nesting = 0) const;
     void render_body(const Body& body, bool as_source, Output& out) const;
-    void validate(unsigned method, const AssembledMethod& assembled) const;
+    void validate(unsigned method, const AssembledMethod& assembled, std::size_t added_strings = 0) const;
     std::string render_pcode(const Body& body, std::span<const Instruction> instructions, Output out) const;
     const Body& body(unsigned method) const;
+    bool public_name(unsigned index, std::string_view package, std::string_view local) const;
+    std::optional<double> numeric_constant(const Instruction& instruction) const;
+    std::map<unsigned, StringTable> string_tables(unsigned cinit, const AbcClass& type) const;
+    StringDecoder string_decoder(unsigned method, std::map<unsigned, StringTable> tables) const;
+    std::size_t rewrite_string_calls(std::vector<Instruction>& code, const Body& body, StringDecoders& decoders,
+        std::map<std::string, unsigned, std::less<>>& pool, std::vector<std::string>& added) const;
 
     ByteView bytes_;
     unsigned major_{}, minor_{};
     std::vector<AbcClass> classes_;
-    std::vector<unsigned> class_bases_;
+    std::vector<unsigned> class_names_, class_bases_;
     std::map<unsigned, std::vector<unsigned>> class_scripts_;
     std::vector<std::int32_t> integers_;
     std::vector<std::uint32_t> unsigned_, namespaces_;
     std::vector<unsigned> namespace_kinds_{0};
+    std::vector<std::vector<unsigned>> namespace_sets_{1};
     std::vector<double> doubles_;
     std::vector<float> floats_;
     std::vector<std::array<float, 4>> float4s_;
     std::vector<std::string> strings_;
+    std::size_t strings_begin_{}, strings_end_{};
     std::vector<std::pair<std::size_t, std::size_t>> string_ranges_{{0, 0}};
     std::vector<Multiname> multinames_;
     std::map<std::string, std::string, std::less<>> public_symbols_;
@@ -311,6 +347,7 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
             return value;
         });
     }
+    strings_begin_ = input.position();
     pool(input, strings_, [&]
     {
         const auto begin = input.position();
@@ -318,13 +355,16 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
         string_ranges_.emplace_back(begin, input.position());
         return value;
     });
+    strings_end_ = input.position();
     pool(input, namespaces_, [&] { namespace_kinds_.push_back(input.u8()); return input.u30(); });
     const auto sets = bounded_count(input);
     for (unsigned i = 1; i < sets; ++i)
     {
         const auto size = bounded_count(input);
+        auto& namespaces = namespace_sets_.emplace_back();
+        namespaces.reserve(size);
         for (unsigned j = 0; j < size; ++j)
-            input.u30();
+            namespaces.push_back(input.u30());
     }
     pool(input, multinames_, [&]
     {
@@ -335,8 +375,8 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
         case 0x07: case 0x0D: entry.ns = input.u30(); entry.string = input.u30(); break;
         case 0x0F: case 0x10: entry.string = input.u30(); break;
         case 0x11: case 0x12: break;
-        case 0x09: case 0x0E: entry.string = input.u30(); input.u30(); break;
-        case 0x1B: case 0x1C: input.u30(); break;
+        case 0x09: case 0x0E: entry.string = input.u30(); entry.set = input.u30(); break;
+        case 0x1B: case 0x1C: entry.set = input.u30(); break;
         case 0x1D:
         {
             entry.base = input.u30();
@@ -412,6 +452,7 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
     for (auto& type : classes_)
     {
         const auto class_name = input.u30();
+        class_names_.push_back(class_name);
         type.name = name(class_name, false);
         type.qualified = name(class_name);
         if (const auto separator = type.qualified.rfind('.'); separator != std::string::npos)
@@ -670,6 +711,86 @@ std::string Abc::literal(unsigned op, unsigned index) const
     }
 }
 
+namespace
+{
+void order_between_handlers(std::vector<Instruction>& instructions, const Body& body)
+{
+    if (body.exceptions.size() < 2 || body.exceptions.size() > 128)
+        return;
+    const auto position = [&](std::size_t offset)
+    {
+        if (offset == body.code.size())
+            return instructions.size();
+        const auto found = std::ranges::lower_bound(instructions, offset, {}, &Instruction::offset);
+        return found != instructions.end() && found->offset == offset ?
+            static_cast<std::size_t>(found - instructions.begin()) : SIZE_MAX;
+    };
+    std::set<std::size_t> boundaries{0, instructions.size()};
+    for (const auto& entry : body.exceptions)
+    {
+        const auto last = position(entry.to);
+        if (last >= instructions.size() || instructions[last].op != 0x10)
+            return;
+        boundaries.insert({position(entry.from), last, position(entry.target),
+            position(static_cast<std::size_t>(instructions[last].args[0]))});
+    }
+    if (*boundaries.rbegin() != instructions.size())
+        return;
+    std::map<std::size_t, std::pair<std::size_t, std::size_t>> incoming;
+    for (std::size_t i = 0; i < instructions.size(); ++i)
+        if (instructions[i].op >= 0x0C && instructions[i].op <= 0x1B)
+            for (const auto address : instructions[i].args)
+            {
+                const auto target = position(static_cast<std::size_t>(address));
+                if (target == SIZE_MAX)
+                    return;
+                const auto [entry, inserted] = incoming.try_emplace(target, i, i);
+                if (!inserted)
+                    entry->second.second = i;
+            }
+    for (auto begin = boundaries.begin(); std::next(begin) != boundaries.end(); ++begin)
+    {
+        const auto first = *begin, last = *std::next(begin);
+        bool external = false;
+        for (auto entry = incoming.upper_bound(first); entry != incoming.end() && entry->first < last; ++entry)
+            external |= entry->second.first < first || entry->second.second >= last;
+        if (external)
+            continue;
+        std::vector<Instruction> ordered;
+        std::vector<bool> visited(last - first);
+        std::size_t next = first;
+        bool rearranged = false;
+        while (next >= first && next < last && !visited[next - first])
+        {
+            visited[next - first] = true;
+            const auto& item = instructions[next];
+            if (item.op == 0x10)
+            {
+                const auto target = position(static_cast<std::size_t>(item.args[0]));
+                rearranged |= target != next + 1;
+                next = target;
+                continue;
+            }
+            if ((item.op >= 0x0C && item.op <= 0x1B) || item.op == 0x03 || item.op == 0x47 || item.op == 0x48)
+                break;
+            if (item.op != 0x02 && item.op != 0x09)
+                ordered.push_back(item);
+            ++next;
+        }
+        if (!rearranged || next != last || !std::ranges::all_of(visited, [](bool value) { return value; }))
+            continue;
+        for (auto i = first; i < last; ++i)
+        {
+            const auto offset = instructions[i].offset;
+            instructions[i] = i - first < ordered.size() ? std::move(ordered[i - first]) : Instruction{};
+            instructions[i].offset = offset;
+            if (i - first >= ordered.size())
+                instructions[i].op = 0x02;
+        }
+    }
+}
+}
+
 std::string Abc::resolved_operand(unsigned op, unsigned index) const
 {
     auto resolved = multiname_operand(op) ? name(index) : literal(op, index);
@@ -722,8 +843,11 @@ void Abc::assembly(const Body& body, Output& out) const
     }
 }
 
-void Abc::source(const Body& body, Output& output, SourceNames* names, std::string_view static_owner) const
+void Abc::source(const Body& body, Output& output, SourceNames* names, std::string_view static_owner,
+    const CapturedVariables* captured, unsigned nesting) const
 {
+    if (nesting > 8)
+        throw std::runtime_error("Trop de fonctions ActionScript imbriquées.");
     constexpr std::string_view lexical_scope = "\x01lexical", global_scope = "\x01global";
     constexpr std::string_view activation_scope = "\x01" "activation";
     const auto validate_expression = [](std::string_view text)
@@ -734,6 +858,10 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
     const auto& method = methods_[body.method];
     const auto argument_count = method.parameters.size() + (method.rest || method.arguments);
     std::set<std::string> used_names(method.parameters.begin(), method.parameters.end());
+    if (captured)
+        for (const auto& [index, name] : *captured)
+            if (!used_names.insert(name).second)
+                throw std::runtime_error("Paramètre masquant une variable capturée.");
     std::map<unsigned, std::string> local_names;
     const auto local = [&](unsigned number)
     {
@@ -762,17 +890,18 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             throw std::runtime_error("Trop d’instructions pour reconstruire cette méthode.");
         instructions.push_back(decode(code));
     }
+    order_between_handlers(instructions, body);
     const bool own_scope = instructions.size() >= 2 && instructions[0].op == 0xD0 && instructions[1].op == 0x30;
+    const auto scope_start = own_scope ? std::size_t{2} : 0;
     std::optional<unsigned> activation;
-    if (own_scope && instructions.size() >= 6 && instructions[2].op == 0x57 && instructions[3].op == 0x2A &&
-        instructions[5].op == 0x30 && !body.slots.empty())
+    if (instructions.size() >= scope_start + 4 && instructions[scope_start].op == 0x57 &&
+        instructions[scope_start + 1].op == 0x2A && instructions[scope_start + 3].op == 0x30)
     {
-        activation = store_register(instructions[4]);
-        if (activation && (!*activation || *activation <= argument_count ||
-            std::ranges::any_of(instructions, [](const Instruction& item) { return item.op == 0x40; })))
-            throw std::runtime_error("Portée d’activation capturée ou partagée avec un argument.");
+        activation = store_register(instructions[scope_start + 2]);
+        if (activation && (!*activation || *activation <= argument_count))
+            throw std::runtime_error("Portée d’activation partagée avec un argument.");
     }
-    const auto body_start = activation ? std::size_t{6} : 0;
+    const auto body_start = activation ? scope_start + 4 : 0;
     for (const auto& item : instructions)
     {
         switch (item.op)
@@ -885,6 +1014,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             case 0x28: case 0x2F: case 0x75: case 0x84: return "Number";
             case 0x2C: case 0x70: case 0x85: case 0x95: return "String";
             case 0x55: return "Object";
+            case 0x40: return "Function";
             case 0x56: return "Array";
             case 0x80: case 0x86: return name(static_cast<unsigned>(producer.args[0]));
             case 0x42: case 0x4A: return constructed_type(previous);
@@ -982,6 +1112,32 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             }
             slot_declarations.add(variable + ";\n");
         }
+    CapturedVariables lexical_variables = captured ? *captured : CapturedVariables{};
+    for (const auto& [index, slot] : variable_slots)
+        lexical_variables.insert_or_assign(index, slot_variables.at(slot));
+    const auto lexical_variable = [&](unsigned index) -> const std::string*
+    {
+        if (const auto found = lexical_variables.find(index); found != lexical_variables.end())
+            return &found->second;
+        const auto& lookup = at(multinames_, index);
+        if (lookup.kind != 0x07 && lookup.kind != 0x09)
+            return nullptr;
+        const std::string* match = nullptr;
+        for (const auto& [key, value] : lexical_variables)
+        {
+            const auto& original = at(multinames_, key);
+            if (original.kind != 0x07 || at(strings_, original.string) != at(strings_, lookup.string))
+                continue;
+            const bool same_namespace = lookup.kind == 0x07 ? original.ns == lookup.ns :
+                std::ranges::find(at(namespace_sets_, lookup.set), original.ns) != at(namespace_sets_, lookup.set).end();
+            if (!same_namespace)
+                continue;
+            if (match)
+                throw std::runtime_error("Variable capturée ambiguë.");
+            match = &value;
+        }
+        return match;
+    };
     Output out;
     const auto destination = [&](std::int64_t address)
     {
@@ -1025,37 +1181,43 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         CatchVariable variable;
     };
     std::optional<CatchVariable> caught;
-    std::optional<TryRegion> guarded;
+    std::vector<TryRegion> regions;
     const auto unsupported_try = [] { return std::runtime_error("Structure try/catch ou finally non reconnue."); };
     if (!body.exceptions.empty())
     {
-        if (body.exceptions.size() != 1)
-            throw unsupported_try();
-        const auto& handler = body.exceptions.front();
-        const auto first = destination(handler.from), last = destination(handler.to), rescue = destination(handler.target);
-        if (first < body_start || first >= last || last >= rescue || rescue + 2 > instructions.size() || instructions[last].op != 0x10 ||
-            instructions[rescue].op != 0xD0 || instructions[rescue + 1].op != 0x30)
-            throw unsupported_try();
-        const auto join = destination(instructions[last].args[0]);
-        auto binder = rescue + 2;
-        if (activation && binder + 1 < join && load_register(instructions[binder]) == activation && instructions[binder + 1].op == 0x30)
-            binder += 2;
-        constexpr unsigned prologue[]{0x5A, 0x2A, 0, 0x2A, 0x30, 0x2B, 0x6D};
-        constexpr auto setup = std::size(prologue);
-        if (join < binder + setup + 2)
-            throw unsupported_try();
-        for (std::size_t i = 0; i < setup; ++i)
-            if (prologue[i] && instructions[binder + i].op != prologue[i])
+        for (std::size_t exception = 0; exception < body.exceptions.size(); ++exception)
+        {
+            const auto& handler = body.exceptions[exception];
+            const auto first = destination(handler.from), last = destination(handler.to), rescue = destination(handler.target);
+            if (first < body_start || first >= last || last >= rescue || rescue + 2 > instructions.size() || instructions[last].op != 0x10 ||
+                instructions[rescue].op != 0xD0 || instructions[rescue + 1].op != 0x30)
                 throw unsupported_try();
-        const auto temporary = store_register(instructions[binder + 2]);
-        const auto& cleanup = instructions[join - 1];
-        auto catch_name = identifier(name(handler.variable, false), "error");
-        if (!temporary || !*temporary || activation == temporary || instructions[binder].args[0] != 0 || instructions[binder + 6].args[0] != 1 ||
-            instructions[join - 2].op != 0x1D || cleanup.op != 0x08 || cleanup.args[0] != *temporary || used_names.contains(catch_name))
-            throw unsupported_try();
-        guarded = TryRegion{first, last, binder + setup, join, qualified_name(handler.type), {std::move(catch_name), local(*temporary)}};
+            const auto join = destination(instructions[last].args[0]);
+            auto binder = rescue + 2;
+            if (activation && binder + 1 < join && load_register(instructions[binder]) == activation && instructions[binder + 1].op == 0x30)
+                binder += 2;
+            constexpr unsigned prologue[]{0x5A, 0x2A, 0, 0x2A, 0x30, 0x2B, 0x6D};
+            constexpr auto setup = std::size(prologue);
+            if (join < binder + setup + 2)
+                throw unsupported_try();
+            for (std::size_t i = 0; i < setup; ++i)
+                if (prologue[i] && instructions[binder + i].op != prologue[i])
+                    throw unsupported_try();
+            const auto temporary = store_register(instructions[binder + 2]);
+            const auto& cleanup = instructions[join - 1];
+            auto catch_name = identifier(name(handler.variable, false), "error");
+            if (!temporary || !*temporary || activation == temporary || instructions[binder].args[0] != static_cast<std::int64_t>(exception) ||
+                instructions[binder + 6].args[0] != 1 ||
+                instructions[join - 2].op != 0x1D || cleanup.op != 0x08 || cleanup.args[0] != *temporary || used_names.contains(catch_name))
+                throw unsupported_try();
+            regions.push_back({first, last, binder + setup, join, qualified_name(handler.type), {std::move(catch_name), local(*temporary)}});
+        }
+        std::ranges::sort(regions, {}, &TryRegion::first);
+        for (std::size_t i = 1; i < regions.size(); ++i)
+            if (regions[i - 1].join > regions[i].first)
+                throw unsupported_try();
     }
-    bool emitted_try = false;
+    std::set<std::size_t> emitted_try;
     struct SwitchDispatch
     {
         std::size_t store, dispatch;
@@ -1150,11 +1312,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         };
         for (std::size_t i = first; i < last; ++i)
         {
-            if (guarded && i == guarded->first && last >= guarded->join)
+            const auto guarded = std::ranges::lower_bound(regions, i, {}, &TryRegion::first);
+            if (guarded != regions.end() && i == guarded->first && last >= guarded->join)
             {
-                if (expression || !stack.empty() || emitted_try)
+                if (expression || !stack.empty() || !emitted_try.insert(i).second)
                     throw unsupported_try();
-                emitted_try = true;
                 out.add(indent + "try\n" + indent + "{\n");
                 visit(visit, i, guarded->last, depth + 1, false, false, loop);
                 caught = guarded->variable;
@@ -1170,8 +1332,8 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             const auto arg = [&](std::size_t index) { return static_cast<unsigned>(item.args.at(index)); };
             const auto lexical = [&]
             {
-                if (const auto slot = variable_slots.find(arg(0)); slot != variable_slots.end())
-                    return slot_variables.at(slot->second);
+                if (const auto variable = lexical_variable(arg(0)))
+                    return *variable;
                 const auto& entry = at(multinames_, arg(0));
                 if (entry.kind != 0x07 && entry.kind != 0x09)
                     throw std::runtime_error("Accès à une propriété calculée à l’exécution.");
@@ -1576,6 +1738,21 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 if (stack.pop() != local(0))
                     throw std::runtime_error("Portée construite dynamiquement.");
                 break;
+            case 0x40:
+            {
+                const auto index = arg(0);
+                Output closure;
+                try { source(this->body(index), closure, names, {}, &lexical_variables, nesting + 1); }
+                catch (const std::runtime_error& error)
+                {
+                    throw std::runtime_error(std::format("Fonction imbriquée {} · {}", index, error.what()));
+                }
+                const auto signature = method_signature(index);
+                const auto parameters = signature.substr(signature.find('('));
+                stack.push("(function" + (names ? names->spell(parameters) : parameters) + "\n{\n" +
+                    std::move(closure).take() + "})");
+                break;
+            }
             case 0x41:
             {
                 const auto arguments = stack.arguments(arg(0), true, true);
@@ -1678,7 +1855,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             case 0x65:
                 if (own_scope && arg(0) == 0)
                     stack.push(local(0));
-                else if (activation && arg(0) == 1)
+                else if (activation && arg(0) == static_cast<unsigned>(own_scope))
                     stack.push(std::string(activation_scope));
                 else
                     throw std::runtime_error("Objet de portée non reconnu.");
@@ -1692,7 +1869,12 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 emit(slot_name(stack.pop()) + " = " + value);
                 break;
             }
-            case 0x70: case 0x85: stack.push("String(" + stack.pop_as3_value() + ')'); break;
+            case 0x70: case 0x85:
+            {
+                const auto value = stack.pop();
+                stack.push(value.starts_with('"') && value.ends_with('"') ? value : "String(" + value + ')');
+                break;
+            }
             case 0x73: case 0x83: stack.push("int(" + stack.pop_as3_value() + ')'); break;
             case 0x74: case 0x88: stack.push("uint(" + stack.pop_as3_value() + ')'); break;
             case 0x75: case 0x84: stack.push("Number(" + stack.pop_as3_value() + ')'); break;
@@ -1769,7 +1951,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         return result;
     };
     statement_block(statement_block, body_start, instructions.size(), 1);
-    if (guarded && !emitted_try)
+    if (emitted_try.size() != regions.size())
         throw unsupported_try();
     for (const auto& [index, declaration] : local_declarations)
         output.add("    " + declaration + ";\n");
@@ -1889,6 +2071,18 @@ const std::vector<unsigned>* Abc::class_script(unsigned method) const
             return matches;
         };
         const auto previous_arg = [&] { return static_cast<unsigned>(instructions[i - 1].args[0]); };
+        const auto getlex = [&]() -> std::optional<unsigned>
+        {
+            if (accept(0x60))
+                return previous_arg();
+            if (i + 1 < instructions.size() && instructions[i].op == 0x5D && instructions[i + 1].op == 0x66 &&
+                instructions[i].args == instructions[i + 1].args)
+            {
+                i += 2;
+                return previous_arg();
+            }
+            return {};
+        };
         if (!accept(0xD0) || !accept(0x30))
             return nullptr;
         for (const auto index : recorded->second)
@@ -1899,18 +2093,25 @@ const std::vector<unsigned>* Abc::class_script(unsigned method) const
             if (destination_is_scope ? previous_arg() != 0 : !accept(0x5D) || name(previous_arg(), false) != classes_[index].name)
                 return nullptr;
             unsigned scopes = 0, last_scope = 0;
-            while (i + 1 < instructions.size() && instructions[i].op == 0x60 && instructions[i + 1].op == 0x30)
+            while (i < instructions.size())
             {
-                last_scope = static_cast<unsigned>(instructions[i].args[0]);
+                const auto start = i;
+                const auto lookup = getlex();
+                if (!lookup || !accept(0x30))
+                {
+                    i = start;
+                    break;
+                }
+                last_scope = *lookup;
                 ++scopes;
-                i += 2;
             }
             const auto base = class_bases_[index];
             if (base)
             {
-                if (!accept(0x60))
+                const auto binding = getlex();
+                if (!binding)
                     return nullptr;
-                const auto lookup = previous_arg();
+                const auto lookup = *binding;
                 const auto scoped_lookup = at(multinames_, lookup).kind == 0x09 && last_scope &&
                     name(last_scope) == name(base) && name(lookup, false) == name(base, false);
                 if (name(lookup) != name(base) && !scoped_lookup)
@@ -2087,7 +2288,7 @@ std::string Abc::render_pcode(const Body& info, std::span<const Instruction> ins
     return std::move(out).take();
 }
 
-void Abc::validate(unsigned method, const AssembledMethod& assembled) const
+void Abc::validate(unsigned method, const AssembledMethod& assembled, std::size_t added_strings) const
 {
     if (assembled.locals <= at(methods_, method).types.size())
         throw std::runtime_error("Le nombre de registres est inférieur à celui exigé par la signature.");
@@ -2111,7 +2312,11 @@ void Abc::validate(unsigned method, const AssembledMethod& assembled) const
         };
         switch (op)
         {
-        case 0x06: case 0x2C: case 0xF1: at(strings_, arg()); break;
+        case 0x2C:
+            if (arg() >= strings_.size() + added_strings)
+                throw std::runtime_error("Indice de chaîne ABC invalide.");
+            break;
+        case 0x06: case 0xF1: at(strings_, arg()); break;
         case 0x08: case 0x62: case 0x63: case 0x92: case 0x94: case 0xC2: case 0xC3: local(arg()); break;
         case 0x22: at(floats_, arg()); break;
         case 0x2D: at(integers_, arg()); break;
@@ -2179,8 +2384,378 @@ std::size_t Abc::obfuscated_methods() const
     }));
 }
 
-AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
+bool Abc::public_name(unsigned index, std::string_view package, std::string_view local) const
 {
+    const auto& entry = at(multinames_, index);
+    return entry.kind == 0x07 && entry.ns && at(namespace_kinds_, entry.ns) == 0x16 &&
+        at(strings_, at(namespaces_, entry.ns)) == package && at(strings_, entry.string) == local;
+}
+
+std::optional<double> Abc::numeric_constant(const Instruction& item) const
+{
+    if (item.args.empty())
+        return {};
+    const auto operand = static_cast<unsigned>(item.args[0]);
+    switch (item.op)
+    {
+    case 0x24: return double(item.args[0]);
+    case 0x25: return double(std::bit_cast<std::int16_t>(static_cast<std::uint16_t>(operand)));
+    case 0x2D: return double(at(integers_, operand));
+    case 0x2E: return double(at(unsigned_, operand));
+    case 0x2F: return at(doubles_, operand);
+    default: return {};
+    }
+}
+
+namespace
+{
+std::vector<Instruction> decoder_code(const Body& body, std::size_t limit, unsigned first_local = 1)
+{
+    if (!body.exceptions.empty() || !body.slots.empty() || body.code.size() > limit)
+        throw std::runtime_error("Corps non admissible pour l’évaluation des chaînes.");
+    Reader reader(body.code);
+    std::vector<Instruction> result;
+    while (reader.remaining())
+        result.push_back(decode(reader));
+    if (has_boolean_prelude(body.code, first_local, body.locals))
+        deobfuscate_flow(result, body.code.size(), {}, first_local, body.locals);
+    return result;
+}
+
+bool debugger_instruction(unsigned op)
+{
+    return op == 0x02 || op == 0x09 || op == 0xEF || op == 0xF0 || op == 0xF1;
+}
+}
+
+std::map<unsigned, StringTable> Abc::string_tables(unsigned cinit, const AbcClass& type) const
+{
+    const auto unsupported = [] { return std::runtime_error("Initialiseur de tables non reconnu."); };
+    auto code = decoder_code(body(cinit), 256 * 1024);
+    std::erase_if(code, [](const auto& item) { return debugger_instruction(item.op); });
+    std::size_t cursor = 0;
+    const auto take = [&](unsigned op) -> const Instruction&
+    {
+        const auto& item = at(code, cursor++);
+        if (item.op != op)
+            throw unsupported();
+        return item;
+    };
+    if (!code.empty() && code.front().op == 0xD0)
+    {
+        take(0xD0);
+        take(0x30);
+    }
+    std::map<unsigned, StringTable> tables;
+    while (cursor < code.size() && code[cursor].op != 0x47)
+    {
+        const auto field = static_cast<unsigned>(take(0x5E).args[0]);
+        const auto& multiname = at(multinames_, field);
+        if (multiname.kind != 0x07 || !multiname.ns || at(namespace_kinds_, multiname.ns) != 0x17 ||
+            at(strings_, at(namespaces_, multiname.ns)) != type.package)
+            throw unsupported();
+        const auto declaration = "internal static const " + at(strings_, multiname.string) + ":Array";
+        if (std::ranges::none_of(type.members, [&](const auto& member) { return member.declaration == declaration; }))
+            throw unsupported();
+        const auto array = static_cast<unsigned>(take(0x5D).args[0]);
+        if (!public_name(array, "", "Array"))
+            throw unsupported();
+        StringTable table;
+        std::vector<double> values;
+        for (; cursor < code.size(); ++cursor)
+        {
+            const auto& item = code[cursor];
+            if (const auto value = numeric_constant(item); value && std::isfinite(*value) && values.size() < 4096)
+                values.push_back(*value);
+            else if (item.op == 0x56 && item.args[0] == static_cast<std::int64_t>(values.size()) && table.size() < 8192)
+                table.emplace_back(std::exchange(values, {}));
+            else
+                break;
+        }
+        const auto& construct = take(0x4A);
+        if (construct.args[0] != array || construct.args[1] != static_cast<std::int64_t>(table.size()) ||
+            !values.empty() || table.size() < 2 || take(0x68).args[0] != field ||
+            !tables.try_emplace(field, std::move(table)).second)
+            throw unsupported();
+    }
+    take(0x47);
+    if (cursor != code.size())
+        throw unsupported();
+    return tables;
+}
+
+StringDecoder Abc::string_decoder(unsigned id, std::map<unsigned, StringTable> tables) const
+{
+    const auto unsupported = [] { return std::runtime_error("Instruction non admise pour l’évaluation des chaînes."); };
+    const auto& info = body(id);
+    const auto parameters = static_cast<unsigned>(methods_[id].types.size());
+    auto code = decoder_code(info, 8192, parameters + 1);
+    std::vector<unsigned> table_names;
+    StringDecoder result;
+    result.locals = info.locals;
+    result.parameters = parameters;
+    for (auto& [field, values] : tables)
+    {
+        table_names.push_back(field);
+        result.tables.push_back(std::move(values));
+    }
+
+    const auto builtin = [&](unsigned index, std::string_view local)
+    {
+        const auto& entry = at(multinames_, index);
+        if (entry.kind == 0x09 && at(strings_, entry.string) == local)
+            return std::ranges::any_of(at(namespace_sets_, entry.set), [&](unsigned ns)
+            {
+                return ns && at(namespace_kinds_, ns) == 0x16 && at(strings_, at(namespaces_, ns)).empty();
+            });
+        return public_name(index, "", local) || (entry.kind == 0x07 && entry.ns &&
+            at(namespace_kinds_, entry.ns) == 0x08 && at(strings_, entry.string) == local &&
+            at(strings_, at(namespaces_, entry.ns)) == "http://adobe.com/AS3/2006/builtin");
+    };
+    const auto lookup = [&](std::int64_t target)
+    {
+        const auto offset = static_cast<std::size_t>(target);
+        const auto found = std::ranges::lower_bound(code, offset, {}, &Instruction::offset);
+        if (found == code.end() || found->offset != offset)
+            throw unsupported();
+        const auto index = static_cast<std::size_t>(found - code.begin());
+        if (index < 2 && code.size() >= 2 && code[0].op == 0xD0 && code[1].op == 0x30)
+            throw unsupported();
+        return index;
+    };
+    std::set<std::int64_t> targets;
+    for (const auto& item : code)
+        if (item.op >= 0x0C && item.op <= 0x1B)
+            targets.insert(item.args.begin(), item.args.end());
+    for (std::size_t i = 1; i < code.size(); ++i)
+        if (code[i - 1].op == 0x5D && code[i].op == 0x66 && code[i - 1].args == code[i].args &&
+            !targets.contains(static_cast<std::int64_t>(code[i].offset)))
+        {
+            code[i - 1].op = 0x60;
+            code[i].op = 0x02;
+            code[i].args.clear();
+        }
+    for (std::size_t i = 0; i < code.size(); ++i)
+    {
+        const auto& item = code[i];
+        StringInstruction next{};
+        next.op = item.op;
+        const auto operand = item.args.empty() ? 0 : static_cast<unsigned>(item.args[0]);
+        if (debugger_instruction(item.op) ||
+            (i < 2 && code.size() >= 2 && code[0].op == 0xD0 && code[1].op == 0x30))
+            next.op = 0x02;
+        else if (const auto reg = load_register(item); reg && *reg && *reg < info.locals)
+        {
+            next.op = 0x62;
+            next.index = *reg;
+        }
+        else if (const auto written = store_register(item); written && *written && *written < info.locals)
+        {
+            next.op = 0x63;
+            next.index = *written;
+        }
+        else if (const auto value = numeric_constant(item))
+            next.number = *value;
+        else
+        {
+            switch (item.op)
+            {
+            case 0x10: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17: case 0x18:
+                next.index = lookup(item.args[0]); break;
+            case 0x20: case 0x21: case 0x48: case 0x73: case 0x82: case 0x83: case 0x85:
+            case 0x93: case 0xA0: case 0xA1: case 0xA5: case 0xA7: case 0xA8: case 0xAA: case 0xC0:
+                break;
+            case 0x2C: next.text = string_units(at(strings_, operand)); break;
+            case 0x5D:
+                if (!public_name(operand, "", "int"))
+                    throw unsupported();
+                next.member = StringOperand::integer;
+                break;
+            case 0x60:
+                if (builtin(operand, "String"))
+                    next.member = StringOperand::string;
+                else
+                {
+                    const auto table = std::ranges::find(table_names, operand);
+                    if (table == table_names.end())
+                        throw unsupported();
+                    next.member = StringOperand::table;
+                    next.index = static_cast<std::size_t>(table - table_names.begin());
+                }
+                break;
+            case 0x66:
+                if (at(multinames_, operand).kind == 0x1B)
+                    next.member = StringOperand::index;
+                else if (builtin(operand, "length"))
+                    next.member = StringOperand::length;
+                else
+                    throw unsupported();
+                break;
+            case 0x46:
+                next.count = static_cast<unsigned>(item.args[1]);
+                if (next.count == 1 && public_name(operand, "", "int"))
+                    next.member = StringOperand::integer;
+                else if (next.count >= 1 && next.count <= 32 && builtin(operand, "fromCharCode"))
+                    next.member = StringOperand::from_char_code;
+                else if (next.count == 1 && builtin(operand, "charCodeAt"))
+                    next.member = StringOperand::char_code_at;
+                else if (next.count == 2 && builtin(operand, "substring"))
+                    next.member = StringOperand::substring;
+                else
+                    throw unsupported();
+                break;
+            default: throw unsupported();
+            }
+        }
+        result.code.push_back(std::move(next));
+    }
+    return result;
+}
+
+void Abc::register_string_decoders(StringDecoders& decoders, const std::map<std::string, std::size_t>& class_counts) const
+{
+    for (std::size_t index = 0; index < classes_.size(); ++index)
+    {
+        const auto& type = classes_[index];
+        if (type.interface_type || type.members.size() < 3 || type.members.size() > 10 || class_counts.at(type.qualified) != 1 ||
+            !public_name(class_names_[index], type.package, type.name) || !public_name(class_bases_[index], "", "Object"))
+            continue;
+        try
+        {
+            const auto script = std::ranges::find_if(class_scripts_, [&](const auto& item)
+            {
+                return item.second.size() == 1 && item.second.front() == index;
+            });
+            if (script == class_scripts_.end() || !class_script(script->first))
+                continue;
+            const auto ctor = std::ranges::find(type.members, type.name, &AbcMember::name);
+            const auto cinit = std::ranges::find_if(type.members, [](const auto& member) { return member.declaration.empty(); });
+            if (ctor == type.members.end() || !ctor->method || cinit == type.members.end() || !cinit->method)
+                continue;
+            const auto method = std::ranges::find_if(type.members, [](const auto& member)
+            {
+                return member.method && member.declaration.starts_with("public static function ");
+            });
+            if (method == type.members.end() ||
+                std::ranges::count_if(type.members, [](const auto& member) { return member.method.has_value(); }) != 3)
+                continue;
+            const auto& signature = at(methods_, *method->method);
+            if (signature.types.empty() || signature.types.size() > 4 || signature.arguments || signature.rest ||
+                !public_name(signature.result, "", "String") ||
+                std::ranges::any_of(signature.types, [&](auto parameter) { return !public_name(parameter, "", "int"); }))
+                continue;
+            auto code = decoder_code(body(*ctor->method), 128);
+            std::erase_if(code, [](const auto& item) { return debugger_instruction(item.op); });
+            constexpr std::array empty_constructor{0xD0u, 0x30u, 0xD0u, 0x49u, 0x47u};
+            if (!std::ranges::equal(code, empty_constructor, {}, &Instruction::op) || code[3].args[0] != 0)
+                continue;
+            auto tables = string_tables(*cinit->method, type);
+            if (tables.size() + 3 != type.members.size())
+                continue;
+            if (!tables.empty() && std::ranges::any_of(class_counts, [&](const auto& item)
+                {
+                    const auto separator = item.first.rfind('.');
+                    const auto package = separator == std::string::npos ? std::string_view{} :
+                        std::string_view(item.first).substr(0, separator);
+                    return item.first != type.qualified && package == type.package;
+                }))
+                continue;
+            decoders.methods.emplace(DecoderName{type.qualified, method->name}, string_decoder(*method->method, std::move(tables)));
+        }
+        catch (const std::runtime_error&) {}
+    }
+}
+
+std::size_t Abc::rewrite_string_calls(std::vector<Instruction>& code, const Body& body, StringDecoders& decoders,
+    std::map<std::string, unsigned, std::less<>>& pool, std::vector<std::string>& added) const
+{
+    std::set<std::int64_t> entries;
+    for (const auto& item : code)
+        if (item.op >= 0x0C && item.op <= 0x1B)
+            entries.insert(item.args.begin(), item.args.end());
+    for (const auto& entry : body.exceptions)
+        entries.insert({entry.from, entry.to, entry.target});
+
+    std::size_t resolved = 0;
+    for (std::size_t first = 0; first + 2 < code.size(); ++first)
+    {
+        const auto& receiver = code[first];
+        const auto loaded = receiver.op == 0x60;
+        const auto retrieved = receiver.op == 0x5D && code[first + 1].op == 0x66 && receiver.args == code[first + 1].args;
+        if (!loaded && !retrieved)
+            continue;
+        const auto& owner = at(multinames_, static_cast<unsigned>(receiver.args[0]));
+        if (owner.kind != 0x07 || !owner.ns || at(namespace_kinds_, owner.ns) != 0x16)
+            continue;
+        auto last = first + (loaded ? 1 : 2);
+        std::vector<std::int32_t> arguments;
+        for (; last < code.size() && arguments.size() < 4; ++last)
+        {
+            const auto arg = numeric_constant(code[last]);
+            if (!arg || !(*arg >= INT32_MIN && *arg <= INT32_MAX && std::trunc(*arg) == *arg))
+                break;
+            arguments.push_back(static_cast<std::int32_t>(*arg));
+        }
+        if (arguments.empty() || last == code.size() || code[last].op != 0x46 ||
+            code[last].args[1] != static_cast<std::int64_t>(arguments.size()))
+            continue;
+        const auto method = static_cast<unsigned>(code[last].args[0]);
+        const auto method_name = name(method, false);
+        if (!public_name(method, "", method_name))
+            continue;
+        const auto protected_entry = entries.upper_bound(static_cast<std::int64_t>(receiver.offset));
+        const auto after_call = last + 1 < code.size() ? code[last + 1].offset : body.code.size();
+        if (protected_entry != entries.end() && *protected_entry < static_cast<std::int64_t>(after_call))
+            continue;
+        const auto& package = at(strings_, at(namespaces_, owner.ns));
+        const auto& local = at(strings_, owner.string);
+        const auto& string = decoders.evaluate({package.empty() ? local : package + '.' + local, method_name}, arguments);
+        if (!string || string->size() > 4096)
+            continue;
+        auto constant = pool.find(*string);
+        if (constant == pool.end())
+        {
+            if (strings_.size() + added.size() >= 100'000)
+                continue;
+            constant = pool.emplace(*string, static_cast<unsigned>(strings_.size() + added.size())).first;
+            added.push_back(*string);
+        }
+        code[first] = {receiver.offset, 0x2C, {constant->second}};
+        for (auto i = first + 1; i <= last; ++i)
+            code[i] = {code[i].offset, 0x02, {}};
+        if (last + 1 < code.size() && (code[last + 1].op == 0x70 || code[last + 1].op == 0x85) &&
+            !entries.contains(static_cast<std::int64_t>(code[last + 1].offset)))
+            code[last + 1] = {code[last + 1].offset, 0x02, {}};
+        first = last;
+        ++resolved;
+    }
+    if (resolved)
+        std::erase_if(code, [&](const Instruction& item)
+        {
+            return item.op == 0x02 && !entries.contains(static_cast<std::int64_t>(item.offset));
+        });
+    return resolved;
+}
+
+AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type, StringDecoders* decoders) const
+{
+    const auto read_code = [](const Body& body)
+    {
+        std::vector<Instruction> instructions;
+        Reader code(body.code);
+        while (code.remaining())
+        {
+            if (instructions.size() >= 65'536)
+                throw std::runtime_error("Trop d’instructions pour désobfusquer cette méthode.");
+            instructions.push_back(decode(code));
+        }
+        return instructions;
+    };
+    const auto local_start = [this](unsigned id)
+    {
+        const auto& method = methods_[id];
+        return static_cast<unsigned>(method.types.size() + 1 + (method.rest || method.arguments));
+    };
     std::set<unsigned> selected;
     if (type)
     {
@@ -2190,8 +2765,36 @@ AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
         for (const auto& [method, classes] : class_scripts_)
             if (std::ranges::find(classes, *type) != classes.end())
                 selected.insert(method);
+        std::vector<unsigned> pending(selected.begin(), selected.end());
+        for (std::size_t i = 0; i < pending.size(); ++i)
+        {
+            const auto id = pending[i];
+            if (!body_by_method_[id])
+                continue;
+            try
+            {
+                const auto& info = body(id);
+                auto instructions = read_code(info);
+                if (std::ranges::none_of(instructions, [](const auto& item) { return item.op == 0x40; }))
+                    continue;
+                deobfuscate_flow(instructions, info.code.size(), info.exceptions, local_start(id), info.locals);
+                for (const auto& item : instructions)
+                    if (item.op == 0x40)
+                    {
+                        const auto nested = static_cast<unsigned>(item.args[0]);
+                        if (nested < methods_.size() && methods_[nested].label.empty() && selected.insert(nested).second)
+                            pending.push_back(nested);
+                    }
+            }
+            catch (const std::runtime_error&) {}
+        }
     }
     AbcDeobfuscation result;
+    std::map<std::string, unsigned, std::less<>> pool;
+    std::vector<std::string> added;
+    if (decoders)
+        for (unsigned i = 1; i < strings_.size(); ++i)
+            pool.try_emplace(strings_[i], i);
     std::size_t copied = 0;
     for (const auto& body : bodies_)
     {
@@ -2199,21 +2802,14 @@ AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
             continue;
         try
         {
-            std::vector<Instruction> instructions;
-            Reader code(body.code);
-            while (code.remaining())
-            {
-                if (instructions.size() >= 65'536)
-                    throw std::runtime_error("Trop d’instructions pour désobfusquer cette méthode.");
-                instructions.push_back(decode(code));
-            }
-            const auto& method = methods_[body.method];
-            const auto first_local = static_cast<unsigned>(method.types.size() + 1 + (method.rest || method.arguments));
-            const auto changes = deobfuscate_flow(instructions, body.code.size(), body.exceptions, first_local, body.locals);
-            if (!changes.removed && !changes.redirected && !changes.constant_branches && !changes.constants)
+            auto instructions = read_code(body);
+            const auto changes = decoders ? FlowChanges{} :
+                deobfuscate_flow(instructions, body.code.size(), body.exceptions, local_start(body.method), body.locals);
+            const auto resolved = decoders ? rewrite_string_calls(instructions, body, *decoders, pool, added) : 0;
+            if (!resolved && !changes.removed && !changes.redirected && !changes.constant_branches && !changes.constants)
                 continue;
             const auto assembled = assemble_method(render_pcode(body, instructions, Output{}));
-            validate(body.method, assembled);
+            validate(body.method, assembled, added.size());
             if (std::ranges::equal(body.code, assembled.code))
                 continue;
             append(result.bytes, bytes_.subspan(copied, body.begin - copied));
@@ -2222,6 +2818,7 @@ AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
             ++result.report.changed_methods;
             result.report.removed_instructions += changes.removed;
             result.report.constant_branches += changes.constant_branches;
+            result.report.resolved_strings += resolved;
         }
         catch (const std::runtime_error&)
         {
@@ -2230,6 +2827,21 @@ AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
     }
     if (copied)
         append(result.bytes, bytes_.subspan(copied));
+    if (copied && !added.empty())
+    {
+        Bytes updated;
+        append(updated, bytes_.first(strings_begin_));
+        put_u30(updated, static_cast<unsigned>(strings_.size() + added.size()));
+        const auto first = strings_.size() > 1 ? string_ranges_[1].first : strings_end_;
+        append(updated, bytes_.subspan(first, strings_end_ - first));
+        for (const auto& string : added)
+        {
+            put_u30(updated, static_cast<unsigned>(string.size()));
+            append(updated, {reinterpret_cast<const std::uint8_t*>(string.data()), string.size()});
+        }
+        append(updated, ByteView(result.bytes).subspan(strings_end_));
+        result.bytes = std::move(updated);
+    }
     return result;
 }
 
@@ -2552,7 +3164,10 @@ std::size_t detect_as3_obfuscation(const Movie& movie)
     return total;
 }
 
-SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type)
+namespace
+{
+SwfDeobfuscation rewrite_as3(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type,
+    script::StringDecoders* decoders)
 {
     if (type && !selected)
         throw std::runtime_error("Sélectionnez le bloc ABC de la classe.");
@@ -2565,7 +3180,7 @@ SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> 
             continue;
         try
         {
-            const auto abc = AbcModule(abc_bytecode(movie, tag)).deobfuscate(type);
+            const auto abc = script::Abc(abc_bytecode(movie, tag)).deobfuscate(type, decoders);
             result.report.skipped_methods += abc.report.skipped_methods;
             if (!abc.bytes.empty())
             {
@@ -2574,6 +3189,7 @@ SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> 
                 result.report.changed_methods += abc.report.changed_methods;
                 result.report.removed_instructions += abc.report.removed_instructions;
                 result.report.constant_branches += abc.report.constant_branches;
+                result.report.resolved_strings += abc.report.resolved_strings;
             }
         }
         catch (const std::runtime_error&)
@@ -2583,5 +3199,35 @@ SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> 
         }
     }
     return result;
+}
+}
+
+SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type)
+{
+    return rewrite_as3(movie, selected, type, nullptr);
+}
+
+SwfDeobfuscation simplify_as3_strings(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type)
+{
+    script::StringDecoders decoders;
+    std::vector<script::Abc> modules;
+    std::map<std::string, std::size_t> class_counts;
+    for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
+        if (movie.tags()[tag].code == 72 || movie.tags()[tag].code == 82)
+        {
+            try { modules.emplace_back(abc_bytecode(movie, tag)); }
+            catch (const std::runtime_error&) { return {}; }
+            for (const auto& declared : modules.back().classes())
+                ++class_counts[declared.qualified];
+        }
+    for (const auto built_in : {"int", "String", "Array", "Object"})
+        if (class_counts.contains(built_in))
+            return {};
+    for (const auto& module : modules)
+        module.register_string_decoders(decoders, class_counts);
+    modules.clear();
+    if (decoders.methods.empty())
+        return {};
+    return rewrite_as3(movie, selected, type, &decoders);
 }
 }

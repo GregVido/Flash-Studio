@@ -86,7 +86,7 @@ void usage()
   FlashTool abc-audit <film.swf> <tag>
   FlashTool abc-coverage <film.swf> <tag>
   FlashTool obfuscation-info <film.swf>
-  FlashTool deobfuscate <film.swf> <copie.swf> [tag [classe]]
+  FlashTool deobfuscate <film.swf> <copie.swf> [tag [classe]] [--strings]
   FlashTool abc-source <film.swf> <tag> <méthode>
   FlashTool abc-pcode <film.swf> <tag> <méthode>
   FlashTool abc-simplify <film.swf> <tag> <méthode>
@@ -199,7 +199,7 @@ int wmain(int argc, wchar_t** argv)
         {
             std::cout << flash::detect_as3_obfuscation(flash::Movie::open(argv[2])) << '\n';
         }
-        else if (argc >= 4 && argc <= 6 && command == L"deobfuscate")
+        else if (argc >= 4 && argc <= 7 && command == L"deobfuscate")
         {
             const auto destination = std::filesystem::absolute(argv[3]);
             const auto original = std::filesystem::absolute(argv[2]);
@@ -207,8 +207,20 @@ int wmain(int argc, wchar_t** argv)
                 (std::filesystem::exists(destination) && std::filesystem::equivalent(destination, original)))
                 throw std::runtime_error("Choisissez une copie du SWF comme destination.");
             const auto movie = flash::Movie::open(original);
-            const auto result = flash::deobfuscate_as3(movie, argc >= 5 ? std::optional{index_of(argv[4])} : std::nullopt,
-                argc == 6 ? std::optional{index_of(argv[5])} : std::nullopt);
+            const auto strings = std::wstring_view(argv[argc - 1]) == L"--strings";
+            const auto count = argc - (strings ? 1 : 0);
+            if (count < 4 || count > 6)
+                throw std::runtime_error("Arguments de désobfuscation invalides.");
+            const auto tag = count >= 5 ? std::optional{index_of(argv[4])} : std::nullopt;
+            const auto type = count == 6 ? std::optional{index_of(argv[5])} : std::nullopt;
+            auto result = flash::deobfuscate_as3(movie, tag, type);
+            if (strings)
+            {
+                auto simplified = flash::simplify_as3_strings(result.movie ? *result.movie : movie, tag, type);
+                if (simplified.movie)
+                    result.movie = std::move(simplified.movie);
+                result.report.resolved_strings = simplified.report.resolved_strings;
+            }
             if (result.movie)
             {
                 if (movie.header().compression == 'C')
@@ -219,6 +231,8 @@ int wmain(int argc, wchar_t** argv)
             const auto& report = result.report;
             std::cout << std::format("{} méthodes nettoyées, {} instructions inaccessibles retirées, {} branchements constants simplifiés, {} méthodes ignorées.\n",
                 report.changed_methods, report.removed_instructions, report.constant_branches, report.skipped_methods);
+            if (strings)
+                std::cout << std::format("{} appels remplacés par des chaînes littérales.\n", report.resolved_strings);
         }
         else if (argc == 4 && command == L"abc-audit")
         {

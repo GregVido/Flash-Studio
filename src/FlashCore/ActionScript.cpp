@@ -5,8 +5,16 @@ namespace flash::script
 std::string quote(std::string_view value, std::size_t limit)
 {
     std::string text = "\"";
-    for (const unsigned char byte : value.substr(0, limit))
+    const auto displayed = value.substr(0, limit);
+    for (std::size_t i = 0; i < displayed.size(); ++i)
     {
+        const auto byte = static_cast<unsigned char>(displayed[i]);
+        if (displayed.substr(i, 3) == "\xE2\x80\xA8" || displayed.substr(i, 3) == "\xE2\x80\xA9")
+        {
+            text += displayed[i + 2] == '\xA8' ? "\\u2028" : "\\u2029";
+            i += 2;
+            continue;
+        }
         switch (byte)
         {
         case '"': text += "\\\""; break;
