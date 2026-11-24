@@ -480,7 +480,7 @@ fire_and_forget Workspace::save_class(std::string source)
             co_return;
         if (edited)
         {
-            const auto output = class_output_path(session->original);
+            const auto output = swf_copy_path(session->original, tr(L"-classe"));
             if (!output)
             {
                 session->saving = false;

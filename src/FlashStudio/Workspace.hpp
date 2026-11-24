@@ -166,6 +166,8 @@ private:
     void status(std::wstring_view message, bool error = false);
     winrt::fire_and_forget save_movie();
     winrt::Windows::Foundation::IAsyncAction open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag = {});
+    winrt::Windows::Foundation::IAsyncAction prompt_deobfuscation(std::size_t methods);
+    winrt::Windows::Foundation::IAsyncAction deobfuscate_swf(bool whole_document);
     winrt::fire_and_forget show_selection();
     winrt::fire_and_forget export_tag(Export format);
     winrt::fire_and_forget export_all(bool project = false, std::wstring visual_format = {});
@@ -186,7 +188,7 @@ private:
     void set_editor_state(std::wstring_view message, bool error = false);
     void post_editor_action(std::wstring_view action);
     bool find_class_compiler(bool prompt);
-    std::optional<std::filesystem::path> class_output_path(const std::filesystem::path& original);
+    std::optional<std::filesystem::path> swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix);
     winrt::fire_and_forget edit_tag();
     winrt::fire_and_forget drop(winrt::Microsoft::UI::Xaml::DragEventArgs args);
 
@@ -217,7 +219,7 @@ private:
     bool frame_work_running_ = false;
     winrt::Microsoft::UI::Xaml::Controls::ListView categories_{nullptr}, tags_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button open_{nullptr}, save_{nullptr}, replace_{nullptr},
-        previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr};
+        previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr}, deobfuscate_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton export_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton recent_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr}, script_tabs_bar_{nullptr};

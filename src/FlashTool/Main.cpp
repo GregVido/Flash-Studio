@@ -85,6 +85,8 @@ void usage()
   FlashTool abc-class <film.swf> <tag> <classe>
   FlashTool abc-audit <film.swf> <tag>
   FlashTool abc-coverage <film.swf> <tag>
+  FlashTool obfuscation-info <film.swf>
+  FlashTool deobfuscate <film.swf> <copie.swf> [tag [classe]]
   FlashTool abc-source <film.swf> <tag> <méthode>
   FlashTool abc-pcode <film.swf> <tag> <méthode>
   FlashTool abc-simplify <film.swf> <tag> <méthode>
@@ -192,6 +194,31 @@ int wmain(int argc, wchar_t** argv)
             for (const auto& method : abc.methods())
                 std::cout << std::format("{}\t{}\t{}\t{}\n", method.id, method.owner, method.signature,
                     method.code_size ? std::to_string(*method.code_size) : "-");
+        }
+        else if (argc == 3 && command == L"obfuscation-info")
+        {
+            std::cout << flash::detect_as3_obfuscation(flash::Movie::open(argv[2])) << '\n';
+        }
+        else if (argc >= 4 && argc <= 6 && command == L"deobfuscate")
+        {
+            const auto destination = std::filesystem::absolute(argv[3]);
+            const auto original = std::filesystem::absolute(argv[2]);
+            if (CompareStringOrdinal(destination.c_str(), -1, original.c_str(), -1, TRUE) == CSTR_EQUAL ||
+                (std::filesystem::exists(destination) && std::filesystem::equivalent(destination, original)))
+                throw std::runtime_error("Choisissez une copie du SWF comme destination.");
+            const auto movie = flash::Movie::open(original);
+            const auto result = flash::deobfuscate_as3(movie, argc >= 5 ? std::optional{index_of(argv[4])} : std::nullopt,
+                argc == 6 ? std::optional{index_of(argv[5])} : std::nullopt);
+            if (result.movie)
+            {
+                if (movie.header().compression == 'C')
+                    flash::write_file(destination, result.movie->compressed());
+                else
+                    flash::write_file(destination, result.movie->uncompressed());
+            }
+            const auto& report = result.report;
+            std::cout << std::format("{} méthodes nettoyées, {} instructions inaccessibles retirées, {} branchements constants simplifiés, {} méthodes ignorées.\n",
+                report.changed_methods, report.removed_instructions, report.constant_branches, report.skipped_methods);
         }
         else if (argc == 4 && command == L"abc-audit")
         {

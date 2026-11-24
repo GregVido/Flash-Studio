@@ -320,6 +320,62 @@ def check(exe, folder, asc=None):
     assert "0\tActionScript\tdemo.Probe\t" in run("search", class_movie, "get read", "--source")
 
     loop_pcode = folder / "boucle.pcode"
+    loop_pcode.write_text(""".stack 2
+.locals 3
+.scope 0 0
+pushfalse
+pushtrue
+swap
+jump stores
+pushbyte 99
+pop
+pushnull
+pop
+stores: setlocal1
+setlocal2
+getlocal1
+dup
+iftrue fake
+pop
+getlocal2
+fake: iffalse dead
+jump payload
+exit: label
+returnvalue
+dead: label
+pushbyte 7
+returnvalue
+payload: pushbyte 42
+jump exit
+""", encoding="utf-8")
+    obfuscated_movie = folder / "Flux obfusqué.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, obfuscated_movie)
+    original = obfuscated_movie.read_bytes()
+    clean_movie = folder / "Flux désobfusqué.swf"
+    assert run("obfuscation-info", class_movie).strip() == "0"
+    assert run("obfuscation-info", obfuscated_movie).strip() == "1"
+    assert "1 méthodes nettoyées" in run("deobfuscate", obfuscated_movie, clean_movie, "0", "0")
+    assert obfuscated_movie.read_bytes() == original
+    assert run("obfuscation-info", clean_movie).strip() == "0"
+    clean_source = run("abc-class", clean_movie, "0", "0")
+    assert "return 42;" in clean_source and "return 7;" not in clean_source
+    assert "0 en échec" in run("abc-audit", clean_movie, "0")
+    recompile(clean_source, "asc-desobfuscation")
+
+    scrambled_code = loop_pcode.read_text(encoding="utf-8").replace(
+        "payload: pushbyte 42\njump exit",
+        "payload: getlocal0\niffalse alternative\npushbyte 42\njump exit\n"
+        "alternative: pushbyte 21\njump exit")
+    loop_pcode.write_text(scrambled_code, encoding="utf-8")
+    scrambled_movie = folder / "Branches déplacées.swf"
+    reordered = folder / "Branches réordonnées.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, scrambled_movie)
+    run("deobfuscate", scrambled_movie, reordered)
+    assert "0 en échec" in run("abc-audit", reordered, "0")
+    reordered_pcode = run("abc-pcode", reordered, "0", "2")
+    assert reordered_pcode.index("iffalse") < reordered_pcode.index("returnvalue")
+    assert "pushbyte 42" in reordered_pcode and "pushbyte 21" in reordered_pcode
+
     static_abc = class_abc[:static_traits] + bytes([1, 7, 6, 1, 4, 0]) + class_abc[static_traits + 1:]
     static_body = class_header + tag(82, abc_header + static_abc) + class_suffix
     static_movie = folder / "Classe statique.swf"
@@ -601,7 +657,24 @@ returnvalue
     assert "try\n" in catch_source and "catch (error:*)" in catch_source and "int(error)" in catch_source
     recompile(catch_source, "asc-exceptions")
 
-    guarded_code = loop_pcode.read_text(encoding="utf-8").replace(
+    catch_code = loop_pcode.read_text(encoding="utf-8")
+    opaque_code = catch_code.replace(".locals 3", ".locals 5").replace(
+        "getlocal0\npushscope\ndebut: pushbyte 4",
+        "pushfalse\npushtrue\nswap\njump stores\npushbyte 99\npop\npushnull\npop\n"
+        "stores: setlocal3\nsetlocal 4\ngetlocal0\npushscope\ndebut: getlocal3\n"
+        "iftrue parasite\npushbyte 4\njump affecter\nparasite: pushbyte 7\naffecter: nop", 1)
+    loop_pcode.write_text(opaque_code, encoding="utf-8")
+    opaque_catch = folder / "Exceptions obfusquées.swf"
+    cleaned_catch = folder / "Exceptions désobfusquées.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, opaque_catch)
+    assert run("obfuscation-info", opaque_catch).strip() == "1"
+    run("deobfuscate", opaque_catch, cleaned_catch)
+    clean_catch_source = run("abc-class", cleaned_catch, "0", "0")
+    assert "try\n" in clean_catch_source and "catch (error:*)" in clean_catch_source
+    assert "0 en échec" in run("abc-audit", cleaned_catch, "0")
+    recompile(clean_catch_source, "asc-desobfuscation-exceptions")
+
+    guarded_code = catch_code.replace(
         "pushscope\ndebut:", "pushscope\npushbyte 0\nsetlocal1\ngetlocal1\niffalse suite\ndebut:", 1)
     loop_pcode.write_text(guarded_code, encoding="utf-8")
     guarded_movie = folder / "Exceptions dans une condition.swf"

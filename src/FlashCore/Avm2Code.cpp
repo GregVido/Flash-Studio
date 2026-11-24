@@ -3,6 +3,8 @@
 #include <charconv>
 #include <format>
 #include <limits>
+#include <map>
+#include <set>
 #include <unordered_set>
 
 namespace flash::script
@@ -53,7 +55,7 @@ Instruction decode(Reader& code)
     return item;
 }
 
-FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t end)
+FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t end, std::span<const ExceptionEntry> exceptions)
 {
     const auto count = instructions.size();
     const auto invalid = count + 1;
@@ -94,6 +96,15 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
 
     FlowChanges changes;
     std::vector<bool> incoming(count);
+    std::vector<bool> boundaries(count);
+    for (const auto& exception : exceptions)
+    {
+        for (const auto boundary : {exception.from, exception.to, exception.target})
+            if (const auto index = lookup(boundary); index < count)
+                boundaries[index] = true;
+        if (const auto target = lookup(exception.target); target < count)
+            incoming[target] = true;
+    }
     for (const auto& instruction : instructions)
         if (instruction.op >= 0x0C && instruction.op <= 0x1B)
             for (const auto target : instruction.args)
@@ -119,9 +130,12 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
                 const auto old = lookup(target);
                 chase_jump(old);
                 const auto next = redirect[old] == invalid ? old : redirect[old];
-                if (old != next)
+                const auto destination = address(next);
+                // Threading a forward jump must not create an unmarked back edge.
+                if (old != next && (destination > instruction.offset ||
+                    (next < count && instructions[next].op == 0x09)))
                 {
-                    target = static_cast<std::int64_t>(address(next));
+                    target = static_cast<std::int64_t>(destination);
                     ++changes.redirected;
                 }
             }
@@ -136,6 +150,8 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
         }
     };
     discover(0);
+    for (const auto& exception : exceptions)
+        discover(lookup(exception.target));
     while (!work.empty())
     {
         const auto index = work.back();
@@ -150,8 +166,13 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
     }
     std::size_t kept = 0;
     for (std::size_t i = 0; i < count; ++i)
-        if (live[i])
+        if (live[i] || boundaries[i])
         {
+            if (!live[i])
+            {
+                instructions[i].op = 0x02;
+                instructions[i].args.clear();
+            }
             if (kept != i)
                 instructions[kept] = std::move(instructions[i]);
             ++kept;
@@ -159,6 +180,392 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
     instructions.resize(kept);
     changes.removed = count - kept;
     return changes;
+}
+
+namespace
+{
+constexpr unsigned nop = 0x02, pop = 0x29, dup = 0x2A, swap = 0x2B;
+constexpr unsigned jump = 0x10, if_true = 0x11, if_false = 0x12;
+constexpr unsigned push_true = 0x26, push_false = 0x27;
+
+bool bool_value(unsigned op) { return op == push_true || op == push_false; }
+bool padding(unsigned op) { return op == nop || op == 0x09 || (op >= 0xEF && op <= 0xF3); }
+
+void erase_instruction(Instruction& instruction)
+{
+    instruction.op = nop;
+    instruction.args.clear();
+}
+
+std::optional<unsigned> register_read(const Instruction& instruction)
+{
+    if (instruction.op == 0x62)
+        return static_cast<unsigned>(instruction.args[0]);
+    if (instruction.op >= 0xD0 && instruction.op <= 0xD3)
+        return instruction.op & 3;
+    return {};
+}
+
+std::optional<unsigned> register_store(const Instruction& instruction)
+{
+    if (instruction.op == 0x63)
+        return static_cast<unsigned>(instruction.args[0]);
+    if (instruction.op >= 0xD4 && instruction.op <= 0xD7)
+        return instruction.op & 3;
+    return {};
+}
+
+std::set<std::int64_t> incoming_offsets(std::span<const Instruction> code, std::span<const ExceptionEntry> exceptions)
+{
+    std::set<std::int64_t> targets;
+    for (const auto& instruction : code)
+        if (instruction.op >= 0x0C && instruction.op <= 0x1B)
+            targets.insert(instruction.args.begin(), instruction.args.end());
+    for (const auto& exception : exceptions)
+        targets.insert(exception.target);
+    return targets;
+}
+
+struct ConstantStore { unsigned reg, value; };
+
+struct Prelude
+{
+    std::vector<ConstantStore> stores;
+    std::size_t end{};
+};
+
+Prelude boolean_stores(std::span<const Instruction> code, const std::set<std::int64_t>& incoming,
+    unsigned first_local, unsigned locals)
+{
+    Prelude prefix;
+    std::vector<ConstantStore> stores;
+    std::vector<unsigned> stack;
+    for (std::size_t i = 0; i < code.size() && i < 96; ++i)
+    {
+        const auto& item = code[i];
+        if (i && incoming.contains(static_cast<std::int64_t>(item.offset)))
+            break;
+        if (bool_value(item.op))
+            stack.push_back(item.op);
+        else if (item.op == swap && stack.size() >= 2)
+            std::iter_swap(stack.end() - 1, stack.end() - 2);
+        else if (item.op == dup && !stack.empty())
+            stack.push_back(stack.back());
+        else if (item.op == pop && !stack.empty())
+            stack.pop_back();
+        else if (const auto local = register_store(item); local && *local >= first_local && *local < locals && !stack.empty())
+        {
+            stores.push_back({*local, stack.back()});
+            stack.pop_back();
+        }
+        else if (!padding(item.op))
+            break;
+        if (stack.empty())
+        {
+            prefix.end = i + 1;
+            prefix.stores = stores;
+        }
+    }
+    return prefix;
+}
+
+std::size_t flatten_adjacent_jumps(std::vector<Instruction>& code)
+{
+    std::size_t removed = 0;
+    for (std::size_t i = 1; i < code.size(); ++i)
+        if (code[i - 1].op == jump && code[i - 1].args[0] == static_cast<std::int64_t>(code[i].offset))
+        {
+            erase_instruction(code[i - 1]);
+            ++removed;
+        }
+    return removed;
+}
+
+std::size_t substitute_locals(std::vector<Instruction>& code, std::span<const ExceptionEntry> exceptions,
+    unsigned first_local, unsigned locals)
+{
+    const auto prefix = boolean_stores(code, incoming_offsets(code, exceptions), first_local, locals);
+    if (prefix.stores.empty())
+        return 0;
+    std::map<unsigned, unsigned> known;
+    std::set<unsigned> ambiguous;
+    for (const auto& store : prefix.stores)
+        if (!known.try_emplace(store.reg, store.value).second)
+            ambiguous.insert(store.reg);
+    for (std::size_t i = prefix.end; i < code.size(); ++i)
+    {
+        const auto& item = code[i];
+        if (const auto local = register_store(item))
+            ambiguous.insert(*local);
+        if (item.op == 0x08 || item.op == 0x32 || item.op == 0x92 || item.op == 0x94 || item.op == 0xC2 || item.op == 0xC3)
+            for (const auto local : item.args)
+                ambiguous.insert(static_cast<unsigned>(local));
+    }
+    for (const auto local : ambiguous)
+        known.erase(local);
+    if (known.empty())
+        return 0;
+    std::size_t substituted = 0;
+    for (std::size_t i = prefix.end; i < code.size(); ++i)
+        if (const auto local = register_read(code[i]))
+            if (const auto found = known.find(*local); found != known.end())
+            {
+                code[i].op = found->second;
+                code[i].args.clear();
+                ++substituted;
+            }
+    if (known.size() == prefix.stores.size())
+    {
+        for (std::size_t i = 0; i < prefix.end; ++i)
+            if (!padding(code[i].op))
+                erase_instruction(code[i]);
+        return substituted + prefix.stores.size();
+    }
+    return substituted;
+}
+
+FlowChanges fold_boolean_sequences(std::vector<Instruction>& code, std::span<const ExceptionEntry> exceptions)
+{
+    const auto incoming = incoming_offsets(code, exceptions);
+    FlowChanges changes;
+    std::optional<std::size_t> value, duplicate;
+    for (std::size_t i = 0; i < code.size(); ++i)
+    {
+        auto& item = code[i];
+        if (incoming.contains(static_cast<std::int64_t>(item.offset)))
+        {
+            value.reset();
+            duplicate.reset();
+        }
+        if (padding(item.op))
+            continue;
+        if (bool_value(item.op))
+        {
+            value = i;
+            duplicate.reset();
+            continue;
+        }
+        if (value && !duplicate && item.op == dup)
+        {
+            duplicate = i;
+            continue;
+        }
+        if (value && !duplicate && (item.op == 0x76 || item.op == 0x81 || item.op == 0x96))
+        {
+            if (item.op == 0x96)
+                code[*value].op = code[*value].op == push_true ? push_false : push_true;
+            erase_instruction(item);
+            ++changes.constants;
+            continue;
+        }
+        if (value && (item.op == if_true || item.op == if_false || item.op == pop))
+        {
+            const bool taken = item.op != pop && ((code[*value].op == push_true) == (item.op == if_true));
+            erase_instruction(code[duplicate.value_or(*value)]);
+            if (item.op != pop)
+                ++changes.constant_branches;
+            if (taken)
+                item.op = jump;
+            else
+            {
+                erase_instruction(item);
+                if (duplicate)
+                {
+                    duplicate.reset();
+                    continue;
+                }
+            }
+        }
+        value.reset();
+        duplicate.reset();
+    }
+    return changes;
+}
+
+std::size_t linearize_single_path(std::vector<Instruction>& code)
+{
+    // A method with only unconditional edges can be emitted in execution order.
+    // Keep the original layout if any branch choice, loop or fallthrough remains.
+    std::vector<bool> visited(code.size());
+    std::vector<Instruction> ordered;
+    for (std::size_t i = 0; i < code.size() && !visited[i];)
+    {
+        visited[i] = true;
+        const auto& item = code[i];
+        if (item.op == jump)
+        {
+            const auto offset = static_cast<std::size_t>(item.args[0]);
+            const auto target = std::ranges::lower_bound(code, offset, {}, &Instruction::offset);
+            if (target == code.end() || target->offset != offset)
+                return 0;
+            i = static_cast<std::size_t>(target - code.begin());
+            continue;
+        }
+        if (item.op >= 0x0C && item.op <= 0x1B)
+            return 0;
+        if (item.op != nop && item.op != 0x09)
+            ordered.push_back({ordered.size(), item.op, item.args});
+        if (item.op == 0x03 || item.op == 0x47 || item.op == 0x48)
+        {
+            const auto removed = code.size() - ordered.size();
+            if (removed)
+                code = std::move(ordered);
+            return removed;
+        }
+        ++i;
+    }
+    return 0;
+}
+
+bool order_acyclic_fragments(std::vector<Instruction>& code)
+{
+    struct Fragment
+    {
+        std::size_t first, last;
+        std::vector<std::size_t> successors;
+        std::size_t predecessors{};
+    };
+    std::vector<Fragment> fragments;
+    std::vector<std::size_t> owner(code.size());
+    std::size_t first = 0;
+    for (std::size_t i = 0; i < code.size(); ++i)
+    {
+        owner[i] = fragments.size();
+        const auto op = code[i].op;
+        if (op == jump || op == 0x1B || op == 0x03 || op == 0x47 || op == 0x48)
+        {
+            fragments.push_back({first, i + 1, {}});
+            first = i + 1;
+        }
+    }
+    if (fragments.size() < 2 || first != code.size())
+        return false;
+
+    const auto destination = [&](std::int64_t target)
+    {
+        const auto offset = static_cast<std::size_t>(target);
+        const auto item = std::ranges::lower_bound(code, offset, {}, &Instruction::offset);
+        return item != code.end() && item->offset == offset ? static_cast<std::size_t>(item - code.begin()) : code.size();
+    };
+    bool scrambled = false;
+    for (std::size_t i = 0; i < code.size(); ++i)
+        if (code[i].op >= 0x0C && code[i].op <= 0x1B)
+            for (const auto address : code[i].args)
+            {
+                const auto target = destination(address);
+                if (target == code.size() || (owner[target] == owner[i] && target <= i))
+                    return false;
+                if (owner[target] == owner[i])
+                    continue;
+                scrambled |= owner[target] < owner[i];
+                fragments[owner[i]].successors.push_back(owner[target]);
+                ++fragments[owner[target]].predecessors;
+            }
+    if (!scrambled || fragments[0].predecessors)
+        return false;
+
+    std::set<std::size_t> available;
+    for (std::size_t i = 0; i < fragments.size(); ++i)
+        if (!fragments[i].predecessors)
+            available.insert(i);
+    std::vector<std::size_t> order;
+    while (!available.empty())
+    {
+        const auto index = *available.begin();
+        available.erase(available.begin());
+        order.push_back(index);
+        for (const auto next : fragments[index].successors)
+            if (!--fragments[next].predecessors)
+                available.insert(next);
+    }
+    // Moving a fragment preserves all implicit edges within it. Leave cyclic layouts intact.
+    if (order.size() != fragments.size())
+        return false;
+    std::vector<std::size_t> remapped(code.size());
+    std::vector<Instruction> ordered;
+    ordered.reserve(code.size());
+    for (const auto index : order)
+        for (auto i = fragments[index].first; i < fragments[index].last; ++i)
+        {
+            remapped[i] = ordered.size();
+            ordered.push_back({ordered.size(), code[i].op, code[i].args});
+        }
+    for (auto& item : ordered)
+        if (item.op >= 0x0C && item.op <= 0x1B)
+            for (auto& target : item.args)
+                target = static_cast<std::int64_t>(remapped[destination(target)]);
+    code = std::move(ordered);
+    return true;
+}
+}
+
+bool has_boolean_prelude(ByteView bytes, unsigned first_local, unsigned locals)
+{
+    try
+    {
+        Reader input(bytes);
+        std::vector<Instruction> prefix;
+        while (input.remaining() && prefix.size() < 8)
+        {
+            auto item = decode(input);
+            if (item.op == jump && item.args[0] >= static_cast<std::int64_t>(input.position()) + 4 &&
+                item.args[0] < static_cast<std::int64_t>(bytes.size()))
+            {
+                input.skip(static_cast<std::size_t>(item.args[0]) - input.position());
+                for (unsigned i = 0; i < 2 && input.remaining(); ++i)
+                    prefix.push_back(decode(input));
+                const auto stores = boolean_stores(prefix, {}, first_local, locals);
+                return stores.stores.size() == 2 && stores.stores[0].reg != stores.stores[1].reg &&
+                    stores.stores[0].value != stores.stores[1].value;
+            }
+            if (!bool_value(item.op) && item.op != swap && !register_store(item) && !padding(item.op))
+                return false;
+            prefix.push_back(std::move(item));
+        }
+    }
+    catch (const std::runtime_error&) {}
+    return false;
+}
+
+FlowChanges deobfuscate_flow(std::vector<Instruction>& code, std::size_t end,
+    std::span<const ExceptionEntry> exceptions, unsigned locals_begin, unsigned local_count)
+{
+    FlowChanges total;
+    for (unsigned pass = 0; pass < 32; ++pass)
+    {
+        const auto cleaned = simplify_flow(code, end, exceptions);
+        const auto jumps = flatten_adjacent_jumps(code);
+        const auto locals = substitute_locals(code, exceptions, locals_begin, local_count);
+        const auto folded = fold_boolean_sequences(code, exceptions);
+        total.removed += cleaned.removed;
+        total.redirected += cleaned.redirected + jumps;
+        total.constant_branches += cleaned.constant_branches + folded.constant_branches;
+        total.constants += locals + folded.constants;
+        if (!cleaned.removed && !cleaned.redirected && !cleaned.constant_branches && !jumps && !locals &&
+            !folded.constant_branches && !folded.constants)
+            break;
+    }
+    if (exceptions.empty() && total.constants)
+    {
+        const auto linear = linearize_single_path(code);
+        total.redirected += linear;
+        if (!linear && order_acyclic_fragments(code))
+            total.redirected += 1 + flatten_adjacent_jumps(code);
+    }
+    if (total.removed || total.redirected || total.constant_branches || total.constants)
+    {
+        auto keep = incoming_offsets(code, exceptions);
+        for (const auto& exception : exceptions)
+        {
+            keep.insert(exception.from);
+            keep.insert(exception.to);
+        }
+        std::erase_if(code, [&](const Instruction& item)
+        {
+            return item.op == nop && !keep.contains(static_cast<std::int64_t>(item.offset));
+        });
+    }
+    return total;
 }
 
 namespace

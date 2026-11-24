@@ -29,6 +29,7 @@ private:
 class Expressions
 {
 public:
+    explicit Expressions(std::size_t limit = 4096) : limit_(limit) {}
     bool empty() const noexcept { return items_.empty(); }
     void push(std::string value)
     {
@@ -53,6 +54,7 @@ public:
     void as3_binary(std::string_view op);
     void as3_conditional(std::string_view test, std::string_view yes, std::string_view no);
     std::string arguments(unsigned count, bool reverse_pop_order, bool as3 = false);
+    std::string as3_list(unsigned count, std::string_view open, std::string_view close);
 private:
     struct Value
     {
@@ -62,6 +64,7 @@ private:
     };
     void push(Value value);
     Value take();
+    std::size_t limit_;
     std::vector<Value> items_;
 };
 }

@@ -53,7 +53,7 @@ std::string_view Expressions::Value::ungrouped() const
 
 void Expressions::push(Value value)
 {
-    if (value.text.size() > 4096 || items_.size() >= 4096)
+    if (value.text.size() > limit_ || items_.size() >= 4096)
         throw std::runtime_error("Expression trop complexe.");
     items_.push_back(std::move(value));
 }
@@ -120,6 +120,44 @@ std::string Expressions::arguments(unsigned count, bool reverse_pop_order, bool 
             throw std::runtime_error("Liste d’arguments trop complexe.");
     }
     return result;
+}
+
+std::string Expressions::as3_list(unsigned count, std::string_view open, std::string_view close)
+{
+    if (count > items_.size())
+        throw std::runtime_error("Nombre d’éléments invalide.");
+    std::vector<std::string> elements(count);
+    std::size_t size = open.size() + close.size();
+    for (auto item = elements.rbegin(); item != elements.rend(); ++item)
+    {
+        *item = pop_as3_value();
+        size += item->size() + 2;
+        if (size > limit_)
+            throw std::runtime_error("Liste d’expressions trop grande.");
+    }
+    Output list(limit_);
+    const bool multiline = size > 110;
+    list.add(open);
+    for (auto item = elements.begin(); item != elements.end(); ++item)
+    {
+        if (item != elements.begin())
+            list.add(multiline ? "," : ", ");
+        std::string_view remaining = *item;
+        do
+        {
+            const auto newline = remaining.find('\n');
+            if (multiline)
+                list.add("\n    ");
+            list.add(remaining.substr(0, newline));
+            if (newline == std::string_view::npos)
+                break;
+            remaining.remove_prefix(newline + 1);
+        } while (!remaining.empty());
+    }
+    if (multiline)
+        list.add("\n");
+    list.add(close);
+    return std::move(list).take();
 }
 }
 

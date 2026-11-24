@@ -540,6 +540,7 @@ void Workspace::build()
     column(abc_tools_, 1, GridUnitType::Star);
     column(abc_tools_, 1.4, GridUnitType::Star);
     column(abc_tools_, 1, GridUnitType::Auto);
+    column(abc_tools_, 1, GridUnitType::Auto);
     abc_owner_ = ComboBox();
     abc_owner_.PlaceholderText(tr(L"Classe ou script"));
     abc_owner_.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -571,6 +572,10 @@ void Workspace::build()
         show_selection();
     });
     place(abc_tools_, abc_method_list_, 0, 1);
+    deobfuscate_ = Button();
+    deobfuscate_.Content(box_value(tr(L"Désobfusquer…")));
+    deobfuscate_.Click([this](auto&&, auto&&) { deobfuscate_swf(false); });
+    place(abc_tools_, deobfuscate_, 0, 2);
     DropDownButton abc_actions;
     abc_actions.Content(box_value(tr(L"Modifier ABC")));
     MenuFlyout abc_menu;
@@ -586,6 +591,10 @@ void Workspace::build()
     edit_simplified_.Text(tr(L"Nettoyer le P-code de la méthode…"));
     edit_simplified_.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::simplify); });
     abc_menu.Items().Append(edit_simplified_);
+    MenuFlyoutItem clean_movie;
+    clean_movie.Text(tr(L"Désobfusquer le SWF…"));
+    clean_movie.Click([this](auto&&, auto&&) { deobfuscate_swf(true); });
+    abc_menu.Items().Append(clean_movie);
     MenuFlyoutItem constant;
     constant.Text(tr(L"Modifier une constante chaîne…"));
     constant.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::pool_string); });
@@ -599,7 +608,7 @@ void Workspace::build()
     replace_module.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::import); });
     abc_menu.Items().Append(replace_module);
     abc_actions.Flyout(abc_menu);
-    place(abc_tools_, abc_actions, 0, 2);
+    place(abc_tools_, abc_actions, 0, 3);
     place(inspector_, abc_tools_, 3);
 
     Grid preview;
@@ -820,12 +829,14 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
     std::shared_ptr<flash::Movie> movie;
     std::vector<Row> rows;
     std::wstring problem;
+    std::size_t obfuscated_methods = 0;
     try
     {
         const auto extension = lower(path.extension().wstring());
         movie = std::make_shared<flash::Movie>(extension == L".xml" ?
             flash::Movie::import_xml(flash::read_file(path)) : flash::Movie::open(path));
         rows = index_rows(*movie);
+        obfuscated_methods = flash::detect_as3_obfuscation(*movie);
     }
     catch (const std::exception& error) { problem = widen(error.what()); }
     co_await ui;
@@ -846,6 +857,136 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
     if (!problem.empty())
         status(problem, true);
     save_.IsEnabled(static_cast<bool>(movie_));
+    if (obfuscated_methods && problem.empty())
+        co_await prompt_deobfuscation(obfuscated_methods);
+}
+
+Windows::Foundation::IAsyncAction Workspace::prompt_deobfuscation(std::size_t methods)
+{
+    const auto lifetime = shared_from_this();
+    const auto input = movie_;
+    if (!input || busy_ || closed_)
+        co_return;
+    bool accepted = false;
+    try
+    {
+        busy_ = true;
+        ContentDialog prompt;
+        prompt.XamlRoot(root_.XamlRoot());
+        prompt.Title(box_value(tr(L"Obfuscation ActionScript possible")));
+        auto message = label(format_message(
+            L"Ce SWF semble obfusqué. Des motifs ont été détectés dans {} méthodes. Voulez-vous le désobfusquer ? Le résultat sera enregistré dans une copie.",
+            methods));
+        message.TextWrapping(TextWrapping::WrapWholeWords);
+        message.TextTrimming(TextTrimming::None);
+        prompt.Content(message);
+        prompt.PrimaryButtonText(tr(L"Désobfusquer"));
+        prompt.CloseButtonText(tr(L"Plus tard"));
+        prompt.DefaultButton(ContentDialogButton::Primary);
+        accepted = co_await prompt.ShowAsync() == ContentDialogResult::Primary;
+    }
+    catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
+    busy_ = false;
+    if (accepted && !closed_ && movie_ == input)
+        co_await deobfuscate_swf(true);
+}
+
+Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document)
+{
+    if (!movie_ || busy_ || closed_ || (!whole_document && (!selected_ || !is_abc(movie_->tags()[*selected_].code))))
+        co_return;
+    const auto lifetime = shared_from_this();
+    const auto input = movie_;
+    const auto original = file_;
+    const auto current = mode_ == Mode::scripts && selected_script_ ? &script_entries_.at(*selected_script_) : nullptr;
+    const auto target = current && current->type ?
+        std::optional(ScriptTarget{current->tag, current->type, current->qualified, {}, {}, View::source}) : std::nullopt;
+    const auto tag = whole_document ? std::nullopt : selected_;
+    const auto type = tag && current && current->tag == *tag ? current->type : std::nullopt;
+    const apartment_context ui;
+    const auto set_busy = [&](bool working)
+    {
+        busy_ = working;
+        open_.IsEnabled(!working);
+        save_.IsEnabled(!working);
+        documents_bar_.IsEnabled(!working);
+        script_tabs_bar_.IsEnabled(!working);
+        deobfuscate_.IsEnabled(!working);
+    };
+    set_busy(true);
+    status(tr(L"Désobfuscation du bytecode ActionScript…"));
+    co_await resume_background();
+    std::shared_ptr<const flash::Movie> cleaned;
+    flash::DeobfuscationReport report;
+    std::vector<Row> rows;
+    std::wstring problem;
+    try
+    {
+        auto result = flash::deobfuscate_as3(*input, tag, type);
+        report = result.report;
+        if (result.movie)
+        {
+            cleaned = std::make_shared<flash::Movie>(std::move(*result.movie));
+            rows = index_rows(*cleaned);
+        }
+    }
+    catch (const std::exception& error) { problem = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    if (!cleaned || !problem.empty())
+    {
+        set_busy(false);
+        if (problem.empty())
+            status(tr(L"Aucune méthode n’a pu être simplifiée dans cette sélection."));
+        else
+            status(problem, true);
+        co_return;
+    }
+
+    std::optional<std::filesystem::path> path;
+    try { path = swf_copy_path(original, tr(L"-désobfusqué")); }
+    catch (const hresult_error& error) { problem = error.message(); }
+    catch (const std::exception& error) { problem = widen(error.what()); }
+    if (!path)
+    {
+        set_busy(false);
+        if (problem.empty())
+            status(tr(L"Enregistrement de la copie annulé."));
+        else
+            status(problem, true);
+        co_return;
+    }
+    co_await resume_background();
+    try
+    {
+        if (input->header().compression == 'C')
+        {
+            const auto bytes = cleaned->compressed();
+            cleaned = std::make_shared<flash::Movie>(flash::Movie::parse(bytes));
+            flash::write_file(*path, bytes);
+        }
+        else
+            flash::write_file(*path, cleaned->uncompressed());
+    }
+    catch (const std::exception& error) { problem = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    set_busy(false);
+    if (!problem.empty())
+    {
+        status(problem, true);
+        co_return;
+    }
+    remember_recent(*path);
+    add_document(*path, std::move(cleaned), std::move(rows), tag);
+    if (target)
+        open_script_target(*target);
+    else if (mode_ != Mode::scripts)
+        switch_mode(Mode::scripts);
+    status(format_message(L"{} méthodes nettoyées · {} branchements constants simplifiés · {} méthodes ignorées",
+        report.changed_methods, report.constant_branches, report.skipped_methods));
 }
 
 void Workspace::update_document()
@@ -1897,9 +2038,9 @@ bool Workspace::find_class_compiler(bool prompt)
     return false;
 }
 
-std::optional<std::filesystem::path> Workspace::class_output_path(const std::filesystem::path& original)
+std::optional<std::filesystem::path> Workspace::swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix)
 {
-    const auto output = dialog(window_, true, L".swf", original.stem().wstring() + tr(L"-classe"));
+    const auto output = dialog(window_, true, L".swf", original.stem().wstring() + std::wstring(suffix));
     if (output && (lower(output->extension().wstring()) != L".swf" ||
         CompareStringOrdinal(output->c_str(), -1, original.c_str(), -1, TRUE) == CSTR_EQUAL ||
         (std::filesystem::exists(*output) && std::filesystem::equivalent(*output, original))))

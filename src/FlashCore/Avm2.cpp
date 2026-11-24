@@ -243,6 +243,8 @@ public:
     const std::vector<unsigned>* class_script(unsigned method) const;
     Bytes replace_method(unsigned method, std::string_view assembly) const;
     Bytes replace_string(unsigned index, std::string_view text) const;
+    std::size_t obfuscated_methods() const;
+    AbcDeobfuscation deobfuscate(std::optional<std::size_t> type) const;
     std::vector<AbcMethod> catalog() const;
     AbcClassSource render_class(std::size_t index) const;
     unsigned major() const { return major_; }
@@ -264,6 +266,7 @@ private:
     void source(const Body& body, Output& out, SourceNames* names = nullptr, std::string_view static_owner = {}) const;
     void render_body(const Body& body, bool as_source, Output& out) const;
     void validate(unsigned method, const AssembledMethod& assembled) const;
+    std::string render_pcode(const Body& body, std::span<const Instruction> instructions, Output out) const;
     const Body& body(unsigned method) const;
 
     ByteView bytes_;
@@ -572,7 +575,8 @@ void Abc::read_traits(Reader& input, AbcClass* type, bool static_member, ScriptT
             if (type)
             {
                 auto declaration = type->interface_type ? std::string{} : modifier();
-                if (flags & 16)
+                // Static traits can carry the AVM2 flag even though AS3 forbids it on static methods.
+                if (!static_member && (flags & 16))
                     declaration += "final ";
                 if (flags & 32)
                     declaration += "override ";
@@ -1122,7 +1126,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
     {
         if (depth > 24)
             throw std::runtime_error("Trop de blocs ActionScript imbriqués.");
-        Expressions stack;
+        Expressions stack(256 * 1024);
         if (initial)
             stack.push(std::move(*initial));
         const std::string indent(depth * 4, ' ');
@@ -1131,7 +1135,18 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             if (expression)
                 throw std::runtime_error("Ce bloc produit une instruction plutôt qu’une expression.");
             validate_expression(text);
-            out.add(indent + text + ";\n");
+            std::string_view remaining(text);
+            while (true)
+            {
+                const auto end = remaining.find('\n');
+                out.add(indent);
+                out.add(remaining.substr(0, end));
+                if (end == std::string_view::npos)
+                    break;
+                out.add("\n");
+                remaining.remove_prefix(end + 1);
+            }
+            out.add(";\n");
         };
         for (std::size_t i = first; i < last; ++i)
         {
@@ -1580,13 +1595,13 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             }
             case 0x45: case 0x46: case 0x4A: case 0x4C: case 0x4E: case 0x4F:
             {
-                const auto arguments = stack.arguments(arg(1), true, true);
+                const auto arguments = stack.as3_list(arg(1), "(", ")");
                 const auto field = property();
                 auto receiver = stack.pop();
                 if (op == 0x45 || op == 0x4E)
                     receiver = "super";
                 const auto callee = member(receiver, field);
-                auto call = std::format("{}{}({})", op == 0x4A ? "new " : "", callee, arguments);
+                auto call = std::format("{}{}{}", op == 0x4A ? "new " : "", callee, arguments);
                 if (op == 0x4E || op == 0x4F)
                     emit(std::move(call));
                 else
@@ -1643,7 +1658,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 stack.push(object + " })");
                 break;
             }
-            case 0x56: stack.push('[' + stack.arguments(arg(0), true, true) + ']'); break;
+            case 0x56: stack.push(stack.as3_list(arg(0), "[", "]")); break;
             case 0x59: stack.push(reference()); break;
             case 0x5B: stack.push("delete " + reference()); break;
             case 0x5D: case 0x5E:
@@ -1883,14 +1898,25 @@ const std::vector<unsigned>* Abc::class_script(unsigned method) const
             const auto destination_is_scope = accept(0x65);
             if (destination_is_scope ? previous_arg() != 0 : !accept(0x5D) || name(previous_arg(), false) != classes_[index].name)
                 return nullptr;
-            unsigned scopes = 0;
+            unsigned scopes = 0, last_scope = 0;
             while (i + 1 < instructions.size() && instructions[i].op == 0x60 && instructions[i + 1].op == 0x30)
             {
+                last_scope = static_cast<unsigned>(instructions[i].args[0]);
                 ++scopes;
                 i += 2;
             }
             const auto base = class_bases_[index];
-            if (base ? (!accept(0x60) || name(previous_arg()) != name(base)) : !accept(0x20))
+            if (base)
+            {
+                if (!accept(0x60))
+                    return nullptr;
+                const auto lookup = previous_arg();
+                const auto scoped_lookup = at(multinames_, lookup).kind == 0x09 && last_scope &&
+                    name(last_scope) == name(base) && name(lookup, false) == name(base, false);
+                if (name(lookup) != name(base) && !scoped_lookup)
+                    return nullptr;
+            }
+            else if (!accept(0x20))
                 return nullptr;
             if (!accept(0x58) || previous_arg() != index)
                 return nullptr;
@@ -1997,7 +2023,6 @@ std::string Abc::pcode(unsigned method, bool simplify) const
 {
     const auto& info = body(method);
     std::vector<Instruction> instructions;
-    std::set<std::int64_t> targets;
     Reader code(info.code);
     while (code.remaining())
         instructions.push_back(decode(code));
@@ -2012,11 +2037,17 @@ std::string Abc::pcode(unsigned method, bool simplify) const
         if (changes.constant_branches)
             out.add(std::format("; Branchements à booléen constant simplifiés ({})\n", changes.constant_branches));
     }
+    return render_pcode(info, instructions, std::move(out));
+}
+
+std::string Abc::render_pcode(const Body& info, std::span<const Instruction> instructions, Output out) const
+{
+    std::set<std::int64_t> targets;
     for (const auto& item : instructions)
         if (item.op >= 0x0C && item.op <= 0x1B)
             targets.insert(item.args.begin(), item.args.end());
     out.add(std::format("; AVM2 · méthode {}\n.stack {}\n.locals {}\n.scope {} {}\n",
-        method, info.max_stack, info.locals, info.initial_scope, info.max_scope));
+        info.method, info.max_stack, info.locals, info.initial_scope, info.max_scope));
     for (const auto& handler : info.exceptions)
     {
         out.add(std::format(".exception {} {} {} {} {}\n", code_label(handler.from), code_label(handler.to),
@@ -2109,6 +2140,23 @@ void Abc::validate(unsigned method, const AssembledMethod& assembled) const
     }
 }
 
+namespace
+{
+void write_method_code(Bytes& result, const AssembledMethod& body)
+{
+    put_u30(result, body.stack);
+    put_u30(result, body.locals);
+    put_u30(result, body.initial_scope);
+    put_u30(result, body.max_scope);
+    put_u30(result, static_cast<unsigned>(body.code.size()));
+    append(result, body.code);
+    put_u30(result, static_cast<unsigned>(body.exceptions.size()));
+    for (const auto& handler : body.exceptions)
+        for (const auto value : {handler.from, handler.to, handler.target, handler.type, handler.variable})
+            put_u30(result, value);
+}
+}
+
 Bytes Abc::replace_method(unsigned method, std::string_view assembly) const
 {
     const auto& original = body(method);
@@ -2116,17 +2164,72 @@ Bytes Abc::replace_method(unsigned method, std::string_view assembly) const
     validate(method, new_body);
     Bytes result;
     append(result, bytes_.first(original.begin));
-    put_u30(result, new_body.stack);
-    put_u30(result, new_body.locals);
-    put_u30(result, new_body.initial_scope);
-    put_u30(result, new_body.max_scope);
-    put_u30(result, static_cast<unsigned>(new_body.code.size()));
-    append(result, new_body.code);
-    put_u30(result, static_cast<unsigned>(new_body.exceptions.size()));
-    for (const auto& handler : new_body.exceptions)
-        for (const auto value : {handler.from, handler.to, handler.target, handler.type, handler.variable})
-            put_u30(result, value);
+    write_method_code(result, new_body);
     append(result, bytes_.subspan(original.traits));
+    return result;
+}
+
+std::size_t Abc::obfuscated_methods() const
+{
+    return static_cast<std::size_t>(std::ranges::count_if(bodies_, [&](const Body& body)
+    {
+        const auto& method = methods_[body.method];
+        const auto first_local = static_cast<unsigned>(method.types.size() + 1 + (method.rest || method.arguments));
+        return has_boolean_prelude(body.code, first_local, body.locals);
+    }));
+}
+
+AbcDeobfuscation Abc::deobfuscate(std::optional<std::size_t> type) const
+{
+    std::set<unsigned> selected;
+    if (type)
+    {
+        for (const auto& member : classes_.at(*type).members)
+            if (member.method)
+                selected.insert(*member.method);
+        for (const auto& [method, classes] : class_scripts_)
+            if (std::ranges::find(classes, *type) != classes.end())
+                selected.insert(method);
+    }
+    AbcDeobfuscation result;
+    std::size_t copied = 0;
+    for (const auto& body : bodies_)
+    {
+        if (type && !selected.contains(body.method))
+            continue;
+        try
+        {
+            std::vector<Instruction> instructions;
+            Reader code(body.code);
+            while (code.remaining())
+            {
+                if (instructions.size() >= 65'536)
+                    throw std::runtime_error("Trop d’instructions pour désobfusquer cette méthode.");
+                instructions.push_back(decode(code));
+            }
+            const auto& method = methods_[body.method];
+            const auto first_local = static_cast<unsigned>(method.types.size() + 1 + (method.rest || method.arguments));
+            const auto changes = deobfuscate_flow(instructions, body.code.size(), body.exceptions, first_local, body.locals);
+            if (!changes.removed && !changes.redirected && !changes.constant_branches && !changes.constants)
+                continue;
+            const auto assembled = assemble_method(render_pcode(body, instructions, Output{}));
+            validate(body.method, assembled);
+            if (std::ranges::equal(body.code, assembled.code))
+                continue;
+            append(result.bytes, bytes_.subspan(copied, body.begin - copied));
+            write_method_code(result.bytes, assembled);
+            copied = body.traits;
+            ++result.report.changed_methods;
+            result.report.removed_instructions += changes.removed;
+            result.report.constant_branches += changes.constant_branches;
+        }
+        catch (const std::runtime_error&)
+        {
+            ++result.report.skipped_methods;
+        }
+    }
+    if (copied)
+        append(result.bytes, bytes_.subspan(copied));
     return result;
 }
 
@@ -2223,6 +2326,7 @@ AbcClassSource Abc::render_class(std::size_t index) const
     add(type.package.empty() ? "package\n{\n" : "package " + type.package + "\n{\n");
     add("    " + names.spell(type.declaration) + "\n    {\n");
     std::map<std::size_t, std::string> static_values;
+    std::vector<std::size_t> static_order;
     std::string static_code;
     if (const auto initializer = std::ranges::find_if(type.members, [](const auto& member) { return member.declaration.empty(); });
         initializer != type.members.end() && initializer->method && at(body_by_method_, *initializer->method))
@@ -2238,8 +2342,8 @@ AbcClassSource Abc::render_class(std::size_t index) const
             bool declarations_only = true;
             while (!remaining.empty())
             {
-                const auto end = remaining.find('\n');
-                const auto statement = remaining.substr(0, end);
+                const auto end = remaining.find(";\n");
+                const auto statement = remaining.substr(0, end == std::string_view::npos ? end : end + 1);
                 const auto equal = statement.find(" = ");
                 if (!statement.starts_with("    ") || equal == std::string_view::npos || equal < 5 || !statement.ends_with(';'))
                 {
@@ -2255,13 +2359,14 @@ AbcClassSource Abc::render_class(std::size_t index) const
                         value.declaration.find(" = ") == std::string::npos;
                 });
                 const auto position = static_cast<std::size_t>(member - type.members.begin());
-                if (member == type.members.end() || (!static_values.empty() && position <= static_values.rbegin()->first))
+                if (member == type.members.end() || static_values.contains(position))
                 {
                     declarations_only = false;
                     break;
                 }
                 static_values.emplace(position, std::string(statement.substr(equal + 3, statement.size() - equal - 4)));
-                remaining.remove_prefix(end == std::string_view::npos ? remaining.size() : end + 1);
+                static_order.push_back(position);
+                remaining.remove_prefix(end == std::string_view::npos ? remaining.size() : end + 2);
             }
             if (declarations_only)
                 static_code.clear();
@@ -2297,12 +2402,16 @@ AbcClassSource Abc::render_class(std::size_t index) const
         }
     };
     bool previous_field = false;
-    for (std::size_t position = 0; position < type.members.size(); ++position)
+    result.member_lines.resize(type.members.size());
+    auto next_static = static_order.begin();
+    for (std::size_t slot = 0; slot < type.members.size(); ++slot)
     {
+        // Initializers may reference fields initialized earlier in the original bytecode.
+        const auto position = static_values.contains(slot) ? *next_static++ : slot;
         const auto& member = type.members[position];
         if (previous_field && member.method)
             add("\n");
-        result.member_lines.push_back(line);
+        result.member_lines[position] = line;
         previous_field = !member.method;
         if (member.declaration.empty())
         {
@@ -2312,7 +2421,17 @@ AbcClassSource Abc::render_class(std::size_t index) const
         }
         add("        " + names.spell(member.declaration));
         if (const auto value = static_values.find(position); value != static_values.end())
-            add(" = " + value->second);
+        {
+            add(" = ");
+            std::string_view remaining(value->second);
+            for (auto end = remaining.find('\n'); end != std::string_view::npos; end = remaining.find('\n'))
+            {
+                add(remaining.substr(0, end + 1));
+                add("    ");
+                remaining.remove_prefix(end + 1);
+            }
+            add(remaining);
+        }
         if (!member.method || !at(body_by_method_, *member.method) || type.interface_type)
         {
             add(";\n");
@@ -2393,6 +2512,8 @@ std::optional<std::string> AbcModule::source_problem(unsigned method) const { re
 bool AbcModule::declares_classes(unsigned method) const { return state_->program.class_script(method) != nullptr; }
 Bytes AbcModule::replace_method(unsigned method, std::string_view pcode) const { return state_->program.replace_method(method, pcode); }
 Bytes AbcModule::replace_string(unsigned index, std::string_view utf8) const { return state_->program.replace_string(index, utf8); }
+std::size_t AbcModule::obfuscated_methods() const { return state_->program.obfuscated_methods(); }
+AbcDeobfuscation AbcModule::deobfuscate(std::optional<std::size_t> type) const { return state_->program.deobfuscate(type); }
 
 ByteView abc_bytecode(const Movie& movie, std::size_t index)
 {
@@ -2417,5 +2538,50 @@ Movie replace_abc(const Movie& movie, std::size_t index, ByteView abc)
     append(bytes, payload.first(payload.size() - original.size()));
     append(bytes, abc);
     return movie.replace_tag(index, bytes);
+}
+
+std::size_t detect_as3_obfuscation(const Movie& movie)
+{
+    std::size_t total = 0;
+    for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
+        if (movie.tags()[tag].code == 72 || movie.tags()[tag].code == 82)
+        {
+            try { total += AbcModule(abc_bytecode(movie, tag)).obfuscated_methods(); }
+            catch (const std::runtime_error&) {}
+        }
+    return total;
+}
+
+SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type)
+{
+    if (type && !selected)
+        throw std::runtime_error("Sélectionnez le bloc ABC de la classe.");
+    if (selected)
+        (void)abc_bytecode(movie, *selected);
+    SwfDeobfuscation result;
+    for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
+    {
+        if ((selected && *selected != tag) || (movie.tags()[tag].code != 72 && movie.tags()[tag].code != 82))
+            continue;
+        try
+        {
+            const auto abc = AbcModule(abc_bytecode(movie, tag)).deobfuscate(type);
+            result.report.skipped_methods += abc.report.skipped_methods;
+            if (!abc.bytes.empty())
+            {
+                auto replacement = replace_abc(result.movie ? *result.movie : movie, tag, abc.bytes);
+                result.movie = std::move(replacement);
+                result.report.changed_methods += abc.report.changed_methods;
+                result.report.removed_instructions += abc.report.removed_instructions;
+                result.report.constant_branches += abc.report.constant_branches;
+            }
+        }
+        catch (const std::runtime_error&)
+        {
+            if (selected)
+                throw;
+        }
+    }
+    return result;
 }
 }
