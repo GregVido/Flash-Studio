@@ -718,7 +718,7 @@ void Abc::assembly(const Body& body, Output& out) const
     }
 }
 
-void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_view static_owner) const
+void Abc::source(const Body& body, Output& output, SourceNames* names, std::string_view static_owner) const
 {
     constexpr std::string_view lexical_scope = "\x01lexical", global_scope = "\x01global";
     constexpr std::string_view activation_scope = "\x01" "activation";
@@ -788,6 +788,7 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
         return names ? names->spell(original, &used_names) : original;
     };
     std::map<unsigned, std::string> local_types;
+    std::map<unsigned, std::size_t> inline_stores;
     if (!local_names.empty())
     {
         std::set<unsigned> ambiguous;
@@ -817,12 +818,54 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
         for (const auto& handler : body.exceptions)
             entries.insert(target(handler.target));
 
+        const auto constructed_type = [&](std::size_t position) -> std::string
+        {
+            const auto& constructor = instructions[position];
+            unsigned missing = static_cast<unsigned>(constructor.args.back());
+            // Walk over straight-line arguments without assuming the type of a runtime callee.
+            for (unsigned steps = 0; missing; ++steps)
+            {
+                if (!position || entries.contains(position) || steps == 128)
+                    return {};
+                const auto& operand = instructions[--position];
+                unsigned consumed = 0;
+                if (!load_register(operand))
+                    switch (operand.op)
+                    {
+                    case 0x20: case 0x21: case 0x22: case 0x24: case 0x25: case 0x26: case 0x27: case 0x28:
+                    case 0x2C: case 0x2D: case 0x2E: case 0x2F: case 0x31: case 0x54: case 0x60:
+                        break;
+                    case 0x66:
+                    {
+                        const auto kind = at(multinames_, static_cast<unsigned>(operand.args[0])).kind;
+                        if (kind != 0x07 && kind != 0x09)
+                            return {};
+                        consumed = 1;
+                        break;
+                    }
+                    default: return {};
+                    }
+                missing = missing - 1 + consumed;
+            }
+            if (!position || entries.contains(position))
+                return {};
+            const auto& lookup = instructions[position - 1];
+            const bool direct = constructor.op == 0x42;
+            if ((direct && lookup.op != 0x60) ||
+                (!direct && (lookup.op != 0x5D || lookup.args[0] != constructor.args[0])))
+                return {};
+            const auto type = name(static_cast<unsigned>(lookup.args[0]));
+            return std::ranges::any_of(classes_, [&](const AbcClass& entry)
+            {
+                return !entry.interface_type && entry.qualified == type;
+            }) ? type : std::string{};
+        };
         const auto written_type = [&](std::size_t i) -> std::string
         {
             if (!i || entries.contains(i))
                 return {};
             auto previous = i - 1;
-            if (instructions[previous].op == 0x2A)
+            while (instructions[previous].op == 0x2A || instructions[previous].op == 0x82)
             {
                 if (!previous || entries.contains(previous))
                     return {};
@@ -840,24 +883,21 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
             case 0x55: return "Object";
             case 0x56: return "Array";
             case 0x80: case 0x86: return name(static_cast<unsigned>(producer.args[0]));
-            case 0x4A:
-                if (previous && producer.args[1] == 0 && instructions[previous - 1].op == 0x5D &&
-                    instructions[previous - 1].args[0] == producer.args[0] && !entries.contains(previous))
-                {
-                    auto type = name(static_cast<unsigned>(producer.args[0]));
-                    if (std::ranges::any_of(classes_, [&](const AbcClass& entry) { return entry.qualified == type; }))
-                        return type;
-                }
-                break;
+            case 0x42: case 0x4A: return constructed_type(previous);
             default: break;
             }
             return {};
         };
+        std::set<unsigned> locally_accessed;
         for (std::size_t i = 0; i < instructions.size(); ++i)
         {
             const auto& item = instructions[i];
+            if (const auto reg = load_register(item); reg && local_names.contains(*reg))
+                locally_accessed.insert(*reg);
             if (const auto reg = store_register(item); reg && local_names.contains(*reg))
             {
+                if (locally_accessed.insert(*reg).second && !entries.contains(i))
+                    inline_stores.emplace(*reg, i);
                 const auto type = written_type(i);
                 const auto [known, inserted] = local_types.try_emplace(*reg, type);
                 if (type.empty() || type == "*" || (!inserted && known->second != type))
@@ -865,7 +905,12 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
             }
             if (item.op == 0x08 || item.op == 0x32 || item.op == 0x92 || item.op == 0x94 || item.op == 0xC2 || item.op == 0xC3)
                 for (const auto reg : item.args)
-                    ambiguous.insert(static_cast<unsigned>(reg));
+                {
+                    const auto index = static_cast<unsigned>(reg);
+                    ambiguous.insert(index);
+                    if (local_names.contains(index))
+                        locally_accessed.insert(index);
+                }
         }
 
         const auto used_before_assignment = [&](unsigned reg)
@@ -898,19 +943,19 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
         else
             std::erase_if(local_types, [&](const auto& type) { return ambiguous.contains(type.first) || used_before_assignment(type.first); });
     }
-    bool declarations = false;
     if (!static_owner.empty() && (!local_names.empty() || activation))
         throw std::runtime_error("Variables locales dans l’initialiseur statique.");
+    std::map<unsigned, std::string> local_declarations;
     for (const auto& [register_id, name] : local_names)
         if (register_id != activation)
         {
             const auto type = local_types.find(register_id);
             const auto annotation = type == local_types.end() ? "*" : names ? names->spell(type->second, &used_names) : type->second;
-            out.add("    var " + name + ':' + annotation + ";\n");
-            declarations = true;
+            local_declarations.emplace(register_id, "var " + name + ':' + annotation);
         }
     std::map<unsigned, std::string> slot_variables;
     std::map<unsigned, unsigned> variable_slots;
+    Output slot_declarations;
     if (activation)
         for (const auto& slot : body.slots)
         {
@@ -931,11 +976,9 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
                     throw std::runtime_error("Valeur initiale de slot non représentée.");
                 variable += " = " + value;
             }
-            out.add(variable + ";\n");
-            declarations = true;
+            slot_declarations.add(variable + ";\n");
         }
-    if (declarations)
-        out.add("\n");
+    Output out;
     const auto destination = [&](std::int64_t address)
     {
         if (address == static_cast<std::int64_t>(body.code.size()))
@@ -1175,6 +1218,19 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
                     throw std::runtime_error("L’écriture du registre this ne se traduit pas en ActionScript.");
                 if (activation == index)
                     throw std::runtime_error("Écriture dynamique du registre d’activation.");
+                return local(index);
+            };
+            const auto assign_local = [&](unsigned index, std::size_t store)
+            {
+                auto target = writable_local(index);
+                // Keep the initializer at its original execution point.
+                if (const auto first_store = inline_stores.find(index);
+                    depth == 1 && first_store != inline_stores.end() && first_store->second == store)
+                {
+                    if (auto declared = local_declarations.extract(index); declared)
+                        target = std::move(declared.mapped());
+                }
+                emit(target + " = " + stack.pop_as3_value());
                 return local(index);
             };
             const auto read_local = [&](unsigned index)
@@ -1489,9 +1545,7 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
                 if (i + 1 < last)
                     if (const auto saved = store_register(instructions[i + 1]))
                     {
-                        const auto variable = writable_local(*saved);
-                        emit(variable + " = " + stack.pop_as3_value());
-                        stack.push(variable);
+                        stack.push(assign_local(*saved, i + 1));
                         ++i;
                         break;
                     }
@@ -1604,7 +1658,7 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
                 break;
             }
             case 0x62: stack.push(read_local(arg(0))); break;
-            case 0x63: emit(writable_local(arg(0)) + " = " + stack.pop_as3_value()); break;
+            case 0x63: assign_local(arg(0), i); break;
             case 0x64: stack.push(std::string(global_scope)); break;
             case 0x65:
                 if (own_scope && arg(0) == 0)
@@ -1683,7 +1737,7 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
             case 0xB3: stack.as3_binary("is"); break;
             case 0xB4: stack.as3_binary("in"); break;
             case 0xD0: case 0xD1: case 0xD2: case 0xD3: stack.push(read_local(op - 0xD0)); break;
-            case 0xD4: case 0xD5: case 0xD6: case 0xD7: emit(writable_local(op - 0xD4) + " = " + stack.pop_as3_value()); break;
+            case 0xD4: case 0xD5: case 0xD6: case 0xD7: assign_local(op - 0xD4, i); break;
             default:
                 throw std::runtime_error(std::format("Instruction {} à 0x{:04X}. Voir le désassemblage.",
                     opcodes[op].name, item.offset));
@@ -1702,6 +1756,13 @@ void Abc::source(const Body& body, Output& out, SourceNames* names, std::string_
     statement_block(statement_block, body_start, instructions.size(), 1);
     if (guarded && !emitted_try)
         throw unsupported_try();
+    for (const auto& [index, declaration] : local_declarations)
+        output.add("    " + declaration + ";\n");
+    const auto slots = std::move(slot_declarations).take();
+    output.add(slots);
+    if (!local_declarations.empty() || !slots.empty())
+        output.add("\n");
+    output.add(std::move(out).take());
 }
 
 std::string Abc::method_signature(unsigned index, std::string_view declared_name, bool constructor) const

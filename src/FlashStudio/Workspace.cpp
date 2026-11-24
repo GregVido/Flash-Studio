@@ -186,26 +186,39 @@ void Workspace::build()
             args.AcceptedOperation(Windows::ApplicationModel::DataTransfer::DataPackageOperation::Copy);
     });
     root_.Drop([this](auto&&, const DragEventArgs& args) { drop(args); });
-    row(root_, 42, GridUnitType::Pixel);
-    row(root_);
+    row(root_, 48, GridUnitType::Pixel);
     row(root_);
     row(root_, 1, GridUnitType::Star);
     row(root_);
 
-    Border title_bar;
+    Grid title_bar;
     title_bar.Background(brush(base));
-    auto brand = horizontal(10);
-    brand.Margin(pad(20, 0, 0, 0));
-    brand.VerticalAlignment(VerticalAlignment::Center);
+    column(title_bar, 42);
+    column(title_bar, 1, GridUnitType::Star);
+    const auto caption_padding = column(title_bar, 138);
     BitmapImage logo;
     load_logo(logo);
     Image header_logo;
-    header_logo.Width(24);
-    header_logo.Height(24);
+    header_logo.Width(22);
+    header_logo.Height(22);
     header_logo.Source(logo);
-    brand.Children().Append(header_logo);
-    brand.Children().Append(label(L"Flash Studio", 14, primary, true));
-    title_bar.Child(brand);
+    ToolTipService::SetToolTip(header_logo, box_value(L"Flash Studio"));
+    place(title_bar, header_logo, 0);
+    build_documents();
+    place(title_bar, documents_bar_, 0, 1);
+    Grid drag_area;
+    drag_area.Background(brush(base));
+    drag_area.MinWidth(64);
+    documents_bar_.TabStripFooter(drag_area);
+    drag_area.Loaded([this](const IInspectable& sender, auto&&) { window_.SetTitleBar(sender.as<UIElement>()); });
+    const auto size_caption = [this, caption_padding](const IInspectable& element, auto&&)
+    {
+        const auto root = element.as<FrameworkElement>().XamlRoot();
+        if (root)
+            caption_padding.Width({window_.AppWindow().TitleBar().RightInset() / root.RasterizationScale(), GridUnitType::Pixel});
+    };
+    title_bar.Loaded(size_caption);
+    title_bar.SizeChanged(size_caption);
     place(root_, title_bar, 0);
 
     Grid header;
@@ -231,7 +244,6 @@ void Workspace::build()
     open_.Background(brush(accent));
     open_.Padding(pad(14, 8, 14, 8));
     open_.Click([this](auto&&, auto&&) { open_dialog(); });
-    build_documents();
     save_ = Button();
     save_.Content(icon_label(L'\uE74E', tr(L"Enregistrer sous")));
     save_.Padding(pad(14, 8, 14, 8));
@@ -316,7 +328,7 @@ void Workspace::build()
         update_layout();
     });
     workarea_.Child(content);
-    place(root_, workarea_, 3);
+    place(root_, workarea_, 2);
 
     Grid sidebar;
     sidebar.Background(brush(panel));
@@ -402,6 +414,7 @@ void Workspace::build()
     place(content, gallery_, 0, 1);
 
     inspector_ = Grid();
+    row(inspector_);
     inspector_.Background(brush(panel));
     row(inspector_);
     row(inspector_);
@@ -467,7 +480,8 @@ void Workspace::build()
     export_.Flyout(options);
     export_.IsEnabled(false);
     actions.Children().Append(export_);
-    place(inspector_, detail, 0);
+    build_script_tabs();
+    place(inspector_, detail, 1);
 
     Grid bar;
     column(bar, 1, GridUnitType::Star);
@@ -501,6 +515,15 @@ void Workspace::build()
     source_edit_.Visibility(Visibility::Collapsed);
     source_edit_.Click([this](auto&&, auto&&) { edit_class(); });
     view_actions.Children().Append(source_edit_);
+    script_pin_ = Button();
+    script_pin_.FontSize(12);
+    script_pin_.Visibility(Visibility::Collapsed);
+    script_pin_.Click([this](auto&&, auto&&)
+    {
+        if (const auto* tab = current_script_tab())
+            toggle_script_pin(tab->script.tag, tab->script.qualified);
+    });
+    view_actions.Children().Append(script_pin_);
     toggle_outline_ = ToggleButton();
     toggle_outline_.Content(box_value(tr(L"Membres")));
     toggle_outline_.FontSize(12);
@@ -508,7 +531,7 @@ void Workspace::build()
     toggle_outline_.Click([this](auto&&, auto&&) { update_layout(); });
     view_actions.Children().Append(toggle_outline_);
     place(bar, view_actions, 0, 1);
-    place(inspector_, bar, 1);
+    place(inspector_, bar, 2);
 
     abc_tools_ = Grid();
     abc_tools_.Visibility(Visibility::Collapsed);
@@ -577,7 +600,7 @@ void Workspace::build()
     abc_menu.Items().Append(replace_module);
     abc_actions.Flyout(abc_menu);
     place(abc_tools_, abc_actions, 0, 2);
-    place(inspector_, abc_tools_, 2);
+    place(inspector_, abc_tools_, 3);
 
     Grid preview;
     output_ = TextBox();
@@ -670,7 +693,7 @@ void Workspace::build()
     preview.Children().Append(progress_);
     build_source_editor(preview);
     build_outline(preview);
-    place(inspector_, preview, 3);
+    place(inspector_, preview, 4);
     build_frame_player();
     place(content, inspector_, 0, 2);
 
@@ -701,7 +724,7 @@ void Workspace::build()
     choose.Click([this](auto&&, auto&&) { open_dialog(); });
     welcome.Children().Append(choose);
     empty_.Child(welcome);
-    place(root_, empty_, 3);
+    place(root_, empty_, 2);
     workarea_.Visibility(Visibility::Collapsed);
 
     auto footer = horizontal(8);
@@ -711,16 +734,16 @@ void Workspace::build()
     status_ = label(tr(L"Prêt"), 12, secondary);
     footer.Children().Append(status_icon_);
     footer.Children().Append(status_);
-    place(root_, footer, 4);
-    window_.Content(root_);
+    place(root_, footer, 3);
     window_.ExtendsContentIntoTitleBar(true);
-    window_.SetTitleBar(title_bar);
     const auto caption = window_.AppWindow().TitleBar();
+    caption.PreferredHeightOption(Microsoft::UI::Windowing::TitleBarHeightOption::Tall);
     caption.ButtonForegroundColor(color(primary));
     caption.ButtonInactiveForegroundColor(color(secondary));
     caption.ButtonBackgroundColor(Windows::UI::Color{0, 0, 0, 0});
     caption.ButtonInactiveBackgroundColor(Windows::UI::Color{0, 0, 0, 0});
     caption.ButtonHoverBackgroundColor(color(surface));
+    window_.Content(root_);
 }
 
 void Workspace::status(std::wstring_view message, bool error)

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <Windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 
@@ -55,6 +56,12 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
         inlines.Append(run);
     };
     const auto name_character = [](wchar_t c) { return identifier(c) || digit(c); };
+    const auto qualifier_start = [&](std::size_t first)
+    {
+        while (first && (name_character(text[first - 1]) || text[first - 1] == L'.'))
+            --first;
+        return first;
+    };
     const auto type_position = [&](std::wstring_view name, std::size_t first, std::size_t last)
     {
         if (known_type && known_type(name))
@@ -96,8 +103,7 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
         if (first && text[first - 1] == L'.')
         {
             --receiver_start;
-            while (receiver_start && (name_character(text[receiver_start - 1]) || text[receiver_start - 1] == L'.'))
-                --receiver_start;
+            receiver_start = qualifier_start(receiver_start);
             receiver = text.substr(receiver_start, first - receiver_start - 1);
             if (receiver.empty())
                 return {};
@@ -111,7 +117,8 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
         const auto before = text.substr(keyword_start, prefix - keyword_start);
         if (before == L"function" || before == L"get" || before == L"set")
             return {};
-        return reference(receiver, text.substr(first, last - first), before == L"new");
+        return reference(receiver, text.substr(first, last - first),
+            before == L"new" ? CodeReferenceKind::constructor : CodeReferenceKind::call);
     };
     std::size_t start = 0, i = 0;
     bool mnemonic = instructions;
@@ -131,6 +138,7 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
         auto end = i + 1;
         auto token = Token::plain;
         std::function<void()> navigate;
+        std::function<void()> open_type;
         if (block_comment || (!instructions && text.substr(i).starts_with(L"/*")))
         {
             const auto close = text.find(L"*/", block_comment ? i : i + 2);
@@ -181,13 +189,18 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
             {
                 token = Token::type;
                 navigate = call_target(i, end);
+                if (reference)
+                {
+                    const auto start_of_type = qualifier_start(i);
+                    open_type = reference({}, text.substr(start_of_type, end - start_of_type), CodeReferenceKind::type);
+                }
             }
             else if (!instructions && keyword(first))
                 token = Token::command;
             else if (!instructions)
                 navigate = call_target(i, end);
         }
-        if (navigate)
+        if (navigate || open_type)
         {
             if (i > start)
                 append(text.substr(start, i - start), Token::plain);
@@ -197,7 +210,13 @@ winrt::Microsoft::UI::Xaml::Documents::Paragraph color_code(std::wstring_view te
             Run name;
             name.Text(winrt::hstring(text.substr(i, end - i)));
             link.Inlines().Append(name);
-            link.Click([action = std::move(navigate)](auto&&, auto&&) { action(); });
+            link.Click([action = std::move(navigate), type = std::move(open_type)](auto&&, auto&&)
+            {
+                if (type && GetKeyState(VK_CONTROL) < 0)
+                    type();
+                else if (action)
+                    action();
+            });
             inlines.Append(link);
             start = end;
         }

@@ -44,8 +44,6 @@ std::vector<std::filesystem::path> read_recent(const std::filesystem::path& file
 void Workspace::build_documents()
 {
     documents_bar_ = TabView();
-    documents_bar_.Height(42);
-    documents_bar_.Visibility(Visibility::Collapsed);
     documents_bar_.IsAddTabButtonVisible(true);
     documents_bar_.TabWidthMode(TabViewWidthMode::SizeToContent);
     Automation::AutomationProperties::SetName(documents_bar_, tr(L"Documents SWF ouverts"));
@@ -62,7 +60,6 @@ void Workspace::build_documents()
         if (found != documents_.end())
             close_document(static_cast<std::size_t>(found - documents_.begin()));
     });
-    place(root_, documents_bar_, 2);
 
     recent_ = DropDownButton();
     recent_.Padding(pad(10, 8, 10, 8));
@@ -126,7 +123,7 @@ void Workspace::add_document(std::filesystem::path path, std::shared_ptr<const f
         {
             auto& document = documents_[i];
             document = {std::move(path), std::move(movie), std::move(rows), document.tab,
-                initial_tag ? Mode::tags : Mode::resources, View::details, initial_tag, {}, {}};
+                initial_tag ? Mode::tags : Mode::resources, View::details, initial_tag, {}, {}, std::move(document.script_tabs)};
             activate_document(i);
             return;
         }
@@ -134,11 +131,10 @@ void Workspace::add_document(std::filesystem::path path, std::shared_ptr<const f
     tab.Header(box_value(hstring(path.filename().wstring())));
     const auto index = documents_.size();
     documents_.push_back({std::move(path), std::move(movie), std::move(rows), tab,
-        initial_tag ? Mode::tags : Mode::resources, View::details, initial_tag, {}, {}});
+        initial_tag ? Mode::tags : Mode::resources, View::details, initial_tag, {}, {}, {}});
     {
         const UpdatingSelection updating(refreshing_);
         documents_bar_.TabItems().Append(tab);
-        documents_bar_.Visibility(Visibility::Visible);
     }
     activate_document(index);
 }
@@ -155,6 +151,7 @@ void Workspace::activate_document(std::size_t index)
         return;
     if (active_document_)
     {
+        remember_script_tab();
         auto& previous = documents_[*active_document_];
         previous.path = file_;
         previous.movie = movie_;
@@ -180,7 +177,16 @@ void Workspace::activate_document(std::size_t index)
         (mode_ == Mode::scripts ? script_search_ : mode_ == Mode::resources ? gallery_search_ : search_).Text(next.filter);
     }
     if (mode_ == Mode::scripts && next.script)
-        open_script_target({next.script->tag, {}, next.script->qualified, next.script->method, {}, next.view});
+    {
+        const auto match = std::ranges::find_if(next.script_tabs, [&](const ScriptTab& tab)
+        {
+            return tab.script.tag == next.script->tag && tab.script.qualified == next.script->qualified;
+        });
+        if (match != next.script_tabs.end())
+            activate_script_tab(*match);
+        else
+            open_script_target({next.script->tag, {}, next.script->qualified, next.script->method, {}, next.view});
+    }
     else if (mode_ == Mode::tags)
     {
         if (next.tag)
@@ -228,7 +234,7 @@ void Workspace::close_document(std::size_t index)
     abc_method_.reset();
     file_.clear();
     reset_explorer();
-    documents_bar_.Visibility(Visibility::Collapsed);
+    refresh_script_tabs();
     workarea_.Visibility(Visibility::Collapsed);
     empty_.Visibility(Visibility::Visible);
     window_.Title(L"Flash Studio");

@@ -269,25 +269,38 @@ def check(exe, folder, asc=None):
         empty_body = class_header + tag(69, b"\x08\x00\x00\x00") + tag(1) + tag(0)
         empty_as3.write_bytes(swf(b"CWS", empty_body, zlib.compress(empty_body)))
         source = folder / "Panel.as"
-        source.write_text('package demo { public class Panel { public function value():String { return "first"; } } }',
-                          encoding="utf-8")
+        panel_source = """package demo {
+    public class Panel {
+        public function Panel(label:String = "") {}
+        public function value():String { return "first"; }
+        public function make():* {
+            var result:* = new Panel("copy");
+            return result;
+        }
+    }
+}"""
+        source.write_text(panel_source, encoding="utf-8")
         created = folder / "New AS3 class.swf"
         run("class-new", empty_as3, "demo.Panel", source, created, asc / "asc.jar")
         assert created.read_bytes()[:3] == b"CWS"
         assert "0\tdemo.Panel" in run("abc-classes", created, "1")
-        assert 'return "first";' in run("abc-class", created, "1", "0")
+        created_source = run("abc-class", created, "1", "0")
+        assert 'return "first";' in created_source
+        assert 'var local1:Panel = new Panel("copy");' in created_source, created_source
         rejected = folder / "Rejected AS3 class.swf"
         run("class-new", created, "demo.Panel", source, rejected, asc / "asc.jar", ok=False)
         assert not rejected.exists()
 
-        source.write_text('package demo { public class Panel { public function value():String { return "second"; } } }',
-                          encoding="utf-8")
+        source.write_text(panel_source.replace('"first"', '"second"'), encoding="utf-8")
         edited = folder / "Updated AS3 class.swf"
         run("class-edit", created, "1", "demo.Panel", source, edited, asc / "asc.jar")
         assert 'return "second";' in run("abc-class", edited, "1", "0")
         assert 'return "first";' in run("abc-class", created, "1", "0")
-        for film in (created, edited):
-            assert "1\tdemo.Panel\tfunction value():String\t" in run("abc-list", film, "1")
+        def value_method(film):
+            return next(line.split("\t", 1)[0] for line in run("abc-list", film, "1").splitlines()
+                        if "\tdemo.Panel\tfunction value():String\t" in line)
+
+        assert value_method(created) == value_method(edited)
         source.write_text("package demo { public class Panel { @@@ } }", encoding="utf-8")
         run("class-edit", created, "1", "demo.Panel", source, rejected, asc / "asc.jar", ok=False)
         assert not rejected.exists()
@@ -340,7 +353,7 @@ returnvalue
     duplicate = folder / "Duplication et inférence.swf"
     run("abc-edit", class_movie, "0", "2", loop_pcode, duplicate)
     duplicate_source = run("abc-class", duplicate, "0", "0")
-    assert "var local1:int;" in duplicate_source and "local1 = 19;" in duplicate_source and "return local1 + 23;" in duplicate_source
+    assert "var local1:int = 19;" in duplicate_source and "return local1 + 23;" in duplicate_source
     recompile(duplicate_source, "asc-duplication")
 
     loop_pcode.write_text(""".stack 3
@@ -366,7 +379,7 @@ returnvalue
     precedence_movie = folder / "Priorité des opérateurs.swf"
     run("abc-edit", class_movie, "0", "2", loop_pcode, precedence_movie)
     precedence_source = run("abc-class", precedence_movie, "0", "0")
-    assert "local1 = int(Number(1 + 2 * 3));" in precedence_source, precedence_source
+    assert "var local1:int = int(Number(1 + 2 * 3));" in precedence_source, precedence_source
     assert "return 12 - (7 - local1) - 2;" in precedence_source, precedence_source
     recompile(precedence_source, "asc-priorite-operateurs")
 
@@ -386,7 +399,7 @@ returnvalue
     loop_movie = folder / "Boucle.swf"
     run("abc-edit", class_movie, "0", "2", loop_pcode, loop_movie)
     reconstructed = run("abc-class", loop_movie, "0", "0")
-    assert "var local1:*;\n\n" in reconstructed
+    assert "var local1:* = 0;" in reconstructed
     assert "while (local1 < 3)\n" in reconstructed
     assert "return local1;" in reconstructed
     assert "3 corps reconstruits" in run("abc-coverage", loop_movie, "0")

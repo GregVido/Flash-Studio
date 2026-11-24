@@ -64,6 +64,14 @@ private:
         std::wstring qualified;
         std::optional<unsigned> method;
     };
+    struct ScriptTab
+    {
+        ScriptSelection script;
+        View view = View::source;
+        std::size_t line = 1;
+        bool pinned = false;
+        winrt::Microsoft::UI::Xaml::Controls::TabViewItem item{nullptr};
+    };
     struct Package
     {
         std::wstring caption;
@@ -82,6 +90,7 @@ private:
         std::optional<std::size_t> tag;
         std::optional<ScriptSelection> script;
         std::wstring filter;
+        std::vector<ScriptTab> script_tabs;
     };
     struct FramePlayback;
     struct ScriptTarget
@@ -120,6 +129,14 @@ private:
     winrt::fire_and_forget load_thumbnails(std::vector<std::pair<std::size_t, winrt::Microsoft::UI::Xaml::Controls::Image>> tiles);
     void open_dialog();
     void build_documents();
+    void build_script_tabs();
+    void refresh_script_tabs();
+    void remember_script_tab();
+    void track_script_tab(const ScriptEntry& entry);
+    void activate_script_tab(const ScriptTab& tab);
+    void toggle_script_pin(std::size_t tag, std::wstring_view qualified);
+    void update_script_pin();
+    ScriptTab* current_script_tab();
     void show_recent();
     void remember_recent(const std::filesystem::path& path);
     void add_document(std::filesystem::path path, std::shared_ptr<const flash::Movie> movie, std::vector<Row> rows,
@@ -185,7 +202,8 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::ScrollViewer code_view_{nullptr}, picture_view_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Grid source_editor_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::WebView2 source_web_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button source_create_{nullptr}, source_edit_{nullptr}, source_save_{nullptr}, source_cancel_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button source_create_{nullptr}, source_edit_{nullptr}, source_save_{nullptr},
+        source_cancel_{nullptr}, script_pin_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock source_feedback_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ComboBox abc_owner_{nullptr}, abc_method_list_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutSubItem animation_export_{nullptr};
@@ -202,7 +220,7 @@ private:
         previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton export_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton recent_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr}, script_tabs_bar_{nullptr};
     std::vector<OpenDocument> documents_;
     std::optional<std::size_t> active_document_;
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem export_source_{nullptr}, export_assembly_{nullptr},

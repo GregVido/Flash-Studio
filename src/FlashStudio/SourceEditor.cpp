@@ -125,6 +125,8 @@ void Workspace::set_source_editing(bool editing)
     recent_.IsEnabled(!editing);
     export_.IsEnabled(!editing);
     documents_bar_.IsEnabled(!editing);
+    script_tabs_bar_.IsEnabled(!editing);
+    script_pin_.IsEnabled(!editing);
     script_search_.IsEnabled(!editing);
     scripts_.IsEnabled(!editing);
     source_create_.IsEnabled(!editing && movie_ && flash::supports_as3_class_creation(*movie_));

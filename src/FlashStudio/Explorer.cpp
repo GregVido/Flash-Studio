@@ -298,6 +298,7 @@ void Workspace::switch_mode(Mode mode)
         thumbnails_cancel_->store(true, std::memory_order_relaxed);
     if (mode != mode_ && mode_ == Mode::scripts)
     {
+        remember_script_tab();
         previous_script_ = selected_script_;
         previous_method_ = abc_method_;
         previous_script_view_ = view_;
@@ -343,6 +344,7 @@ void Workspace::switch_mode(Mode mode)
     }
     else if (!scripts_loading_)
         index_scripts();
+    refresh_script_tabs();
 }
 
 void Workspace::reset_explorer()
@@ -434,6 +436,7 @@ fire_and_forget Workspace::index_scripts()
         script_errors_ = errors;
         scripts_loading_ = false;
         scripts_indexed_ = true;
+        refresh_script_tabs();
         if (mode_ == Mode::scripts)
         {
             if (edited_script_)
@@ -547,9 +550,12 @@ void Workspace::fill_package(const TreeViewNode& node, std::size_t index)
 
 void Workspace::select_script(std::size_t index, std::optional<unsigned> method, View view)
 {
-    if (mode_ != Mode::scripts || index >= script_entries_.size())
+    if (source_session_ || mode_ != Mode::scripts || index >= script_entries_.size())
         return;
+    remember_script_tab();
     const auto& entry = script_entries_[index];
+    if (method && *method >= entry.module->methods().size())
+        method.reset();
     selected_script_ = index;
     member_lines_.clear();
     {
@@ -586,6 +592,7 @@ void Workspace::select_script(std::size_t index, std::optional<unsigned> method,
     abc_ = entry.module;
     abc_method_ = method;
     select_tag(entry.tag, view);
+    track_script_tab(entry);
 }
 
 void Workspace::jump_to_member()
@@ -611,15 +618,21 @@ CodeReference Workspace::code_references(std::wstring_view source)
     const auto current = *selected_script_;
     const auto& entry = script_entries_[current];
     const auto& info = entry.module->classes()[*entry.type];
-    std::map<std::wstring, std::size_t, std::less<>> classes;
+    std::map<std::wstring, std::optional<std::size_t>, std::less<>> classes;
+    const auto add_name = [&](std::wstring_view key, std::size_t index)
+    {
+        const auto [item, inserted] = classes.emplace(key, index);
+        if (!inserted && item->second != index)
+            item->second.reset();
+    };
     for (std::size_t i = 0; i < script_entries_.size(); ++i)
     {
         const auto& type = script_entries_[i];
         if (!type.type)
             continue;
-        classes.try_emplace(type.qualified, i);
-        if (type.package == entry.package || type.package.empty())
-            classes.try_emplace(type.name, i);
+        add_name(type.qualified, i);
+        if (!entry.package.empty() && type.package == entry.package)
+            add_name(type.name, i);
     }
     for (auto start = source.find(L"\n    import "); start != std::wstring_view::npos; start = source.find(L"\n    import ", start + 1))
     {
@@ -628,8 +641,8 @@ CodeReference Workspace::code_references(std::wstring_view source)
         if (last == std::wstring_view::npos || source[last] != L';')
             continue;
         const auto qualified = source.substr(first, last - first);
-        if (const auto found = classes.find(qualified); found != classes.end())
-            classes.insert_or_assign(script_entries_[found->second].name, found->second);
+        if (const auto found = classes.find(qualified); found != classes.end() && found->second)
+            classes.insert_or_assign(script_entries_[*found->second].name, found->second);
     }
     std::optional<std::size_t> base_class;
     if (const auto marker = info.declaration.find(" extends "); marker != std::string::npos)
@@ -640,8 +653,29 @@ CodeReference Workspace::code_references(std::wstring_view source)
     }
     const auto weak = weak_from_this();
     return [this, current, base_class, weak, classes = std::move(classes)](std::wstring_view receiver, std::wstring_view name,
-        bool constructor) -> std::function<void()>
+        CodeReferenceKind kind) -> std::function<void()>
     {
+        const auto open = [&](std::size_t index, std::optional<unsigned> method = {})
+        {
+            const auto& script = script_entries_[index];
+            return [weak, destination = ScriptTarget{script.tag, script.type, script.qualified, method, {}, View::source}]
+            {
+                if (const auto live = weak.lock(); live && !live->closed_ && !live->busy_)
+                    live->open_script_target(destination);
+            };
+        };
+        if (kind == CodeReferenceKind::type)
+        {
+            constexpr std::wstring_view primitives[]{L"int", L"uint", L"Number", L"String", L"Boolean",
+                L"Object", L"void", L"float", L"float4"};
+            if (std::ranges::find(primitives, name) != std::end(primitives))
+                return {};
+            const auto type = classes.find(name);
+            if (type == classes.end() || !type->second)
+                return {};
+            return open(*type->second);
+        }
+        const bool constructor = kind == CodeReferenceKind::constructor;
         const bool local = receiver.empty() || receiver == L"this";
         auto target = current;
         if (constructor || !local)
@@ -657,9 +691,9 @@ CodeReference Workspace::code_references(std::wstring_view source)
                 const auto owner = constructor ? (receiver.empty() ? std::wstring(name) : std::wstring(receiver) + L'.' + std::wstring(name)) :
                     std::wstring(receiver);
                 const auto found = classes.find(owner);
-                if (found == classes.end())
+                if (found == classes.end() || !found->second)
                     return {};
-                target = found->second;
+                target = *found->second;
             }
         }
         const auto locate = [&](std::size_t index) -> std::optional<unsigned>
@@ -685,17 +719,14 @@ CodeReference Workspace::code_references(std::wstring_view source)
         }
         if (!method && !constructor)
             return {};
-        const auto& script = script_entries_[target];
-        return [weak, destination = ScriptTarget{script.tag, script.type, {}, method, {}, View::source}]
-        {
-            if (const auto live = weak.lock(); live && !live->closed_)
-                live->open_script_target(destination);
-        };
+        return open(target, method);
     };
 }
 
 void Workspace::open_script_target(ScriptTarget target)
 {
+    if (source_session_)
+        return;
     if (mode_ != Mode::scripts)
         switch_mode(Mode::scripts);
     pending_script_target_ = std::move(target);

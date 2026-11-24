@@ -104,7 +104,7 @@ void Workspace::build_frame_player()
     place(frame_bar_, transport, 1);
     frame_bar_.Visibility(Visibility::Collapsed);
     row(inspector_);
-    place(inspector_, frame_bar_, 4);
+    place(inspector_, frame_bar_, 5);
 
     frame_timer_ = DispatcherTimer();
     frame_timer_.Tick([this](auto&&, auto&&) { tick_frames(); });
