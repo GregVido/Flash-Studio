@@ -125,7 +125,7 @@ void Workspace::open_frame_player()
             audio_.Visibility(Visibility::Collapsed);
         }
         output_.Visibility(Visibility::Collapsed);
-        code_view_.Visibility(Visibility::Collapsed);
+        hide_code();
         preview_error_.Visibility(Visibility::Collapsed);
         image_.Source(nullptr);
         picture_view_.Visibility(Visibility::Collapsed);

@@ -9,6 +9,7 @@ Flash Studio is a Windows workbench for inspecting, editing and exporting SWF fi
 ## Explore and edit
 
 - Browse the resources, tags, frames and nested ActionScript packages of multiple SWFs in separate tabs. Search source, P-code, text, ABC constants and tag names across a document.
+- Use **Open folder** (`Ctrl+Shift+O`) to index the SWFs in a directory and its subdirectories. The workspace lists relative paths and opens each SWF when selected. In code, `Ctrl+click` a quoted SWF path to open the matching local file in a tab. Press `F1` to see the keyboard shortcuts.
 - Read syntax-highlighted ActionScript or inspect AVM1 and AVM2 instructions and raw tag data. In decompiled source, `Ctrl+click` a resolved type to open its class in a tab. Pin classes to keep them on the left of the script tab strip. SWF tabs sit in the title bar.
 - If Flash Studio recognizes obfuscated ActionScript, it offers to clean up the SWF when it opens. Use **Deobfuscate…** in the script toolbar for a selected class or ABC block, or **Edit ABC → Deobfuscate SWF…** for the whole document. The result opens in a new tab as a separate SWF.
 - After cleanup, choose **Simplify strings** to replace calls to recognized string decoders with their literal results. Flash Studio evaluates the supported calculations without running the SWF.

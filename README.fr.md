@@ -9,6 +9,7 @@ Flash Studio est un atelier Windows pour inspecter, modifier et exporter des fic
 ## Explorer et modifier
 
 - Parcourez les ressources, les tags, les images de la timeline et les packages ActionScript imbriqués de plusieurs SWF dans des onglets distincts. La recherche couvre le source, le P-code, les textes, les constantes ABC et les noms de tags.
+- Utilisez **Ouvrir un dossier** (`Ctrl+Maj+O`) pour indexer les SWF d’un dossier et de ses sous-dossiers. L’espace de travail liste leurs chemins relatifs et les ouvre à la sélection. Dans le code, un `Ctrl+clic` sur un chemin SWF entre guillemets ouvre le fichier local correspondant dans un onglet. Appuyez sur `F1` pour consulter les raccourcis.
 - Lisez l’ActionScript coloré ou examinez les instructions AVM1 et AVM2 et les données brutes des tags. Dans le source décompilé, un `Ctrl+clic` sur un type résolu ouvre sa classe dans un onglet. Épinglez les classes à garder à gauche de la barre de scripts. Les onglets SWF occupent la barre de titre.
 - Si Flash Studio reconnaît de l’ActionScript obfusqué, il propose de nettoyer le SWF à l’ouverture. Utilisez **Désobfusquer…** dans la barre des scripts pour une classe ou un bloc ABC, ou **Modifier ABC → Désobfusquer le SWF…** pour le fichier entier. Le résultat s’ouvre dans un nouvel onglet sous forme de copie.
 - Après le nettoyage, choisissez **Simplifier les chaînes** pour remplacer les appels aux décodeurs reconnus par leurs résultats littéraux. Flash Studio évalue les calculs pris en charge sans lancer le SWF.

@@ -1,9 +1,10 @@
 import {
-    basicSetup, EditorView, EditorState, Compartment, Prec, keymap,
+    basicSetup, EditorView, EditorState, Compartment, Prec, keymap, StreamLanguage,
     syntaxHighlighting, autocompletion, completionStatus, lintGutter, setDiagnostics
 } from "./vendor/codemirror.js";
 import { language, colors, makeCatalog, suggest } from "./as3-language.js";
 import platformSymbols from "./platform-symbols.js";
+import { codeLink } from "./code-navigation.js";
 
 const bridge = window.chrome.webview;
 const parent = document.querySelector("#editor");
@@ -31,6 +32,7 @@ const theme = EditorView.theme({
     ".cm-scroller": { fontFamily: "Consolas, monospace", fontSize: "13px", lineHeight: "20px" },
     ".cm-content": { padding: "11px 0 20px", caretColor: "#ffba72" },
     ".cm-line": { padding: "0 14px", minHeight: "20px" },
+    ".cm-content[data-navigation]": { cursor: "pointer" },
     ".cm-gutters": { backgroundColor: "#121418", color: "#b0bac9", borderRight: "1px solid #323842" },
     ".cm-lineNumbers .cm-gutterElement": { padding: "0 9px 0 5px", minWidth: "30px" },
     ".cm-gutter-lint:not(:has(.cm-lint-marker))": { display: "none" },
@@ -57,6 +59,98 @@ function send(action, data = {}) {
 function save() {
     if (session?.dirty && !session.locked) send("save", { source: session.view.state.doc.toString() });
     return true;
+}
+
+const assembly = StreamLanguage.define({
+    startState: () => ({ command: true }),
+    token(stream, state) {
+        if (stream.sol()) state.command = true;
+        if (stream.eatSpace()) return null;
+        if (stream.match(/^;.*/)) return "lineComment";
+        if (stream.match(/^L[0-9a-f]+:?/i)) return "typeName";
+        if (stream.match(/^"(?:[^"\\]|\\.)*"/)) return "string";
+        if (stream.match(/^-?(?:0x[0-9a-f]+|\d+)/i)) return "number";
+        if (state.command && stream.match(/^\.?[A-Za-z_][\w_]*/)) {
+            state.command = false;
+            return "keyword";
+        }
+        stream.next();
+        return null;
+    }
+});
+
+const workspaceKeys = [
+    ["Mod-o", "open"], ["Mod-Shift-o", "folder"], ["Mod-Shift-e", "workspace"],
+    ["Mod-w", "close"], ["Ctrl-Tab", "next"], ["Ctrl-Shift-Tab", "previous"],
+    ["Mod-1", "resources"], ["Mod-2", "scripts"], ["Mod-3", "tags"],
+    ["Mod-Shift-f", "search"], ["Mod-Shift-s", "save"], ["F1", "about"]
+].map(([key, name]) => ({ key, run() { send("shortcut", { name }); return true; } }));
+
+function jump(view, line) {
+    const start = view.state.doc.line(Math.min(Math.max(line, 1), view.state.doc.lines)).from;
+    view.dispatch({ selection: { anchor: start }, effects: EditorView.scrollIntoView(start, { y: "start" }) });
+}
+
+function openPreview(message) {
+    session?.view.destroy();
+    const french = message.locale === "fr";
+    document.documentElement.lang = french ? "fr" : "en";
+    document.title = french ? "Code ActionScript" : "ActionScript code";
+    const catalog = makeCatalog(message.classes, platformSymbols);
+    const navigate = (editor, position, control) => {
+        const line = editor.state.doc.lineAt(position);
+        const link = codeLink(line.text, position - line.from, control, message.instructions);
+        if (!link) return false;
+        const { action, ...data } = link;
+        send(action, data);
+        return true;
+    };
+    const view = new EditorView({
+        parent,
+        doc: message.source,
+        extensions: [
+            theme, basicSetup, message.instructions ? assembly : language(catalog), syntaxHighlighting(colors),
+            EditorState.readOnly.of(true),
+            EditorState.phrases.of(french ? frenchPhrases : {}),
+            EditorView.contentAttributes.of({ tabindex: "0", "aria-label": document.title }),
+            Prec.highest(keymap.of([
+                ...workspaceKeys,
+                { key: "Mod-Enter", run: editor => navigate(editor, editor.state.selection.main.from, true) }
+            ])),
+            EditorView.domEventHandlers({
+                click(event, editor) {
+                    if (event.button !== 0 || !editor.state.selection.main.empty) return false;
+                    const position = editor.posAtCoords({ x: event.clientX, y: event.clientY });
+                    return position !== null && navigate(editor, position, event.ctrlKey) && event.ctrlKey;
+                },
+                mousemove(event, editor) {
+                    editor.contentDOM.toggleAttribute("data-navigation", event.ctrlKey);
+                    return false;
+                },
+                mouseleave(_, editor) {
+                    editor.contentDOM.removeAttribute("data-navigation");
+                    return false;
+                }
+            })
+        ]
+    });
+    session = { id: message.id, view, preview: true };
+    let visible = message.line;
+    let scheduled = false;
+    view.scrollDOM.addEventListener("scroll", () => {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+            scheduled = false;
+            if (session?.view !== view) return;
+            const top = Math.max(0, view.scrollDOM.scrollTop - view.documentPadding.top);
+            const line = view.state.doc.lineAt(view.lineBlockAtHeight(top).from).number;
+            if (line === visible) return;
+            visible = line;
+            send("scroll", { line });
+        });
+    }, { passive: true });
+    jump(view, message.line);
 }
 
 function replaceSession(message) {
@@ -98,8 +192,7 @@ function replaceSession(message) {
     });
     const view = new EditorView({ state, parent });
     session = { id: message.id, view, original: state.doc, newClass: message.newClass, dirty: message.newClass, locked: false, failed: false };
-    const start = view.state.doc.line(Math.min(Math.max(message.line, 1), view.state.doc.lines)).from;
-    view.dispatch({ selection: { anchor: start }, effects: EditorView.scrollIntoView(start, { y: "start" }) });
+    jump(view, message.line);
     view.focus();
 }
 
@@ -123,9 +216,12 @@ function setState(message) {
 bridge.addEventListener("message", ({ data }) => {
     if (data.action === "open") {
         replaceSession(data);
+    } else if (data.action === "preview") {
+        openPreview(data);
     } else if (session && session.id === data.id) {
         if (data.action === "save") save();
         if (data.action === "state") setState(data);
+        if (data.action === "goto" && session.preview) jump(session.view, data.line);
         if (data.action === "close") {
             session.view.destroy();
             session = undefined;

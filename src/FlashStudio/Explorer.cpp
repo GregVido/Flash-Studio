@@ -430,8 +430,15 @@ fire_and_forget Workspace::index_scripts()
             return std::tie(left.package, left.name, left.tag) < std::tie(right.package, right.name, right.tag);
         });
         co_await ui;
-        if (closed_ || movie != movie_)
+        if (closed_)
             co_return;
+        if (movie != movie_)
+        {
+            const auto document = std::ranges::find(documents_, movie, &OpenDocument::movie);
+            if (document != documents_.end())
+                document->catalog = ScriptCatalog{std::move(entries), errors};
+            co_return;
+        }
         script_entries_ = std::move(entries);
         script_errors_ = errors;
         scripts_loading_ = false;
@@ -598,17 +605,9 @@ void Workspace::select_script(std::size_t index, std::optional<unsigned> method,
 void Workspace::jump_to_member()
 {
     const auto index = members_.SelectedIndex();
-    if (index < 0 || static_cast<std::size_t>(index) >= member_lines_.size() || !code_view_.IsLoaded())
+    if (index < 0 || static_cast<std::size_t>(index) >= member_lines_.size())
         return;
     jump_to_code_line(member_lines_[index]);
-}
-
-void Workspace::jump_to_code_line(std::size_t line)
-{
-    if (!line || code_view_.Visibility() != Visibility::Visible)
-        return;
-    code_view_.UpdateLayout();
-    code_view_.ChangeView(0.0, static_cast<double>(line - 1) * code_.LineHeight(), nullptr, true);
 }
 
 CodeReference Workspace::code_references(std::wstring_view source)

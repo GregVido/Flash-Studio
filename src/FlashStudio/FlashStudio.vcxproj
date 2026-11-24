@@ -50,7 +50,8 @@
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Workspace.cpp" />
-    <ClCompile Include="CodeColors.cpp" />
+    <ClCompile Include="FolderWorkspace.cpp" />
+    <ClCompile Include="Shortcuts.cpp" />
     <ClCompile Include="Explorer.cpp" />
     <ClCompile Include="Documents.cpp" />
     <ClCompile Include="FramePlayer.cpp" />
@@ -59,7 +60,6 @@
     <ClCompile Include="ScriptTabs.cpp" />
     <ClCompile Include="UiLanguage.cpp" />
     <ClInclude Include="Workspace.hpp" />
-    <ClInclude Include="CodeColors.hpp" />
     <ClInclude Include="UiStyle.hpp" />
     <ClInclude Include="UiLanguage.hpp" />
     <ClInclude Include="UiTranslations.inc" />

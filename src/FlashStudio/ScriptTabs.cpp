@@ -72,8 +72,8 @@ void Workspace::remember_script_tab()
     {
         tab->script.method = abc_method_;
         tab->view = view_;
-        if (code_view_.Visibility() == Visibility::Visible)
-            tab->line = 1 + static_cast<std::size_t>(code_view_.VerticalOffset() / code_.LineHeight());
+        if (code_visible_)
+            tab->line = code_line_;
     }
 }
 

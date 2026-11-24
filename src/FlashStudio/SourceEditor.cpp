@@ -33,7 +33,7 @@ std::filesystem::path editor_assets()
     if (!length || length >= path.size())
         throw std::runtime_error("Le dossier de Flash Studio est introuvable.");
     const auto assets = std::filesystem::path(path.data()).parent_path() / L"Editor";
-    for (const auto file : {L"index.html", L"editor.js", L"as3-language.js", L"platform-symbols.js", L"vendor/codemirror.js"})
+    for (const auto file : {L"index.html", L"editor.js", L"as3-language.js", L"code-navigation.js", L"platform-symbols.js", L"vendor/codemirror.js"})
         if (!std::filesystem::is_regular_file(assets / file))
             throw std::runtime_error("Les ressources de l’éditeur AS3 sont introuvables.");
     return assets;
@@ -109,6 +109,8 @@ void Workspace::build_source_editor(const Grid& preview)
     buttons.Children().Append(source_save_);
     buttons.Children().Append(source_cancel_);
     place(actions, buttons, 0, 1);
+    source_actions_ = actions;
+    source_actions_.Visibility(Visibility::Collapsed);
     place(source_editor_, actions, 2);
     preview.Children().Append(source_editor_);
 }
@@ -137,16 +139,19 @@ void Workspace::set_source_editing(bool editing)
     toggle_outline_.IsEnabled(!editing);
     source_cancel_.IsEnabled(true);
     source_save_.IsEnabled(false);
-    source_editor_.Visibility(editing ? Visibility::Visible : Visibility::Collapsed);
+    source_actions_.Visibility(editing ? Visibility::Visible : Visibility::Collapsed);
     if (editing)
     {
         ++preview_version_;
-        code_view_.Visibility(Visibility::Collapsed);
+        hide_code();
+        source_editor_.Visibility(Visibility::Visible);
         output_.Visibility(Visibility::Collapsed);
         preview_error_.Visibility(Visibility::Collapsed);
         progress_.Visibility(Visibility::Collapsed);
         progress_.IsActive(false);
     }
+    else
+        source_editor_.Visibility(Visibility::Collapsed);
     update_abc_visibility();
     if (editing)
     {
@@ -194,6 +199,105 @@ void Workspace::open_editor_source()
     source_web_.Focus(FocusState::Programmatic);
     source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
     set_editor_state(editor_hint());
+}
+
+void Workspace::show_code(std::string_view code, bool instructions)
+{
+    code_text_ = widen(code);
+    code_id_ = std::to_wstring(++source_revision_);
+    code_line_ = 1;
+    code_visible_ = true;
+    code_instructions_ = instructions;
+    preview_reference_ = instructions ? CodeReference{} : code_references(code_text_);
+    if (code_unavailable_)
+    {
+        output_.Text(code_text_);
+        return;
+    }
+    output_.Visibility(Visibility::Collapsed);
+    source_editor_.Visibility(Visibility::Visible);
+    if (source_ready_)
+        open_code_preview();
+    else
+        initialize_code_view();
+}
+
+void Workspace::open_code_preview()
+{
+    if (!code_visible_ || !source_ready_)
+        return;
+    JsonObject message;
+    put(message, L"action", L"preview");
+    put(message, L"id", code_id_);
+    put(message, L"source", code_text_);
+    put(message, L"locale", language() == Language::french ? L"fr" : L"en");
+    message.SetNamedValue(L"instructions", JsonValue::CreateBooleanValue(code_instructions_));
+    message.SetNamedValue(L"line", JsonValue::CreateNumberValue(static_cast<double>(code_line_)));
+    JsonObject classes;
+    if (!code_instructions_)
+        for (const auto& entry : script_entries_)
+            if (entry.type)
+                classes.SetNamedValue(hstring(entry.qualified), JsonValue::CreateNullValue());
+    message.SetNamedValue(L"classes", classes);
+    source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
+}
+
+void Workspace::hide_code()
+{
+    if (!code_visible_)
+        return;
+    code_visible_ = false;
+    preview_reference_ = {};
+    code_text_.clear();
+    source_editor_.Visibility(Visibility::Collapsed);
+    if (source_ready_)
+    {
+        JsonObject message;
+        put(message, L"action", L"close");
+        put(message, L"id", code_id_);
+        source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
+    }
+}
+
+void Workspace::jump_to_code_line(std::size_t line)
+{
+    if (!code_visible_ || !line)
+        return;
+    code_line_ = line;
+    if (source_ready_)
+    {
+        JsonObject message;
+        put(message, L"action", L"goto");
+        put(message, L"id", code_id_);
+        message.SetNamedValue(L"line", JsonValue::CreateNumberValue(static_cast<double>(line)));
+        source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
+    }
+}
+
+void Workspace::code_preview_message(std::wstring_view action, const JsonObject& message)
+{
+    if (action == L"scroll")
+    {
+        const auto line = message.GetNamedNumber(L"line", 1);
+        if (line >= 1 && line <= code_text_.size() + 1)
+            code_line_ = static_cast<std::size_t>(line);
+    }
+    else if (action == L"shortcut")
+        run_shortcut(message.GetNamedString(L"name", L""));
+    else if (action == L"file" && !busy_)
+        follow_swf_reference(message.GetNamedString(L"path", L""));
+    else if (action == L"reference" && !busy_ && preview_reference_)
+    {
+        const auto kind = message.GetNamedString(L"kind", L"");
+        const auto name = message.GetNamedString(L"name", L"");
+        const auto receiver = message.GetNamedString(L"receiver", L"");
+        if (name.empty() || name.size() > 512 || receiver.size() > 512)
+            return;
+        auto navigate = preview_reference_(receiver, name, kind == L"type" ? CodeReferenceKind::type :
+            kind == L"constructor" ? CodeReferenceKind::constructor : CodeReferenceKind::call);
+        if (navigate)
+            navigate();
+    }
 }
 
 void Workspace::post_editor_action(std::wstring_view action)
@@ -313,7 +417,7 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
     const auto movie = movie_;
     const auto original = file_;
     const auto previous_view = view_;
-    const auto line = script.type && view_ == View::source ? 1 + static_cast<std::size_t>(code_view_.VerticalOffset() / code_.LineHeight()) : 1;
+    const auto line = script.type && view_ == View::source ? code_line_ : 1;
     source_preparing_ = true;
     struct Preparing { bool& busy; ~Preparing() { busy = false; } } preparing{source_preparing_};
     const apartment_context ui_thread;
@@ -357,11 +461,39 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         set_editor_state(tr(L"Chargement de l’éditeur…"));
         status(tr(L"Édition de ") + script.qualified);
         if (source_ready_)
-        {
             open_editor_source();
-            co_return;
+        else
+        {
+            code_unavailable_ = false;
+            initialize_code_view();
         }
+    }
+    catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
+    catch (const std::exception& error) { if (!closed_) status(widen(error.what()), true); }
+}
 
+fire_and_forget Workspace::initialize_code_view()
+{
+    if (code_initializing_ || source_ready_ || closed_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    code_initializing_ = true;
+    auto failed = [this](std::wstring_view message)
+    {
+        if (closed_)
+            return;
+        code_unavailable_ = true;
+        if (source_session_)
+            set_editor_state(message, true);
+        else if (code_visible_)
+        {
+            source_editor_.Visibility(Visibility::Collapsed);
+            output_.Text(code_text_);
+            output_.Visibility(Visibility::Visible);
+        }
+    };
+    try
+    {
         const auto assets = editor_assets();
         if (source_web_)
         {
@@ -376,7 +508,7 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         Automation::AutomationProperties::SetName(source_web_, tr(L"Éditeur ActionScript 3"));
         place(source_editor_, source_web_, 0);
         co_await source_web_.EnsureCoreWebView2Async();
-        if (closed_ || !source_session_)
+        if (closed_)
             co_return;
         const auto web = source_web_.CoreWebView2();
         web.SetVirtualHostNameToFolderMapping(hstring(editor_host), assets.wstring(), CoreWebView2HostResourceAccessKind::Deny);
@@ -390,10 +522,13 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         });
         web.NewWindowRequested([](auto&&, const CoreWebView2NewWindowRequestedEventArgs& event) { event.Handled(true); });
         const auto weak = weak_from_this();
-        web.NavigationCompleted([weak](auto&&, const CoreWebView2NavigationCompletedEventArgs& event)
+        web.NavigationCompleted([weak, failed](auto&&, const CoreWebView2NavigationCompletedEventArgs& event)
         {
             if (const auto self = weak.lock(); self && !self->closed_ && !event.IsSuccess())
-                self->set_editor_state(tr(L"Impossible de charger les ressources de l’éditeur."), true);
+            {
+                self->code_initializing_ = false;
+                failed(tr(L"Impossible de charger les ressources de l’éditeur."));
+            }
         });
         web.WebMessageReceived([weak](auto&&, const CoreWebView2WebMessageReceivedEventArgs& event)
         {
@@ -406,8 +541,12 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
                 const auto action = message.GetNamedString(L"action", L"");
                 if (action == L"ready")
                 {
+                    self->code_initializing_ = false;
                     self->source_ready_ = true;
-                    self->open_editor_source();
+                    if (self->source_session_)
+                        self->open_editor_source();
+                    else
+                        self->open_code_preview();
                 }
                 else if (self->source_session_ && message.GetNamedString(L"id", L"") == self->source_session_->id)
                 {
@@ -423,24 +562,15 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
                     else if (action == L"cancel")
                         self->end_source_edit();
                 }
+                else if (self->code_visible_ && !self->source_session_ && message.GetNamedString(L"id", L"") == self->code_id_)
+                    self->code_preview_message(action, message);
             }
             catch (const hresult_error& error) { self->status(error.message(), true); }
         });
         web.Navigate(hstring(editor_url));
     }
-    catch (const hresult_error& error)
-    {
-        if (!closed_ && source_session_)
-            set_editor_state(error.message(), true);
-    }
-    catch (const std::exception& error)
-    {
-        if (!closed_)
-        {
-            if (source_session_) set_editor_state(widen(error.what()), true);
-            else status(widen(error.what()), true);
-        }
-    }
+    catch (const hresult_error& error) { code_initializing_ = false; failed(error.message()); }
+    catch (const std::exception& error) { code_initializing_ = false; failed(widen(error.what())); }
 }
 
 fire_and_forget Workspace::save_class(std::string source)

@@ -1,13 +1,12 @@
 #pragma once
 
-#include "CodeColors.hpp"
-
 #include "../FlashCore/Swf.hpp"
 #include "../FlashCore/Abc.hpp"
 #include "../FlashCore/Search.hpp"
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Media.Core.h>
 #include <winrt/Windows.Media.Playback.h>
@@ -25,6 +24,7 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 
@@ -34,6 +34,8 @@ enum class View { details, source, instructions, hex, frame };
 enum class Mode { resources, scripts, tags };
 enum class Export { asset, raw, source, instructions, pcode, graph };
 enum class AbcEdit { method, simplify, pool_string, import };
+enum class CodeReferenceKind { call, constructor, type };
+using CodeReference = std::function<std::function<void()>(std::wstring_view, std::wstring_view, CodeReferenceKind)>;
 
 class Workspace : public std::enable_shared_from_this<Workspace>
 {
@@ -79,6 +81,11 @@ private:
         std::vector<std::size_t> entries;
         bool contains_selection = false;
     };
+    struct ScriptCatalog
+    {
+        std::vector<ScriptEntry> entries;
+        std::size_t errors{};
+    };
     struct OpenDocument
     {
         std::filesystem::path path;
@@ -91,6 +98,7 @@ private:
         std::optional<ScriptSelection> script;
         std::wstring filter;
         std::vector<ScriptTab> script_tabs;
+        std::optional<ScriptCatalog> catalog;
     };
     struct FramePlayback;
     struct ScriptTarget
@@ -128,6 +136,15 @@ private:
     winrt::fire_and_forget index_scripts();
     winrt::fire_and_forget load_thumbnails(std::vector<std::pair<std::size_t, winrt::Microsoft::UI::Xaml::Controls::Image>> tiles);
     void open_dialog();
+    void open_folder_dialog();
+    void build_folder_panel(const winrt::Microsoft::UI::Xaml::Controls::Grid& main);
+    void toggle_folder_panel();
+    void filter_folder();
+    void follow_swf_reference(std::wstring_view reference);
+    winrt::Windows::Foundation::IAsyncAction open_folder(std::filesystem::path path);
+    void register_shortcuts();
+    bool run_shortcut(std::wstring_view action);
+    winrt::fire_and_forget show_about();
     void build_documents();
     void build_script_tabs();
     void refresh_script_tabs();
@@ -161,6 +178,10 @@ private:
     void configure_abc(std::shared_ptr<const flash::AbcModule> module, unsigned method);
     void show_abc_methods(std::size_t group, std::optional<unsigned> selected);
     void show_code(std::string_view code, bool instructions);
+    void hide_code();
+    void open_code_preview();
+    void code_preview_message(std::wstring_view action, const winrt::Windows::Data::Json::JsonObject& message);
+    winrt::fire_and_forget initialize_code_view();
     void update_abc_visibility();
     void preview_problem(std::uint64_t version, std::wstring_view message);
     void status(std::wstring_view message, bool error = false);
@@ -199,10 +220,8 @@ private:
         status_{nullptr}, status_icon_{nullptr}, list_count_{nullptr}, detail_title_{nullptr},
         detail_meta_{nullptr}, empty_list_{nullptr}, preview_error_{nullptr}, page_label_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox search_{nullptr}, output_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TextBlock line_numbers_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::RichTextBlock code_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::ScrollViewer code_view_{nullptr}, picture_view_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Grid source_editor_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ScrollViewer picture_view_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Grid source_editor_{nullptr}, source_actions_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::WebView2 source_web_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button source_create_{nullptr}, source_edit_{nullptr}, source_save_{nullptr},
         source_cancel_{nullptr}, script_pin_{nullptr};
@@ -222,6 +241,13 @@ private:
         previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr}, deobfuscate_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton export_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton recent_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::SplitView folder_pane_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button folder_button_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBox folder_search_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ListView folder_list_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock folder_title_{nullptr}, folder_count_{nullptr};
+    struct FolderIndex;
+    std::shared_ptr<const FolderIndex> folder_;
     winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr}, script_tabs_bar_{nullptr};
     std::vector<OpenDocument> documents_;
     std::optional<std::size_t> active_document_;
@@ -280,6 +306,10 @@ private:
     std::filesystem::path class_compiler_;
     std::shared_ptr<SourceEdit> source_session_;
     std::uint64_t source_revision_ = 0;
-    bool source_preparing_ = false, source_ready_ = false;
+    bool source_preparing_ = false, source_ready_ = false, code_initializing_ = false, code_unavailable_ = false;
+    bool code_visible_ = false, code_instructions_ = false;
+    std::wstring code_text_, code_id_;
+    std::size_t code_line_ = 1;
+    CodeReference preview_reference_;
 };
 }

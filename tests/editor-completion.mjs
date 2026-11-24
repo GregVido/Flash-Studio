@@ -2,6 +2,17 @@ import assert from "node:assert/strict";
 import { EditorState } from "../src/FlashStudio/Editor/vendor/codemirror.js";
 import { language, makeCatalog, suggest } from "../src/FlashStudio/Editor/as3-language.js";
 import platformSymbols from "../src/FlashStudio/Editor/platform-symbols.js";
+import { codeLink } from "../src/FlashStudio/Editor/code-navigation.js";
+
+const reference = 'var target:String = "../data/external.swf?rev=42";';
+const target = reference.indexOf("external");
+assert.deepEqual(codeLink(reference, target, true), { action: "file", path: "../data/external.swf?rev=42" });
+assert.equal(codeLink(reference, target, false), undefined);
+assert.equal(codeLink("// " + reference, target + 3, true), undefined);
+assert.deepEqual(codeLink("Client.send(message);", 8, false),
+    { action: "reference", kind: "call", receiver: "Client", name: "send" });
+assert.deepEqual(codeLink("var conn:net.Client;", 15, true),
+    { action: "reference", kind: "type", name: "net.Client" });
 
 const catalog = makeCatalog({
     "demo.Probe": [{ label: "sample", detail: "public function sample():void", type: "method", isPublic: true }],

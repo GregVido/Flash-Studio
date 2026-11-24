@@ -163,6 +163,8 @@ void Workspace::activate_document(std::size_t index)
         previous.script.reset();
         if (selected_script_ && script_entries_[*selected_script_].type)
             previous.script = ScriptSelection{*selected_, script_entries_[*selected_script_].qualified, abc_method_};
+        if (scripts_indexed_)
+            previous.catalog = ScriptCatalog{std::move(script_entries_), script_errors_};
     }
 
     auto& next = documents_[index];
@@ -226,6 +228,7 @@ void Workspace::close_document(std::size_t index)
         return;
     }
     ++preview_version_;
+    hide_code();
     close_frame_player();
     movie_.reset();
     indexed_rows_.clear();

@@ -1,5 +1,4 @@
 #include "Workspace.hpp"
-#include "CodeColors.hpp"
 #include "UiStyle.hpp"
 #include "ResourceIds.h"
 
@@ -97,7 +96,7 @@ std::optional<std::filesystem::path> dialog(const Window& window, bool save, std
         {tr(L"Image JPEG"), L"*.jpg"}, {tr(L"Image TIFF"), L"*.tiff"}
     };
     if (folder)
-        check_hresult(picker->SetTitle(tr(L"Choisir le dossier d’export")));
+        check_hresult(picker->SetTitle(tr(save ? L"Choisir le dossier d’export" : L"Ouvrir un dossier de SWF")));
     else if (raster)
         check_hresult(picker->SetFileTypes(vector ? 5 : 4, image_types + (vector ? 0 : 1)));
     else if (format)
@@ -171,7 +170,13 @@ void Workspace::start(const std::filesystem::path& initial_file, std::optional<s
     app_window.Resize({1320, 830});
     window_.Activate();
     if (!initial_file.empty())
-        open_file(initial_file, initial_tag);
+    {
+        std::error_code error;
+        if (std::filesystem::is_directory(initial_file, error))
+            open_folder(initial_file);
+        else
+            open_file(initial_file, initial_tag);
+    }
 }
 
 void Workspace::build()
@@ -250,6 +255,13 @@ void Workspace::build()
     save_.Click([this](auto&&, auto&&) { save_movie(); });
     save_.IsEnabled(false);
     actions.Children().Append(open_);
+    folder_button_ = Button();
+    folder_button_.Content(glyph(L'\uE8B7', 16));
+    folder_button_.Padding(pad(10, 8, 10, 8));
+    Automation::AutomationProperties::SetName(folder_button_, tr(L"Espace de travail"));
+    ToolTipService::SetToolTip(folder_button_, box_value(tr(L"Espace de travail (Ctrl+Maj+E)")));
+    folder_button_.Click([this](auto&&, auto&&) { toggle_folder_panel(); });
+    actions.Children().Append(folder_button_);
     actions.Children().Append(recent_);
     actions.Children().Append(save_);
     global_search_ = Button();
@@ -286,6 +298,13 @@ void Workspace::build()
     }
     language_menu.Flyout(languages);
     actions.Children().Append(language_menu);
+    Button help;
+    help.Content(glyph(L'\uE946', 16));
+    help.Padding(pad(10, 8, 10, 8));
+    Automation::AutomationProperties::SetName(help, tr(L"À propos"));
+    ToolTipService::SetToolTip(help, box_value(tr(L"À propos (F1)")));
+    help.Click([this](auto&&, auto&&) { show_about(); });
+    actions.Children().Append(help);
     place(header, actions, 0, 2);
     place(root_, header, 1);
 
@@ -314,7 +333,9 @@ void Workspace::build()
     global_shortcut.Key(Windows::System::VirtualKey::F);
     global_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
     global_search_.KeyboardAccelerators().Append(global_shortcut);
+    register_shortcuts();
 
+    Grid main;
     workarea_ = Border();
     workarea_.BorderThickness(pad(0, 1, 0, 1));
     workarea_.BorderBrush(brush(stroke));
@@ -325,10 +346,12 @@ void Workspace::build()
     root_.SizeChanged([this, side_column](auto&&, const SizeChangedEventArgs& args)
     {
         side_column.Width({args.NewSize().Width < 975 ? 188.0 : 246.0, GridUnitType::Pixel});
+        if (folder_pane_)
+            folder_pane_.DisplayMode(args.NewSize().Width >= 1250 ? SplitViewDisplayMode::Inline : SplitViewDisplayMode::Overlay);
         update_layout();
     });
     workarea_.Child(content);
-    place(root_, workarea_, 2);
+    main.Children().Append(workarea_);
 
     Grid sidebar;
     sidebar.Background(brush(panel));
@@ -625,35 +648,6 @@ void Workspace::build()
     ScrollViewer::SetHorizontalScrollBarVisibility(output_, ScrollBarVisibility::Auto);
     ScrollViewer::SetVerticalScrollBarVisibility(output_, ScrollBarVisibility::Auto);
     Automation::AutomationProperties::SetName(output_, tr(L"Contenu du tag sélectionné"));
-    code_ = RichTextBlock();
-    code_.FontFamily(FontFamily(L"Consolas"));
-    code_.FontSize(13);
-    code_.Foreground(brush(primary));
-    code_.TextWrapping(TextWrapping::NoWrap);
-    code_.IsTextSelectionEnabled(true);
-    code_.LineHeight(20);
-    code_.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
-    code_.Padding(pad(14, 11, 14, 20));
-    Automation::AutomationProperties::SetName(code_, tr(L"Code de la méthode sélectionnée"));
-    Grid editor_grid;
-    column(editor_grid, 1, GridUnitType::Auto);
-    column(editor_grid, 1, GridUnitType::Star);
-    line_numbers_ = label(L"", 12, secondary);
-    line_numbers_.FontFamily(FontFamily(L"Consolas"));
-    line_numbers_.LineHeight(20);
-    line_numbers_.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
-    line_numbers_.TextAlignment(TextAlignment::Right);
-    line_numbers_.Padding(pad(12, 11, 9, 20));
-    Automation::AutomationProperties::SetAccessibilityView(line_numbers_, Automation::Peers::AccessibilityView::Raw);
-    place(editor_grid, line_numbers_, 0);
-    place(editor_grid, code_, 0, 1);
-    code_view_ = ScrollViewer();
-    code_view_.Margin(pad(12));
-    code_view_.Background(brush(base));
-    code_view_.HorizontalScrollBarVisibility(ScrollBarVisibility::Auto);
-    code_view_.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
-    code_view_.Content(editor_grid);
-    code_view_.Visibility(Visibility::Collapsed);
     progress_ = ProgressRing();
     progress_.Width(34);
     progress_.Height(34);
@@ -695,7 +689,6 @@ void Workspace::build()
     preview_error_.VerticalAlignment(VerticalAlignment::Center);
     preview_error_.Visibility(Visibility::Collapsed);
     preview.Children().Append(output_);
-    preview.Children().Append(code_view_);
     preview.Children().Append(picture_view_);
     preview.Children().Append(audio_);
     preview.Children().Append(preview_error_);
@@ -723,17 +716,24 @@ void Workspace::build()
     auto question = label(tr(L"Ouvrir une animation Flash"), 26, primary, true);
     question.HorizontalAlignment(HorizontalAlignment::Center);
     welcome.Children().Append(question);
-    auto instructions = label(tr(L"Glissez un fichier .swf dans cette fenêtre"), 14, secondary);
+    auto instructions = label(tr(L"Glissez un fichier SWF ou un dossier dans cette fenêtre"), 14, secondary);
     instructions.HorizontalAlignment(HorizontalAlignment::Center);
     welcome.Children().Append(instructions);
     Button choose;
     choose.Content(icon_label(L'\uE838', tr(L"Parcourir les fichiers")));
-    choose.HorizontalAlignment(HorizontalAlignment::Center);
-    choose.Margin(pad(0, 7, 0, 0));
     choose.Click([this](auto&&, auto&&) { open_dialog(); });
-    welcome.Children().Append(choose);
+    Button choose_folder;
+    choose_folder.Content(icon_label(L'\uE8B7', tr(L"Ouvrir un dossier")));
+    choose_folder.Click([this](auto&&, auto&&) { open_folder_dialog(); });
+    auto welcome_actions = horizontal(8);
+    welcome_actions.HorizontalAlignment(HorizontalAlignment::Center);
+    welcome_actions.Margin(pad(0, 7, 0, 0));
+    welcome_actions.Children().Append(choose);
+    welcome_actions.Children().Append(choose_folder);
+    welcome.Children().Append(welcome_actions);
     empty_.Child(welcome);
-    place(root_, empty_, 2);
+    main.Children().Append(empty_);
+    build_folder_panel(main);
     workarea_.Visibility(Visibility::Collapsed);
 
     auto footer = horizontal(8);
@@ -777,6 +777,18 @@ void Workspace::open_dialog()
     }
 }
 
+void Workspace::open_folder_dialog()
+{
+    if (busy_)
+        return;
+    try
+    {
+        if (const auto folder = dialog(window_, false, L"", {}, nullptr, true))
+            open_folder(*folder);
+    }
+    catch (const hresult_error& error) { status(error.message(), true); }
+}
+
 fire_and_forget Workspace::drop(DragEventArgs args)
 {
     auto lifetime = shared_from_this();
@@ -791,8 +803,10 @@ fire_and_forget Workspace::drop(DragEventArgs args)
             const auto file = item.try_as<StorageFile>();
             if (file)
                 co_await open_file(std::filesystem::path(file.Path().c_str()));
+            else if (const auto folder = item.try_as<StorageFolder>())
+                co_await open_folder(std::filesystem::path(folder.Path().c_str()));
             else
-                status(tr(L"Déposez un fichier SWF."), true);
+                status(tr(L"Déposez un fichier SWF ou un dossier."), true);
         }
     }
     catch (const hresult_error& error)
@@ -1051,6 +1065,17 @@ void Workspace::update_document()
     global_search_.IsEnabled(true);
     document_class_.Visibility(movie_->document_class() ? Visibility::Visible : Visibility::Collapsed);
     reset_explorer();
+    if (active_document_)
+    {
+        auto& catalog = documents_[*active_document_].catalog;
+        if (catalog)
+        {
+            script_entries_ = std::move(catalog->entries);
+            script_errors_ = catalog->errors;
+            scripts_indexed_ = true;
+            catalog.reset();
+        }
+    }
     {
         const UpdatingSelection updating(refreshing_);
         selected_.reset();
@@ -1258,54 +1283,6 @@ void Workspace::set_view(View view)
     show_selection();
 }
 
-void Workspace::show_code(std::string_view text, bool instructions)
-{
-    const auto code = widen(text);
-    if (code.size() > 150'000)
-    {
-        output_.Text(code);
-        return;
-    }
-    const auto lines = std::ranges::count(code, L'\n') + (code.empty() || code.back() != L'\n');
-    std::wstring numbers;
-    for (std::ptrdiff_t i = 1; i <= lines; ++i)
-    {
-        numbers += std::to_wstring(i);
-        numbers += L'\n';
-    }
-    line_numbers_.Text(numbers);
-    code_.Blocks().Clear();
-    std::set<std::wstring, std::less<>> known_types;
-    if (!instructions)
-    {
-        for (const auto& entry : script_entries_)
-            if (entry.type)
-                known_types.insert(entry.name);
-        std::wstring_view line = code;
-        while (!line.empty())
-        {
-            const auto end = line.find(L'\n');
-            const auto current = line.substr(0, end);
-            const auto first = current.find_first_not_of(L" \t");
-            if (first != std::wstring_view::npos && current.substr(first).starts_with(L"import "))
-            {
-                const auto target = current.substr(first + 7, current.find(L';', first) - first - 7);
-                const auto separator = target.rfind(L'.');
-                const auto name = target.substr(separator == std::wstring_view::npos ? 0 : separator + 1);
-                if (!name.empty() && name.front() >= L'A' && name.front() <= L'Z')
-                    known_types.emplace(name);
-            }
-            if (end == std::wstring_view::npos)
-                break;
-            line.remove_prefix(end + 1);
-        }
-    }
-    const auto is_type = [&](std::wstring_view identifier) { return known_types.contains(identifier); };
-    code_.Blocks().Append(color_code(code, instructions, instructions ? CodeReference{} : code_references(code), is_type));
-    code_view_.Visibility(Visibility::Visible);
-    output_.Visibility(Visibility::Collapsed);
-}
-
 void Workspace::update_abc_visibility()
 {
     const auto has_abc = movie_ && selected_ && is_abc(movie_->tags()[*selected_].code);
@@ -1401,7 +1378,7 @@ fire_and_forget Workspace::show_selection()
             audio_.Source(nullptr);
             audio_.Visibility(Visibility::Collapsed);
         }
-        code_view_.Visibility(Visibility::Collapsed);
+        hide_code();
         preview_error_.Visibility(Visibility::Collapsed);
         progress_.Visibility(Visibility::Collapsed);
         progress_.IsActive(false);
