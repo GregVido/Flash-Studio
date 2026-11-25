@@ -62,7 +62,6 @@ bool identifier(std::string_view name)
 struct Workspace::SourceEdit
 {
     std::shared_ptr<const flash::Movie> movie;
-    std::filesystem::path original;
     ScriptEntry script;
     std::string source;
     std::size_t line;
@@ -101,7 +100,7 @@ void Workspace::build_source_editor(const Grid& preview)
     place(actions, diagnostics, 0);
 
     source_save_ = Button();
-    source_save_.Content(box_value(tr(L"Enregistrer")));
+    source_save_.Content(box_value(tr(L"Appliquer")));
     source_save_.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());
     source_save_.IsEnabled(false);
     source_save_.Click([this](auto&&, auto&&) { post_editor_action(L"save"); });
@@ -122,7 +121,7 @@ void Workspace::build_source_editor(const Grid& preview)
 void Workspace::set_source_editing(bool editing)
 {
     busy_ = editing;
-    for (const auto& control : {open_, save_, global_search_, source_edit_, document_class_})
+    for (const auto& control : {open_, save_, save_as_, global_search_, source_edit_, document_class_})
         control.IsEnabled(!editing);
     for (const auto& tab : tabs_)
         tab.IsEnabled(!editing);
@@ -349,6 +348,9 @@ void Workspace::end_source_edit()
     status(tr(L"Source ActionScript affiché"));
 }
 
+bool Workspace::has_source_draft() const { return source_session_ && source_session_->dirty; }
+bool Workspace::source_save_in_progress() const { return source_session_ && source_session_->saving; }
+
 fire_and_forget Workspace::edit_class()
 {
     if (busy_ || source_preparing_ || !movie_ || !selected_script_)
@@ -419,7 +421,6 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         co_return;
     const auto lifetime = shared_from_this();
     const auto movie = movie_;
-    const auto original = file_;
     const auto previous_view = view_;
     const auto line = script.type && view_ == View::source ? code_line_ : 1;
     source_preparing_ = true;
@@ -454,7 +455,7 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         }
         if (script.type && view_ != View::source)
             set_view(View::source);
-        source_session_ = std::make_shared<SourceEdit>(SourceEdit{movie, original, script, std::move(source), line,
+        source_session_ = std::make_shared<SourceEdit>(SourceEdit{movie, script, std::move(source), line,
             std::to_wstring(++source_revision_), script.type ? View::source : previous_view, !script.type});
         set_source_editing(true);
         if (!script.type)
@@ -602,54 +603,27 @@ fire_and_forget Workspace::save_class(std::string source)
         const apartment_context ui_thread;
         co_await resume_background();
         std::shared_ptr<flash::Movie> edited;
+        std::vector<Row> rows;
         try
         {
             edited = std::make_shared<flash::Movie>(session->script.type ?
                 flash::compile_as3_class(*session->movie, session->script.tag, qualified, source, compiler, french) :
                 flash::add_as3_class(*session->movie, qualified, source, compiler, french));
+            rows = index_rows(*edited);
         }
         catch (const std::exception& error) { problem = widen(error.what()); }
         co_await ui_thread;
         if (closed_)
             co_return;
-        if (edited)
+        if (edited && problem.empty())
         {
-            const auto output = swf_copy_path(session->original, tr(L"-classe"));
-            if (!output)
-            {
-                session->saving = false;
-                set_editor_state(tr(L"Compilation réussie. Le brouillon est toujours ouvert."));
-                co_return;
-            }
-            set_editor_state(tr(L"Écriture du SWF recompilé…"));
-            co_await resume_background();
-            std::vector<Row> rows;
-            try
-            {
-                flash::Bytes compressed;
-                if (session->movie->header().compression == 'C')
-                {
-                    compressed = edited->compressed();
-                    edited = std::make_shared<flash::Movie>(flash::Movie::parse(compressed));
-                }
-                rows = index_rows(*edited);
-                flash::write_file(*output, compressed.empty() ? edited->uncompressed() : flash::ByteView(compressed));
-            }
-            catch (const std::exception& error) { problem = widen(error.what()); }
-            co_await ui_thread;
-            if (closed_)
-                co_return;
-            if (problem.empty())
-            {
-                session->saving = false;
-                end_source_edit();
-                remember_recent(*output);
-                add_document(*output, std::move(edited), std::move(rows), {});
-                open_script_target({session->script.type ? std::optional{session->script.tag} : std::nullopt,
-                    {}, session->script.qualified, {}, session->line, View::source});
-                status(tr(L"Classe recompilée dans ") + output->filename().wstring());
-                co_return;
-            }
+            session->saving = false;
+            end_source_edit();
+            apply_document_edit(session->movie, std::move(edited), std::move(rows), {}, !session->script.type);
+            open_script_target({session->script.type ? std::optional{session->script.tag} : std::nullopt,
+                {}, session->script.qualified, {}, session->line, View::source});
+            status(tr(L"Modifications appliquées au SWF"));
+            co_return;
         }
     }
     catch (const hresult_error& error) { problem = error.message(); }

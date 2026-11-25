@@ -38,6 +38,7 @@ const theme = EditorView.theme({
     ".cm-gutter-lint:not(:has(.cm-lint-marker))": { display: "none" },
     ".cm-scroller::-webkit-scrollbar": { width: "10px", height: "10px" },
     ".cm-scroller::-webkit-scrollbar-thumb": { backgroundColor: "#4e5967", border: "2px solid #121418", borderRadius: "6px" },
+    ".cm-scroller::-webkit-scrollbar:horizontal": { height: "12px" },
     ".cm-scroller::-webkit-scrollbar-corner": { backgroundColor: "#121418" },
     ".cm-activeLine": { backgroundColor: "#7394c012" },
     ".cm-activeLineGutter": { backgroundColor: "#1d242f" },
@@ -85,7 +86,7 @@ const workspaceKeys = [
     ["Mod-o", "open"], ["Mod-Shift-o", "folder"], ["Mod-Shift-e", "workspace"],
     ["Mod-w", "close"], ["Ctrl-Tab", "next"], ["Ctrl-Shift-Tab", "previous"],
     ["Mod-1", "resources"], ["Mod-2", "scripts"], ["Mod-3", "tags"],
-    ["Mod-Shift-f", "search"], ["Mod-Shift-s", "save"], ["F1", "about"]
+    ["Mod-Shift-f", "search"], ["Mod-s", "save"], ["Mod-Shift-s", "saveAs"], ["F1", "about"]
 ].map(([key, name]) => ({ key, run() { send("shortcut", { name }); return true; } }));
 
 function jump(view, line) {
@@ -112,7 +113,6 @@ function openPreview(message) {
         doc: message.source,
         extensions: [
             theme, basicSetup, message.instructions ? assembly : language(catalog), syntaxHighlighting(colors),
-            message.instructions ? [] : EditorView.lineWrapping,
             EditorState.readOnly.of(true),
             EditorState.phrases.of(french ? frenchPhrases : {}),
             EditorView.contentAttributes.of({ tabindex: "0", "aria-label": document.title }),
@@ -166,7 +166,7 @@ function replaceSession(message) {
     const state = EditorState.create({
         doc: message.source,
         extensions: [
-            theme, basicSetup, EditorView.lineWrapping, locking.of([]), language(catalog), syntaxHighlighting(colors),
+            theme, basicSetup, locking.of([]), language(catalog), syntaxHighlighting(colors),
             autocompletion({ override: [suggest(catalog, message.qualified)], maxRenderedOptions: 10 }),
             lintGutter(),
             EditorState.phrases.of(french ? frenchPhrases : {}),

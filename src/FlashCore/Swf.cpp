@@ -314,10 +314,11 @@ Movie Movie::replace_binary(std::size_t index, ByteView replacement) const
     return replace_tag(index, payload);
 }
 
-Movie Movie::replace_tag(std::size_t index, ByteView replacement) const
+Movie Movie::replace_tag(std::size_t index, ByteView replacement, std::optional<unsigned> new_code) const
 {
     const auto& target = tags_.at(index);
-    if (replacement.size() > max_file_size || target.code == 0)
+    if (replacement.size() > max_file_size || target.code == 0 ||
+        (new_code && (!*new_code || *new_code >= 1024 || *new_code == 39 || target.code == 39)))
         throw std::runtime_error("Le contenu de ce tag ne peut pas être remplacé.");
     std::vector<std::pair<std::size_t, std::size_t>> edits;
     std::size_t new_size = replacement.size();
@@ -341,7 +342,8 @@ Movie Movie::replace_tag(std::size_t index, ByteView replacement) const
     {
         const auto& tag = tags_[edit->first];
         append(updated, all.subspan(cursor, tag.header_offset - cursor));
-        put_tag_header(updated, tag.code, edit->second, tag.offset - tag.header_offset == 6);
+        const auto code = edit->first == index ? new_code.value_or(tag.code) : tag.code;
+        put_tag_header(updated, code, edit->second, tag.offset - tag.header_offset == 6);
         cursor = tag.offset;
     }
     append(updated, replacement);

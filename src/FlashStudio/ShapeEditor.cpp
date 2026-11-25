@@ -236,7 +236,7 @@ flash::ShapeDrawing decode_draft(const flash::Movie& movie, std::size_t index, c
 struct Workspace::ShapeEdit
 {
     std::shared_ptr<const flash::Movie> movie;
-    std::filesystem::path original;
+    TabViewItem document_tab{nullptr};
     std::size_t tag{};
     Window window{nullptr};
     WebView2 web{nullptr};
@@ -272,6 +272,12 @@ void Workspace::close_shape_editor()
     }
 }
 
+bool Workspace::has_shape_draft() const { return shape_session_ && shape_session_->dirty; }
+bool Workspace::shape_editor_for(std::size_t index) const
+{
+    return shape_session_ && shape_session_->document_tab == documents_[index].tab;
+}
+
 fire_and_forget Workspace::edit_shape()
 {
     if (closed_ || busy_ || !movie_ || !selected_ || !flash::is_editable_shape(movie_->tags()[*selected_].code))
@@ -285,7 +291,7 @@ fire_and_forget Workspace::edit_shape()
     const auto lifetime = shared_from_this();
     auto session = std::make_shared<ShapeEdit>();
     session->movie = movie_;
-    session->original = file_;
+    session->document_tab = documents_[*active_document_].tab;
     session->tag = *selected_;
     shape_session_ = session;
     const auto& resource = movie_->tags()[*selected_];
@@ -446,42 +452,21 @@ fire_and_forget Workspace::save_shape(std::shared_ptr<ShapeEdit> session, hstrin
     catch (const hresult_error&) { problem = tr(L"Les données du dessin sont invalides."); }
     catch (const std::exception& error) { problem = widen(error.what()); }
     co_await ui;
-    std::optional<std::filesystem::path> path;
-    if (!closed_ && !session->closed && problem.empty())
-    {
-        try { path = swf_copy_path(session->original, tr(L"-forme"), session->window); }
-        catch (const hresult_error& error) { problem = error.message(); }
-        catch (const std::exception& error) { problem = widen(error.what()); }
-    }
-    if (path)
-    {
-        co_await resume_background();
-        try
-        {
-            if (session->movie->header().compression == 'C')
-            {
-                const auto bytes = edited->compressed();
-                edited = std::make_shared<flash::Movie>(flash::Movie::parse(bytes));
-                flash::write_file(*path, bytes);
-            }
-            else
-                flash::write_file(*path, edited->uncompressed());
-        }
-        catch (const std::exception& error) { problem = widen(error.what()); }
-        co_await ui;
-    }
     if (closed_)
         co_return;
     busy_ = false;
     session->saving = false;
-    if (!path || !problem.empty())
+    if (!problem.empty())
     {
-        session->feedback(problem.empty() ? tr(L"Enregistrement de la copie annulé.") : localized_error(problem), !problem.empty());
+        session->feedback(localized_error(problem), true);
+        co_return;
+    }
+    if (!apply_document_edit(session->movie, std::move(edited), std::move(rows), session->tag))
+    {
+        session->feedback(tr(L"Le SWF a changé depuis l’ouverture de l’éditeur de formes."), true);
         co_return;
     }
     close_shape_editor();
-    remember_recent(*path);
-    add_document(*path, std::move(edited), std::move(rows), session->tag);
-    status(tr(L"Forme modifiée et enregistrée"));
+    status(tr(L"Modifications appliquées au SWF"));
 }
 }

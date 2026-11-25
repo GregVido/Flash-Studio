@@ -11,15 +11,17 @@ Flash Studio is a Windows workbench for inspecting, editing and exporting SWF fi
 - Browse the resources, tags, frames and nested ActionScript packages of multiple SWFs in separate tabs. Search source, P-code, text, ABC constants and tag names across a document.
 - Use **Open folder** (`Ctrl+Shift+O`) to index the SWFs in a directory and its subdirectories. The workspace lists relative paths and opens each SWF when selected. In code, `Ctrl+click` a quoted SWF path to open the matching local file in a tab. Press `F1` to see the keyboard shortcuts.
 - Read syntax-highlighted ActionScript or inspect AVM1 and AVM2 instructions and raw tag data. In decompiled source, `Ctrl+click` a resolved type to open its class in a tab. Pin classes to keep them on the left of the script tab strip. SWF tabs sit in the title bar.
-- If Flash Studio recognizes obfuscated ActionScript, it offers to clean up the SWF when it opens. Use **Deobfuscate…** in the script toolbar for a selected class or ABC block, or **Edit ABC → Deobfuscate SWF…** for the whole document. The optional simplification step resolves calls to recognized decoders and shortens obfuscated identifiers in the copy.
+- If Flash Studio recognizes obfuscated ActionScript, it offers to clean up the SWF when it opens. Use **Deobfuscate…** in the script toolbar for a selected class or ABC block, or **Edit ABC → Deobfuscate SWF…** for the whole document. The optional simplification step resolves calls to recognized decoders and shortens obfuscated identifiers in the current document.
 - After cleanup, choose **Simplify strings** to replace calls to recognized string decoders with their literal results. Flash Studio evaluates the supported calculations without running the SWF.
-- In **Scripts**, choose **New class** and enter a name such as `demo.tools.Counter`. Edit the generated class in the ActionScript pane, then select **Save** to compile it and open a copy of the SWF in a new tab. Use **Edit code** for an existing class.
+- In **Scripts**, choose **New class** and enter a name such as `demo.tools.Counter`. Edit the generated class in the ActionScript pane, then select **Apply** to compile it into the current SWF. Use **Edit code** for an existing class.
+- An asterisk marks tabs with unsaved changes. Use **Save** to write the current file or **Save as** to choose a new path. Flash Studio asks what to do with unsaved changes when you close a tab or quit and restores the tabs you left open on the next launch.
 - Complete local names, SWF classes and Flash API types with `Ctrl+Space`. Select a class suggestion to add its import when needed. Use `Ctrl+S` to compile. Compiler diagnostics stay with the draft.
 - Open the globe menu to choose **English** or **Français**. Restart the app to apply the saved preference. Use `--language en` or `--language fr` to override it for one launch.
 
 ## Preview and export
 
-- Select a **DefineShape** resource and choose **Edit shape**. Move or resize elements, edit vertices and curve handles, change solid fills and gradients, or draw rectangles, ellipses, lines and polygons. Save a copy of the SWF with the edited drawing.
+- Select a **DefineShape** resource and choose **Edit shape**. Move or resize elements, edit vertices and curve handles, change solid fills and gradients, or draw rectangles, ellipses, lines and polygons. Use **Apply to SWF** to update the document.
+- Edit text fields and single-style static text with embedded glyphs. Replace bitmap images, individual sounds and binary resources. Preview embedded glyph outlines or inspect binary payloads in hexadecimal, including information about any recognized embedded SWF.
 
 ![A moving shape exported from a twelve-frame SWF sprite](docs/media/sprite-export.gif)
 

@@ -4,6 +4,9 @@
 #include <Windows.h>
 #include <d2d1_3.h>
 #include <d3d11.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 #include <array>
@@ -16,6 +19,9 @@
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "mfplat.lib")
+#pragma comment(lib, "mfreadwrite.lib")
+#pragma comment(lib, "mfuuid.lib")
 
 namespace flash
 {
@@ -694,6 +700,155 @@ bool is_visual_tag(unsigned code) noexcept
     default:
         return false;
     }
+}
+
+bool is_bitmap_tag(unsigned code) noexcept
+{
+    return code == 6 || code == 20 || code == 21 || code == 35 || code == 36 || code == 90;
+}
+
+Movie Movie::replace_image(std::size_t index, ByteView encoded) const
+{
+    if (!is_bitmap_tag(tags().at(index).code) || !tags()[index].character_id)
+        throw std::runtime_error("Cette ressource n’est pas une image bitmap.");
+    const ImageApartment apartment;
+    const auto factory = image_factory();
+    const auto frame = image_frame(*factory.Get(), encoded);
+    UINT width{}, height{};
+    check_image(frame->GetSize(&width, &height));
+    const auto count = pixel_count(width, height);
+    if (width > UINT16_MAX || height > UINT16_MAX)
+        throw std::runtime_error("Dimensions trop grandes pour une image SWF.");
+    const bool alpha = header().version >= 3;
+    ComPtr<IWICFormatConverter> converter;
+    check_image(factory->CreateFormatConverter(&converter));
+    check_image(converter->Initialize(frame.Get(), alpha ? GUID_WICPixelFormat32bppPBGRA : GUID_WICPixelFormat32bppBGRA,
+        WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom));
+    Bytes pixels(count * 4);
+    check_image(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()));
+    for (std::size_t offset = 0; offset < pixels.size(); offset += 4)
+    {
+        // SWF stores 32-bit lossless pixels as ARGB or XRGB.
+        std::swap(pixels[offset], pixels[offset + 3]);
+        std::swap(pixels[offset + 1], pixels[offset + 2]);
+        if (!alpha)
+            pixels[offset] = 0;
+    }
+    Bytes payload;
+    put16(payload, static_cast<std::uint16_t>(*tags()[index].character_id));
+    payload.push_back(5);
+    put16(payload, static_cast<std::uint16_t>(width));
+    put16(payload, static_cast<std::uint16_t>(height));
+    append(payload, deflate_zlib(pixels));
+    return replace_tag(index, payload, alpha ? 36u : 20u);
+}
+
+Movie Movie::replace_sound(std::size_t index, const std::filesystem::path& audio) const
+{
+    const auto& tag = tags().at(index);
+    if (tag.code != 14 || !tag.character_id)
+        throw std::runtime_error("Cette ressource n’est pas un son indépendant.");
+    if (std::filesystem::file_size(audio) > max_file_size)
+        throw std::runtime_error("Le fichier audio dépasse 256 Mio.");
+    const auto check_audio = [](HRESULT result)
+    {
+        if (FAILED(result))
+            throw std::runtime_error(std::format("Impossible de décoder le fichier audio (0x{:08X}).",
+                static_cast<unsigned>(result)));
+    };
+    const ImageApartment apartment;
+    check_audio(MFStartup(MF_VERSION, MFSTARTUP_LITE));
+    struct MediaStartup { ~MediaStartup() { MFShutdown(); } };
+    const MediaStartup startup;
+    ComPtr<IMFSourceReader> reader;
+    check_audio(MFCreateSourceReaderFromURL(audio.c_str(), nullptr, &reader));
+    constexpr auto stream = static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM);
+    check_audio(reader->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS), FALSE));
+    check_audio(reader->SetStreamSelection(stream, TRUE));
+    ComPtr<IMFMediaType> input, output;
+    check_audio(reader->GetNativeMediaType(stream, 0, &input));
+    UINT32 native_rate{}, native_channels{};
+    check_audio(input->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &native_rate));
+    check_audio(input->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &native_channels));
+    constexpr std::array<UINT32, 4> rates{5512, 11025, 22050, 44100};
+    const auto rate_index = std::ranges::find(rates, native_rate);
+    const auto rate = rate_index == rates.end() ? rates.back() : *rate_index;
+    const auto channels = native_channels == 1 ? 1u : 2u;
+    const auto block_size = channels * 2;
+    check_audio(MFCreateMediaType(&output));
+    check_audio(output->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio));
+    check_audio(output->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM));
+    check_audio(output->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, channels));
+    check_audio(output->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, rate));
+    check_audio(output->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16));
+    check_audio(output->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, block_size));
+    check_audio(output->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, rate * block_size));
+    check_audio(reader->SetCurrentMediaType(stream, nullptr, output.Get()));
+
+    Bytes payload;
+    put16(payload, static_cast<std::uint16_t>(*tag.character_id));
+    payload.push_back(static_cast<std::uint8_t>(0x32 | ((std::ranges::find(rates, rate) - rates.begin()) << 2) |
+        (channels == 2 ? 1 : 0)));
+    put32(payload, 0);
+    for (unsigned empty_samples = 0;;)
+    {
+        ComPtr<IMFSample> sample;
+        DWORD flags{};
+        check_audio(reader->ReadSample(stream, 0, nullptr, &flags, nullptr, &sample));
+        if (flags & (MF_SOURCE_READERF_ERROR | MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED))
+            throw std::runtime_error("Le format audio change au cours du fichier.");
+        if (sample)
+        {
+            ComPtr<IMFMediaBuffer> buffer;
+            check_audio(sample->ConvertToContiguousBuffer(&buffer));
+            BYTE* bytes{};
+            DWORD size{};
+            check_audio(buffer->Lock(&bytes, nullptr, &size));
+            try { if (size) append(payload, {bytes, size}); }
+            catch (...) { buffer->Unlock(); throw; }
+            check_audio(buffer->Unlock());
+            if (size)
+                empty_samples = 0;
+        }
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
+            break;
+        if (++empty_samples >= 1024)
+            throw std::runtime_error("Le fichier audio ne fournit pas d’échantillons.");
+    }
+    const auto pcm_size = payload.size() - 7;
+    if (!pcm_size || pcm_size % block_size)
+        throw std::runtime_error("Échantillons PCM invalides.");
+    const auto samples = pcm_size / block_size;
+    for (unsigned i = 0; i < 4; ++i)
+        payload[3 + i] = static_cast<std::uint8_t>(samples >> (8 * i));
+    return replace_tag(index, payload);
+}
+
+std::string binary_preview(const Movie& movie, std::size_t index)
+{
+    const auto tag = movie.tags().at(index);
+    if (tag.code != 87 || tag.size < 6)
+        throw std::runtime_error("Ce tag ne contient pas de données binaires.");
+    const auto data = movie.data(index).subspan(6);
+    auto summary = std::format("DefineBinaryData #{} · {} octets\n", tag.character_id.value_or(0), data.size());
+    try
+    {
+        std::optional<Movie> nested;
+        if (data.size() >= 8 && (data[0] == 'F' || data[0] == 'C' || data[0] == 'Z') && data[1] == 'W' && data[2] == 'S')
+            nested = Movie::parse(data);
+        else if (data.size() >= 8 && data[0] >= 6 && data[0] <= 50 && data[5] == 0x78 &&
+            ((static_cast<unsigned>(data[5]) << 8) + data[6]) % 31 == 0)
+        {
+            // Some loaders prepend only the SWF signature to an otherwise complete compressed file.
+            Bytes reconstructed{'C', 'W', 'S'};
+            append(reconstructed, data);
+            nested = Movie::parse(reconstructed);
+        }
+        if (nested)
+            summary += '\n' + summarize(*nested) + '\n';
+    }
+    catch (const std::runtime_error&) {}
+    return summary + '\n' + hex_dump(data, 64 * 1024);
 }
 
 std::wstring_view animation_extension(AnimationFormat format) noexcept

@@ -1080,6 +1080,16 @@ fin:
     assert output_text.read_text(encoding="utf-8") == "Remplacé ✓"
     run("export", edited, "2", output_text)
     assert output_text.read_bytes() == b"A"
+    sheet = folder / "Glyphes.svg"
+    run("font-preview", editable, "1", sheet)
+    assert "U+0041" in sheet.read_text(encoding="utf-8")
+    static_edit = folder / "Texte statique modifié.swf"
+    new_text.write_text("AA\nA", encoding="utf-8")
+    run("replace-text", edited, "2", new_text, static_edit)
+    run("export", static_edit, "2", output_text)
+    assert output_text.read_bytes() == b"AA\nA"
+    new_text.write_text("B", encoding="utf-8")
+    run("replace-text", static_edit, "2", new_text, edited, ok=False)
     gradient = folder / "dégradé.svg"
     run("export", edited, "3", gradient)
     assert 'fill="url(#gradient-4-1)"' in gradient.read_text(encoding="utf-8")
@@ -1104,11 +1114,35 @@ fin:
         run("image", path, "7", converted)
         assert converted.read_bytes().startswith(signature)
 
+    image_edit, imported_bitmap = folder / "Image remplacée.swf", folder / "Image réextraite.png"
+    run("replace-image", path, "7", png, image_edit)
+    run("export", image_edit, "7", imported_bitmap)
+    assert imported_bitmap.read_bytes() == png_bytes
+    assert "DefineBitsLossless2\t" in run("list", image_edit)
+
     wav = folder / "son.wav"
     run("export", path, "9", wav)
     with wave.open(str(wav), "rb") as sound:
         assert (sound.getframerate(), sound.getsampwidth(), sound.getnchannels()) == (5512, 2, 1)
         assert sound.readframes(2) == b"\x83\x13\x00\x00"
+
+    replacement_audio = folder / "Remplacement.wav"
+    samples = struct.pack("<hhh", 32767, -200, 1)
+    with wave.open(str(replacement_audio), "wb") as sound:
+        sound.setparams((1, 2, 44100, 3, "NONE", "not compressed"))
+        sound.writeframes(samples)
+    audio_edit, imported_sound = folder / "Son remplacé.swf", folder / "Son réextrait.wav"
+    run("replace-sound", path, "9", replacement_audio, audio_edit)
+    run("export", audio_edit, "9", imported_sound)
+    with wave.open(str(imported_sound), "rb") as sound:
+        assert (sound.getframerate(), sound.getnchannels(), sound.getnframes()) == (44100, 1, 3)
+        assert sound.readframes(3) == samples
+
+    binary, embedded = folder / "SWF sans signature.bin", folder / "SWF encapsulé.swf"
+    binary.write_bytes(cases["zlib"][3:])
+    run("replace-binary", path, "5", binary, embedded)
+    preview = run("binary-preview", embedded, "5")
+    assert "DefineBinaryData #8" in preview and "CWS" in preview
 
     exported = folder / "ressources"
     report = run("export-all", path, exported)

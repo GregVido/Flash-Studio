@@ -100,6 +100,10 @@ void usage()
   FlashTool replace-tag <film.swf> <index> <contenu.bin> <destination.swf>
   FlashTool replace-binary <film.swf> <index> <contenu.bin> <destination.swf>
   FlashTool replace-text <film.swf> <index> <texte.txt> <destination.swf>
+  FlashTool replace-image <film.swf> <index> <image> <destination.swf>
+  FlashTool replace-sound <film.swf> <index> <audio> <destination.swf>
+  FlashTool font-preview <film.swf> <index> <destination.svg>
+  FlashTool binary-preview <film.swf> <index>
 
 Les indices commencent à 0. La commande export écrit le format natif ou converti du tag.
 )";
@@ -431,7 +435,20 @@ int wmain(int argc, wchar_t** argv)
             else
                 throw std::runtime_error("Aucun export spécialisé pour ce type de tag.");
         }
-        else if (argc == 6 && (command == L"replace-binary" || command == L"replace-tag" || command == L"replace-text"))
+        else if (argc == 5 && command == L"font-preview")
+        {
+            const auto preview = flash::font_svg(flash::Movie::open(argv[2]), index_of(argv[3]));
+            flash::write_file(argv[4], preview.bytes);
+        }
+        else if (argc == 4 && command == L"binary-preview")
+            std::cout << flash::binary_preview(flash::Movie::open(argv[2]), index_of(argv[3]));
+        else if (argc == 6 && command == L"replace-sound")
+        {
+            const auto movie = flash::Movie::open(argv[2]).replace_sound(index_of(argv[3]), argv[4]);
+            flash::write_file(argv[5], movie.uncompressed());
+        }
+        else if (argc == 6 && (command == L"replace-binary" || command == L"replace-tag" || command == L"replace-text" ||
+            command == L"replace-image"))
         {
             const auto movie = flash::Movie::open(argv[2]);
             const auto index = index_of(argv[3]);
@@ -442,6 +459,8 @@ int wmain(int argc, wchar_t** argv)
                     return movie.replace_binary(index, content);
                 if (command == L"replace-tag")
                     return movie.replace_tag(index, content);
+                if (command == L"replace-image")
+                    return movie.replace_image(index, content);
                 const std::string_view text = content.empty() ? std::string_view{} :
                     std::string_view(reinterpret_cast<const char*>(content.data()), content.size());
                 return movie.replace_text(index, text);

@@ -60,10 +60,12 @@ public:
     ByteView uncompressed() const noexcept { return bytes_; }
     Bytes compressed() const;
     std::string export_xml() const;
-    Movie replace_tag(std::size_t index, ByteView replacement) const;
+    Movie replace_tag(std::size_t index, ByteView replacement, std::optional<unsigned> new_code = {}) const;
     Movie insert_root_tag(std::size_t before, unsigned code, ByteView payload) const;
     Movie replace_binary(std::size_t index, ByteView replacement) const;
     Movie replace_text(std::size_t index, std::string_view utf8) const;
+    Movie replace_image(std::size_t index, ByteView encoded) const;
+    Movie replace_sound(std::size_t index, const std::filesystem::path& audio) const;
 
 private:
     static Movie decode(ByteView bytes, Bytes&& owned = {});
@@ -134,6 +136,9 @@ Asset visual_asset(const Movie& movie, std::size_t index);
 Asset convert_image(const Asset& image, std::wstring_view extension, double scale = 1);
 std::string extract_text(const Movie& movie, std::size_t index);
 Asset text_svg(const Movie& movie, std::size_t index);
+Asset font_svg(const Movie& movie, std::size_t index);
+std::string binary_preview(const Movie& movie, std::size_t index);
+bool is_bitmap_tag(unsigned code) noexcept;
 bool has_avm1_actions(const Movie& movie, std::size_t index);
 std::string disassemble(const Movie& movie, std::size_t index);
 std::string decompile(const Movie& movie, std::size_t index);

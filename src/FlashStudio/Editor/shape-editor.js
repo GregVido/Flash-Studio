@@ -9,7 +9,7 @@ const selection = $("selection"), transient = $("transient");
 const bridge = window.chrome?.webview;
 const locale = {
     fr: {
-        undo: "Annuler", redo: "Rétablir", close: "Fermer", save: "Enregistrer une copie",
+        undo: "Annuler", redo: "Rétablir", close: "Fermer", save: "Appliquer au SWF",
         select: "Sélection et déplacement", nodes: "Sommets et courbes", rectangle: "Rectangle", ellipse: "Ellipse",
         line: "Ligne", pen: "Polygone", zoomOut: "Réduire", zoomIn: "Agrandir", fit: "Ajuster",
         elements: "Éléments", item: "Élément", position: "Position et taille", width: "Largeur", height: "Hauteur",
@@ -25,7 +25,7 @@ const locale = {
         discard: "Fermer et abandonner les modifications ?", keep: "Continuer l’édition", discardAction: "Abandonner"
     },
     en: {
-        undo: "Undo", redo: "Redo", close: "Close", save: "Save a copy",
+        undo: "Undo", redo: "Redo", close: "Close", save: "Apply to SWF",
         select: "Select and move", nodes: "Nodes and curves", rectangle: "Rectangle", ellipse: "Ellipse",
         line: "Line", pen: "Polygon", zoomOut: "Zoom out", zoomIn: "Zoom in", fit: "Fit",
         elements: "Elements", item: "Element", position: "Position and size", width: "Width", height: "Height",

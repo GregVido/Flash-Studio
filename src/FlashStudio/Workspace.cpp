@@ -73,9 +73,11 @@ fire_and_forget load_logo(BitmapImage bitmap)
 }
 
 enum class DocumentFormat { uncompressed = 1, compressed, xml };
+enum class ResourceImport { none, bitmap, audio };
 
 std::optional<std::filesystem::path> dialog(const Window& window, bool save, std::wstring_view extension,
-    std::wstring_view suggested = {}, DocumentFormat* format = nullptr, bool folder = false, bool raster = false, bool vector = false)
+    std::wstring_view suggested = {}, DocumentFormat* format = nullptr, bool folder = false, bool raster = false, bool vector = false,
+    ResourceImport resource = ResourceImport::none)
 {
     auto picker = create_instance<IFileDialog>(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog);
     const std::wstring wildcard = L"*" + std::wstring(extension);
@@ -96,6 +98,10 @@ std::optional<std::filesystem::path> dialog(const Window& window, bool save, std
         {tr(L"Image SVG"), L"*.svg"}, {tr(L"Image PNG"), L"*.png"}, {tr(L"Image BMP"), L"*.bmp"},
         {tr(L"Image JPEG"), L"*.jpg"}, {tr(L"Image TIFF"), L"*.tiff"}
     };
+    const COMDLG_FILTERSPEC imports[]{
+        {tr(L"Images bitmap"), L"*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff"},
+        {tr(L"Fichiers audio"), L"*.wav;*.mp3;*.m4a;*.aac;*.wma;*.flac"}
+    };
     if (folder)
         check_hresult(picker->SetTitle(tr(save ? L"Choisir le dossier d’export" : L"Ouvrir un dossier de SWF")));
     else if (raster)
@@ -104,6 +110,11 @@ std::optional<std::filesystem::path> dialog(const Window& window, bool save, std
         check_hresult(picker->SetFileTypes(3, movie_types));
     else if (!save && extension == L".swf")
         check_hresult(picker->SetFileTypes(2, open_types));
+    else if (resource != ResourceImport::none)
+    {
+        const COMDLG_FILTERSPEC allowed[]{imports[resource == ResourceImport::bitmap ? 0 : 1], types[1]};
+        check_hresult(picker->SetFileTypes(2, allowed));
+    }
     else
         check_hresult(picker->SetFileTypes(extension.empty() ? 1 : 2, extension.empty() ? types + 1 : types));
     DWORD options{};
@@ -143,6 +154,32 @@ std::optional<std::filesystem::path> dialog(const Window& window, bool save, std
 
 bool is_abc(unsigned code) { return code == 72 || code == 82; }
 bool is_text(unsigned code) { return code == 11 || code == 33 || code == 37 || code == 77; }
+
+void write_document_file(const std::filesystem::path& path, const flash::Movie& movie, DocumentFormat format)
+{
+    GUID id;
+    check_hresult(CoCreateGuid(&id));
+    wchar_t name[40];
+    if (!StringFromGUID2(id, name, static_cast<int>(std::size(name))))
+        throw std::runtime_error("Impossible de créer un fichier temporaire.");
+    const auto temporary = path.parent_path() / (std::wstring(name) + L".tmp");
+    try
+    {
+        switch (format)
+        {
+        case DocumentFormat::uncompressed: flash::write_file(temporary, movie.uncompressed()); break;
+        case DocumentFormat::compressed: flash::write_file(temporary, movie.compressed()); break;
+        case DocumentFormat::xml: flash::write_text(temporary, movie.export_xml()); break;
+        }
+        check_bool(MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+    }
+    catch (...)
+    {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        throw;
+    }
+}
 }
 
 void Workspace::start(const std::filesystem::path& initial_file, std::optional<std::size_t> initial_tag)
@@ -150,6 +187,18 @@ void Workspace::start(const std::filesystem::path& initial_file, std::optional<s
     ui_thread_ = GetCurrentThreadId();
     window_ = Window();
     window_.Title(L"Flash Studio");
+    window_.AppWindow().Closing([weak = weak_from_this()](auto&&, const Microsoft::UI::Windowing::AppWindowClosingEventArgs& event)
+    {
+        if (const auto owner = weak.lock(); owner && !owner->close_confirmed_)
+        {
+            event.Cancel(true);
+            owner->root_.DispatcherQueue().TryEnqueue([weak]
+            {
+                if (const auto workspace = weak.lock())
+                    workspace->request_quit();
+            });
+        }
+    });
     window_.Closed([this](auto&&, auto&&)
     {
         closed_ = true;
@@ -179,6 +228,8 @@ void Workspace::start(const std::filesystem::path& initial_file, std::optional<s
         else
             open_file(initial_file, initial_tag);
     }
+    else
+        restore_session();
 }
 
 void Workspace::build()
@@ -253,11 +304,18 @@ void Workspace::build()
     open_.Padding(pad(14, 8, 14, 8));
     open_.Click([this](auto&&, auto&&) { open_dialog(); });
     save_ = Button();
-    save_.Content(icon_label(L'\uE74E', tr(L"Enregistrer sous")));
-    save_.Padding(pad(14, 8, 14, 8));
+    save_.Content(glyph(L'\uE74E', 16));
+    save_.Padding(pad(11, 8, 11, 8));
+    Automation::AutomationProperties::SetName(save_, tr(L"Enregistrer"));
+    ToolTipService::SetToolTip(save_, box_value(tr(L"Enregistrer")));
     save_.Click([this](auto&&, auto&&) { save_movie(); });
     save_.IsEnabled(false);
     actions.Children().Append(open_);
+    save_as_ = Button();
+    save_as_.Content(box_value(tr(L"Enregistrer sous")));
+    save_as_.Padding(pad(12, 8, 12, 8));
+    save_as_.Click([this](auto&&, auto&&) { save_movie(true); });
+    save_as_.IsEnabled(false);
     folder_button_ = Button();
     folder_button_.Content(glyph(L'\uE8B7', 16));
     folder_button_.Padding(pad(10, 8, 10, 8));
@@ -267,6 +325,7 @@ void Workspace::build()
     actions.Children().Append(folder_button_);
     actions.Children().Append(recent_);
     actions.Children().Append(save_);
+    actions.Children().Append(save_as_);
     global_search_ = Button();
     global_search_.Content(glyph(L'\uE721', 16));
     global_search_.Padding(pad(11, 8, 11, 8));
@@ -317,8 +376,12 @@ void Workspace::build()
     open_.KeyboardAccelerators().Append(shortcut);
     KeyboardAccelerator save_shortcut;
     save_shortcut.Key(Windows::System::VirtualKey::S);
-    save_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
+    save_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control);
     save_.KeyboardAccelerators().Append(save_shortcut);
+    KeyboardAccelerator save_as_shortcut;
+    save_as_shortcut.Key(Windows::System::VirtualKey::S);
+    save_as_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
+    save_as_.KeyboardAccelerators().Append(save_as_shortcut);
     KeyboardAccelerator find_shortcut;
     find_shortcut.Key(Windows::System::VirtualKey::F);
     find_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control);
@@ -827,7 +890,8 @@ fire_and_forget Workspace::drop(DragEventArgs args)
     deferral.Complete();
 }
 
-Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag)
+Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag,
+    bool offer_cleanup)
 {
     if (busy_ || closed_)
         co_return;
@@ -860,7 +924,8 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
         movie = std::make_shared<flash::Movie>(extension == L".xml" ?
             flash::Movie::import_xml(flash::read_file(path)) : flash::Movie::open(path));
         rows = index_rows(*movie);
-        detection = flash::detect_as3_obfuscation(*movie);
+        if (offer_cleanup)
+            detection = flash::detect_as3_obfuscation(*movie);
     }
     catch (const std::exception& error) { problem = widen(error.what()); }
     co_await ui;
@@ -924,7 +989,6 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
         co_return;
     const auto lifetime = shared_from_this();
     const auto input = movie_;
-    const auto original = file_;
     const auto current = mode_ == Mode::scripts && selected_script_ ? &script_entries_.at(*selected_script_) : nullptr;
     auto target = current && current->type ?
         std::optional(ScriptTarget{current->tag, current->type, current->qualified, {}, {}, View::source}) : std::nullopt;
@@ -1013,43 +1077,9 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
         co_return;
     }
 
-    std::optional<std::filesystem::path> path;
-    try { path = swf_copy_path(original, tr(L"-désobfusqué")); }
-    catch (const hresult_error& error) { problem = error.message(); }
-    catch (const std::exception& error) { problem = widen(error.what()); }
-    if (!path)
-    {
-        set_busy(false);
-        if (problem.empty())
-            status(tr(L"Enregistrement de la copie annulé."));
-        else
-            status(problem, true);
-        co_return;
-    }
-    co_await resume_background();
-    try
-    {
-        if (input->header().compression == 'C')
-        {
-            const auto bytes = cleaned->compressed();
-            cleaned = std::make_shared<flash::Movie>(flash::Movie::parse(bytes));
-            flash::write_file(*path, bytes);
-        }
-        else
-            flash::write_file(*path, cleaned->uncompressed());
-    }
-    catch (const std::exception& error) { problem = widen(error.what()); }
-    co_await ui;
-    if (closed_)
-        co_return;
     set_busy(false);
-    if (!problem.empty())
-    {
-        status(problem, true);
+    if (!apply_document_edit(input, std::move(cleaned), std::move(rows), tag, report.renamed_identifiers != 0))
         co_return;
-    }
-    remember_recent(*path);
-    add_document(*path, std::move(cleaned), std::move(rows), tag);
     if (target)
     {
         if (report.renamed_identifiers)
@@ -1069,20 +1099,13 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
 void Workspace::update_document()
 {
     const auto& header = movie_->header();
-    file_name_.Text(file_.filename().wstring());
     file_info_.Text(format_message(L"SWF {}  ·  {}WS  ·  {:g} × {:g} px  ·  {:g} i/s",
-        header.version, static_cast<wchar_t>(header.compression),
+        header.version, static_cast<wchar_t>(active_document_ ? documents_[*active_document_].disk_compression : header.compression),
         (static_cast<double>(header.right) - header.left) / 20.0,
         (static_cast<double>(header.bottom) - header.top) / 20.0, header.frames_per_second));
-    window_.Title(L"Flash Studio — " + file_.filename().wstring());
     sync_folder_selection();
     if (active_document_)
-    {
-        auto& document = documents_[*active_document_];
-        document.path = file_;
-        document.tab.Header(box_value(hstring(file_.filename().wstring())));
-        ToolTipService::SetToolTip(document.tab, box_value(hstring(file_.wstring())));
-    }
+        update_tab_label(*active_document_);
     empty_.Visibility(Visibility::Collapsed);
     workarea_.Visibility(Visibility::Visible);
     global_search_.IsEnabled(true);
@@ -1241,9 +1264,11 @@ void Workspace::select_tag(std::optional<std::size_t> index, std::optional<View>
         const auto& tag = movie_->tags()[*index];
         scene = tag.code == 39;
         script = is_abc(tag.code) || flash::has_avm1_actions(*movie_, *index);
-        can_replace = (tag.code == 87 && tag.size >= 6) || tag.code == 37 || tag.code == 77;
-        replace_.Content(box_value(tag.code == 87 ? tr(L"Remplacer…") : tr(L"Modifier…")));
-        Automation::AutomationProperties::SetName(replace_, tag.code == 87 ? tr(L"Remplacer les données binaires") : tr(L"Modifier le texte"));
+        can_replace = (tag.code == 87 && tag.size >= 6) || is_text(tag.code) || tag.code == 14 || flash::is_bitmap_tag(tag.code);
+        replace_.Content(box_value(is_text(tag.code) ? tr(L"Modifier…") : tr(L"Remplacer…")));
+        Automation::AutomationProperties::SetName(replace_, is_text(tag.code) ? tr(L"Modifier le texte") :
+            tag.code == 14 ? tr(L"Remplacer le son") : flash::is_bitmap_tag(tag.code) ? tr(L"Remplacer l’image") :
+            tr(L"Remplacer les données binaires"));
         detail_title_.Text(widen(flash::tag_name(tag.code)));
         detail_meta_.Text(format_message(L"Tag {}  ·  0x{:X}  ·  {} octets", *index, tag.offset, tag.size));
     }
@@ -1486,6 +1511,10 @@ fire_and_forget Workspace::show_selection()
                 text = flash::decompile(*movie, index);
             else if (view == View::instructions)
                 text = flash::disassemble(*movie, index);
+            else if (tag.code == 87)
+                text = flash::binary_preview(*movie, index);
+            else if (tag.code == 10 || tag.code == 48 || tag.code == 75 || tag.code == 91)
+                asset = flash::font_svg(*movie, index);
             else if (is_text(tag.code))
             {
                 const auto extracted = flash::extract_text(*movie, index);
@@ -1794,40 +1823,73 @@ fire_and_forget Workspace::export_animation(flash::AnimationFormat format)
     catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
 }
 
-fire_and_forget Workspace::save_movie()
+fire_and_forget Workspace::save_movie(bool choose_path)
 {
-    if (!movie_ || busy_)
+    if (!active_document_ || busy_ || close_prompt_)
         co_return;
-    auto lifetime = shared_from_this();
-    const auto movie = movie_;
+    const auto lifetime = shared_from_this();
+    busy_ = true;
+    co_await save_document(*active_document_, choose_path);
+    busy_ = false;
+}
+
+Windows::Foundation::IAsyncOperation<bool> Workspace::save_document(std::size_t index, bool choose_path)
+{
+    const auto lifetime = shared_from_this();
+    auto& document = documents_.at(index);
+    if (!choose_path && !document.dirty)
+        co_return true;
+    const auto movie = document.movie;
+    std::wstring failure;
     try
     {
-        auto format = movie->header().compression == 'C' ? DocumentFormat::compressed : DocumentFormat::uncompressed;
-        const auto destination = dialog(window_, true, L".swf", file_.stem().wstring() + tr(L"-copie"), &format);
-        if (!destination)
-            co_return;
-        const apartment_context ui;
-        co_await resume_background();
-        std::wstring failure;
-        try
+        auto format = lower(document.path.extension().wstring()) == L".xml" ? DocumentFormat::xml :
+            document.disk_compression == 'F' ? DocumentFormat::uncompressed : DocumentFormat::compressed;
+        auto destination = document.path;
+        if (choose_path)
         {
-            switch (format)
+            const auto chosen = dialog(window_, true, L".swf", document.path.stem().wstring(), &format);
+            if (!chosen)
+                co_return false;
+            destination = *chosen;
+            for (std::size_t other = 0; other < documents_.size(); ++other)
             {
-            case DocumentFormat::uncompressed: flash::write_file(*destination, movie->uncompressed()); break;
-            case DocumentFormat::compressed: flash::write_file(*destination, movie->compressed()); break;
-            case DocumentFormat::xml: flash::write_text(*destination, movie->export_xml()); break;
+                if (other == index)
+                    continue;
+                std::error_code ignored;
+                if (CompareStringOrdinal(destination.c_str(), -1, documents_[other].path.c_str(), -1, TRUE) == CSTR_EQUAL ||
+                    std::filesystem::equivalent(destination, documents_[other].path, ignored))
+                    throw std::runtime_error("Ce fichier est déjà ouvert dans un autre onglet.");
             }
         }
+        const apartment_context ui;
+        co_await resume_background();
+        try { write_document_file(destination, *movie, format); }
+        catch (const hresult_error& error) { failure = error.message(); }
         catch (const std::exception& error) { failure = widen(error.what()); }
         co_await ui;
-        if (!closed_)
-            status(failure.empty() ? tr(L"SWF enregistré : ") + destination->filename().wstring() : failure, !failure.empty());
+        if (closed_)
+            co_return false;
+        if (failure.empty())
+        {
+            document.path = destination;
+            document.disk_compression = format == DocumentFormat::compressed ? 'C' : 'F';
+            document.dirty = false;
+            update_tab_label(index);
+            if (active_document_ == index)
+            {
+                file_ = destination;
+                sync_folder_selection(false);
+            }
+            remember_recent(destination);
+            status(tr(L"SWF enregistré : ") + destination.filename().wstring());
+            co_return true;
+        }
     }
-    catch (const hresult_error& error)
-    {
-        if (!closed_)
-            status(error.message(), true);
-    }
+    catch (const hresult_error& error) { failure = error.message(); }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    status(localized_error(failure), true);
+    co_return false;
 }
 
 fire_and_forget Workspace::choose_visual_batch()
@@ -1911,7 +1973,7 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
     const auto script = selected_script_ ? std::optional(script_entries_[*selected_script_].qualified) : std::nullopt;
     if (operation != AbcEdit::import && !abc)
         co_return;
-    std::optional<std::filesystem::path> input, target;
+    std::optional<std::filesystem::path> input;
     flash::Bytes compiled;
     try
     {
@@ -2000,12 +2062,10 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
             if (co_await prompt.ShowAsync() != ContentDialogResult::Primary || closed_ || movie_ != movie)
                 co_return;
         }
-        if (operation != AbcEdit::import || input)
-            target = dialog(window_, true, L".swf", file_.stem().wstring() + L"-abc.swf");
     }
     catch (const hresult_error& error) { status(error.message(), true); }
     catch (const std::exception& error) { status(widen(error.what()), true); }
-    if (!target)
+    if (!compiled.size() && (operation != AbcEdit::import || !input))
         co_return;
     busy_ = true;
     open_.IsEnabled(false);
@@ -2022,7 +2082,6 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
             compiled = flash::read_file(*input);
         result = std::make_shared<flash::Movie>(flash::replace_abc(*movie, tag, compiled));
         rows = index_rows(*result);
-        flash::write_file(*target, result->uncompressed());
     }
     catch (const std::exception& error) { failure = widen(error.what()); }
     co_await ui;
@@ -2036,12 +2095,9 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
         status(failure, true);
         co_return;
     }
-    movie_ = std::move(result);
-    indexed_rows_ = std::move(rows);
-    file_ = *target;
-    update_document();
+    apply_document_edit(movie, std::move(result), std::move(rows), tag);
     if (script && mode_ == Mode::scripts)
-        edited_script_ = ScriptSelection{tag, *script, operation == AbcEdit::import ? std::nullopt : method};
+        open_script_target({tag, {}, *script, operation == AbcEdit::import ? std::nullopt : method, {}, View::instructions});
     else if (mode_ == Mode::tags)
     {
         select_tag(tag);
@@ -2050,7 +2106,7 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
         refresh_tags();
         set_view(View::instructions);
     }
-    status(tr(L"Bloc ABC modifié dans ") + target->filename().wstring());
+    status(tr(L"Modifications appliquées au SWF"));
 }
 
 bool Workspace::find_class_compiler(bool prompt)
@@ -2082,17 +2138,6 @@ bool Workspace::find_class_compiler(bool prompt)
     return false;
 }
 
-std::optional<std::filesystem::path> Workspace::swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix,
-    const Window& owner)
-{
-    const auto output = dialog(owner ? owner : window_, true, L".swf", original.stem().wstring() + std::wstring(suffix));
-    if (output && (lower(output->extension().wstring()) != L".swf" ||
-        CompareStringOrdinal(output->c_str(), -1, original.c_str(), -1, TRUE) == CSTR_EQUAL ||
-        (std::filesystem::exists(*output) && std::filesystem::equivalent(*output, original))))
-        throw std::runtime_error("Choisissez une copie avec un nom de fichier SWF différent.");
-    return output;
-}
-
 fire_and_forget Workspace::edit_tag()
 {
     if (!movie_ || !selected_ || busy_)
@@ -2100,13 +2145,16 @@ fire_and_forget Workspace::edit_tag()
     auto lifetime = shared_from_this();
     const auto movie = movie_;
     const auto index = *selected_;
-    std::optional<std::filesystem::path> replacement, destination;
+    const auto code = movie->tags()[index].code;
+    std::optional<std::filesystem::path> replacement;
     std::optional<std::string> text;
     try
     {
-        if (movie->tags()[index].code == 87)
+        if (code == 87 || code == 14 || flash::is_bitmap_tag(code))
         {
-            replacement = dialog(window_, false, L"");
+            const auto kind = code == 14 ? ResourceImport::audio :
+                flash::is_bitmap_tag(code) ? ResourceImport::bitmap : ResourceImport::none;
+            replacement = dialog(window_, false, L"", {}, nullptr, false, false, false, kind);
             if (!replacement)
                 co_return;
         }
@@ -2122,14 +2170,26 @@ fire_and_forget Workspace::edit_tag()
             ContentDialog prompt;
             prompt.XamlRoot(root_.XamlRoot());
             prompt.Title(box_value(tr(L"Modifier le texte")));
-            prompt.PrimaryButtonText(tr(L"Continuer"));
+            prompt.PrimaryButtonText(tr(L"Appliquer"));
             prompt.CloseButtonText(tr(L"Annuler"));
             prompt.Content(editor);
             if (co_await prompt.ShowAsync() != ContentDialogResult::Primary || closed_ || movie_ != movie)
                 co_return;
             text = to_string(editor.Text());
+            auto normalize_lines = [](std::string& value)
+            {
+                for (std::size_t i = 0; (i = value.find('\r', i)) != std::string::npos; ++i)
+                    if (i + 1 < value.size() && value[i + 1] == '\n')
+                        value.erase(i, 1);
+                    else
+                        value[i] = '\n';
+            };
+            auto original = flash::extract_text(*movie, index);
+            normalize_lines(*text);
+            normalize_lines(original);
+            if (*text == original)
+                co_return;
         }
-        destination = dialog(window_, true, L".swf", file_.stem().wstring() + tr(L"-modifie.swf"));
     }
     catch (const hresult_error& error)
     {
@@ -2139,7 +2199,7 @@ fire_and_forget Workspace::edit_tag()
     {
         status(widen(error.what()), true);
     }
-    if (!destination)
+    if (!replacement && !text)
         co_return;
     busy_ = true;
     open_.IsEnabled(false);
@@ -2154,9 +2214,10 @@ fire_and_forget Workspace::edit_tag()
     try
     {
         updated = std::make_shared<flash::Movie>(text ? movie->replace_text(index, *text) :
+            code == 14 ? movie->replace_sound(index, *replacement) :
+            flash::is_bitmap_tag(code) ? movie->replace_image(index, flash::read_file(*replacement)) :
             movie->replace_binary(index, flash::read_file(*replacement)));
         rows = index_rows(*updated);
-        flash::write_file(*destination, updated->uncompressed());
     }
     catch (const std::exception& error) { failure = widen(error.what()); }
     co_await ui;
@@ -2168,11 +2229,8 @@ fire_and_forget Workspace::edit_tag()
     replace_.IsEnabled(true);
     if (failure.empty())
     {
-        movie_ = std::move(updated);
-        indexed_rows_ = std::move(rows);
-        file_ = *destination;
-        update_document();
-        status(tr(L"SWF modifié et enregistré"));
+        apply_document_edit(movie, std::move(updated), std::move(rows), index);
+        status(tr(L"Modifications appliquées au SWF"));
     }
     else
         status(failure, true);

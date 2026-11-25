@@ -99,6 +99,8 @@ private:
         std::wstring filter;
         std::vector<ScriptTab> script_tabs;
         std::optional<ScriptCatalog> catalog;
+        char disk_compression = 'F';
+        bool dirty = false;
     };
     struct FramePlayback;
     struct ScriptTarget
@@ -160,7 +162,16 @@ private:
     void add_document(std::filesystem::path path, std::shared_ptr<const flash::Movie> movie, std::vector<Row> rows,
         std::optional<std::size_t> initial_tag);
     void activate_document(std::size_t index);
-    void close_document(std::size_t index);
+    winrt::fire_and_forget close_document(std::size_t index);
+    winrt::fire_and_forget request_quit();
+    winrt::fire_and_forget restore_session();
+    void remember_session();
+    void update_tab_label(std::size_t index);
+    bool apply_document_edit(const std::shared_ptr<const flash::Movie>& previous,
+        std::shared_ptr<const flash::Movie> edited, std::vector<Row> rows,
+        std::optional<std::size_t> tag = {}, bool scripts_changed = false);
+    winrt::Windows::Foundation::IAsyncOperation<bool> confirm_document_close(std::size_t index);
+    winrt::Windows::Foundation::IAsyncOperation<bool> confirm_editor_close();
     void update_document();
     void refresh_tags();
     void show_page(std::size_t page);
@@ -186,8 +197,10 @@ private:
     void update_abc_visibility();
     void preview_problem(std::uint64_t version, std::wstring_view message);
     void status(std::wstring_view message, bool error = false);
-    winrt::fire_and_forget save_movie();
-    winrt::Windows::Foundation::IAsyncAction open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag = {});
+    winrt::fire_and_forget save_movie(bool choose_path = false);
+    winrt::Windows::Foundation::IAsyncOperation<bool> save_document(std::size_t index, bool choose_path);
+    winrt::Windows::Foundation::IAsyncAction open_file(std::filesystem::path path,
+        std::optional<std::size_t> initial_tag = {}, bool offer_cleanup = true);
     winrt::Windows::Foundation::IAsyncAction prompt_deobfuscation(flash::As3Obfuscation detection);
     winrt::Windows::Foundation::IAsyncAction deobfuscate_swf(bool whole_document);
     winrt::fire_and_forget show_selection();
@@ -204,6 +217,10 @@ private:
     winrt::fire_and_forget edit_shape();
     winrt::fire_and_forget save_shape(std::shared_ptr<ShapeEdit> session, winrt::hstring message);
     void close_shape_editor();
+    bool has_shape_draft() const;
+    bool shape_editor_for(std::size_t index) const;
+    bool has_source_draft() const;
+    bool source_save_in_progress() const;
     void build_source_editor(const winrt::Microsoft::UI::Xaml::Controls::Grid& preview);
     winrt::fire_and_forget create_class();
     winrt::fire_and_forget edit_class();
@@ -215,8 +232,6 @@ private:
     void set_editor_state(std::wstring_view message, bool error = false);
     void post_editor_action(std::wstring_view action);
     bool find_class_compiler(bool prompt);
-    std::optional<std::filesystem::path> swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix,
-        const winrt::Microsoft::UI::Xaml::Window& owner = nullptr);
     winrt::fire_and_forget edit_tag();
     winrt::fire_and_forget drop(winrt::Microsoft::UI::Xaml::DragEventArgs args);
 
@@ -244,7 +259,7 @@ private:
     std::shared_ptr<FramePlayback> playback_;
     bool frame_work_running_ = false;
     winrt::Microsoft::UI::Xaml::Controls::ListView categories_{nullptr}, tags_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button open_{nullptr}, save_{nullptr}, replace_{nullptr},
+    winrt::Microsoft::UI::Xaml::Controls::Button open_{nullptr}, save_{nullptr}, save_as_{nullptr}, replace_{nullptr},
         previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr}, deobfuscate_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton export_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton recent_{nullptr};
@@ -259,6 +274,8 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr}, script_tabs_bar_{nullptr};
     std::vector<OpenDocument> documents_;
     std::optional<std::size_t> active_document_;
+    bool close_confirmed_ = false;
+    bool close_prompt_ = false;
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem export_source_{nullptr}, export_assembly_{nullptr},
         export_asset_{nullptr}, export_raw_{nullptr}, export_pcode_{nullptr}, export_graph_{nullptr}, convert_image_{nullptr},
         edit_pcode_{nullptr}, edit_simplified_{nullptr}, edit_class_{nullptr};

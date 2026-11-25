@@ -32,7 +32,8 @@ constexpr Shortcut shortcuts[]{
     {VirtualKey::Number3, ctrl, L"tags", L"Ctrl+3", L"Tags"},
     {VirtualKey::F, ctrl, L"", L"Ctrl+F", L"Rechercher dans la vue active"},
     {VirtualKey::F, ctrl | shift, L"search", L"Ctrl+Maj+F", L"Rechercher dans le SWF"},
-    {VirtualKey::S, ctrl | shift, L"save", L"Ctrl+Maj+S", L"Enregistrer sous"},
+    {VirtualKey::S, ctrl, L"save", L"Ctrl+S", L"Enregistrer"},
+    {VirtualKey::S, ctrl | shift, L"saveAs", L"Ctrl+Maj+S", L"Enregistrer sous"},
     {VirtualKey::F1, VirtualKeyModifiers::None, L"about", L"F1", L"À propos"}
 };
 }
@@ -42,7 +43,7 @@ void Workspace::register_shortcuts()
     for (const auto& shortcut : shortcuts)
     {
         const std::wstring_view action(shortcut.action);
-        if (action.empty() || action == L"open" || action == L"search" || action == L"save")
+        if (action.empty() || action == L"open" || action == L"search" || action == L"save" || action == L"saveAs")
             continue;
         KeyboardAccelerator binding;
         binding.Key(shortcut.key);
@@ -84,8 +85,8 @@ bool Workspace::run_shortcut(std::wstring_view action)
         switch_mode(Mode::tags);
     else if (action == L"search")
         show_global_search();
-    else if (action == L"save")
-        save_movie();
+    else if (action == L"save" || action == L"saveAs")
+        save_movie(action == L"saveAs");
     else
         return false;
     return true;

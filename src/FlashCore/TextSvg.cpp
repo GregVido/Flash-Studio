@@ -6,6 +6,7 @@
 namespace flash
 {
 Asset export_shape(unsigned code, ByteView payload, const Movie* movie);
+std::vector<wchar_t> font_glyph_labels(const Movie& movie, unsigned id);
 
 namespace
 {
@@ -68,6 +69,8 @@ std::string glyph_path(const GlyphTable& table, unsigned index)
     if (table.offsets.empty() || index >= table.offsets.size() - 1)
         throw std::runtime_error("Indice de glyphe SWF hors limites.");
     const auto bytes = table.shapes.subspan(table.offsets[index], table.offsets[index + 1] - table.offsets[index]);
+    if (bytes.empty())
+        return {};
     const std::array<std::uint8_t, 10> prefix{0, 0, 0, 1, 0, 255, 255, 255, 255, 0};
     Bytes shape(prefix.begin(), prefix.end());
     append(shape, bytes);
@@ -160,6 +163,37 @@ Asset text_svg(const Movie& movie, std::size_t index)
         svg += "</g>\n";
     }
     svg += "</g>\n</svg>\n";
+    return {L".svg", Bytes(svg.begin(), svg.end())};
+}
+
+Asset font_svg(const Movie& movie, std::size_t index)
+{
+    const auto& tag = movie.tags().at(index);
+    if (!tag.character_id || (tag.code != 10 && tag.code != 48 && tag.code != 75))
+        throw std::runtime_error("Cette police ne contient pas de tracés de glyphes SWF.");
+    const auto table = font_glyphs(movie, *tag.character_id);
+    if (table.offsets.size() < 2)
+        throw std::runtime_error("Cette police ne contient aucun glyphe incorporé.");
+    constexpr unsigned columns = 8, cell_width = 72, cell_height = 76;
+    const auto count = static_cast<unsigned>(std::min<std::size_t>(table.offsets.size() - 1, 512));
+    const auto labels = font_glyph_labels(movie, *tag.character_id);
+    auto svg = std::format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\">\n<title>{} / {} glyphes</title>\n",
+        columns * cell_width, ((count + columns - 1) / columns) * cell_height, count, table.offsets.size() - 1);
+    for (unsigned i = 0; i < count; ++i)
+    {
+        const auto x = i % columns * cell_width, y = i / columns * cell_height;
+        svg += std::format("<rect x=\"{}\" y=\"{}\" width=\"66\" height=\"70\" rx=\"4\" fill=\"#262e39\"/>\n", x + 3, y + 3);
+        const auto glyph = glyph_path(table, i);
+        if (!glyph.empty())
+            svg += std::format("<path fill=\"#f2f4f8\" fill-rule=\"evenodd\" transform=\"translate({} {}) scale({:g})\" d=\"{}\"/>\n",
+                x + 15, y + 47, 35.0 / table.units, glyph);
+        const auto label = i < labels.size() && labels[i] != L'\uFFFD' ?
+            std::format("U+{:04X}", static_cast<unsigned>(labels[i])) : std::format("#{}", i);
+        svg += std::format("<text x=\"{}\" y=\"{}\" fill=\"#aebdd0\" font-size=\"10\">{}</text>\n", x + 11, y + 65, label);
+        if (svg.size() > max_text_size)
+            break;
+    }
+    svg += "</svg>";
     return {L".svg", Bytes(svg.begin(), svg.end())};
 }
 }

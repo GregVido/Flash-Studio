@@ -1,6 +1,9 @@
 #include "Binary.hpp"
 
 #include <Windows.h>
+#include <array>
+#include <bit>
+#include <format>
 
 namespace flash
 {
@@ -77,6 +80,8 @@ struct CodeTable
     ByteView codes;
     bool wide{};
     unsigned page{};
+    ByteView advances;
+    unsigned units = 1024;
 
     wchar_t glyph(unsigned index) const
     {
@@ -124,7 +129,14 @@ CodeTable font_codes(const Movie& movie, unsigned id)
         input.skip(codes_offset - (input.position() - offset_base));
         const auto wide_codes = (flags & 4) != 0;
         const auto page = movie.header().version >= 6 ? 0 : flags & 64 ? shift_jis : windows_latin;
-        return {input.take(count * (wide_codes ? 2u : 1u)), wide_codes, page};
+        const auto codes = input.take(count * (wide_codes ? 2u : 1u));
+        ByteView advances;
+        if ((flags & 128) && input.remaining() >= 6 + count * 2u)
+        {
+            input.skip(6);
+            advances = input.take(count * 2u);
+        }
+        return {codes, wide_codes, page, advances, code == 75 ? 20480u : 1024u};
     }
     if (code != 10)
         return {};
@@ -141,7 +153,7 @@ CodeTable font_codes(const Movie& movie, unsigned id)
         if (info == 62)
             input.skip(1);
         const auto page = movie.header().version >= 6 ? 0 : flags & 16 ? shift_jis : windows_latin;
-        return {input.take(input.remaining()), (flags & 1) != 0, page};
+        return {input.take(input.remaining()), (flags & 1) != 0, page, {}, 1024};
     }
     return {};
 }
@@ -196,6 +208,192 @@ std::string static_text(const Movie& movie, std::size_t index)
     }
     return encode_string(result, CP_UTF8);
 }
+
+class TextBits
+{
+public:
+    explicit TextBits(Bytes& bytes) : bytes_(bytes) {}
+    void put(std::uint32_t value, unsigned width)
+    {
+        while (width)
+        {
+            if (!used_)
+                bytes_.push_back(0);
+            --width;
+            bytes_.back() |= static_cast<std::uint8_t>(((value >> width) & 1) << (7 - used_));
+            used_ = (used_ + 1) % 8;
+        }
+    }
+private:
+    Bytes& bytes_;
+    unsigned used_ = 0;
+};
+
+Bytes edit_static_text(const Movie& movie, std::size_t index, std::wstring_view text)
+{
+    const auto original = movie.data(index);
+    const auto alpha = movie.tags()[index].code == 33;
+    Reader input(original);
+    const auto character = input.u16();
+    std::array<std::int32_t, 4> bounds{};
+    {
+        BitReader rect(input);
+        const auto width = rect.unsigned_bits(5);
+        for (auto& coordinate : bounds)
+            coordinate = rect.signed_bits(width);
+    }
+    const auto matrix_start = input.position();
+    read_matrix(input);
+    const auto matrix_length = input.position() - matrix_start;
+    const auto glyph_bits = input.u8(), advance_bits = input.u8();
+    if (glyph_bits > 32 || advance_bits > 32)
+        throw std::runtime_error("En-tête de texte SWF invalide.");
+    struct Style
+    {
+        unsigned font{}, height{};
+        std::array<std::uint8_t, 4> color{0, 0, 0, 255};
+        bool operator==(const Style&) const = default;
+    };
+    Style read_style;
+    std::optional<Style> style;
+    std::vector<std::pair<std::int64_t, int>> origins;
+    std::unordered_map<unsigned, int> advances;
+    std::int64_t x = 0;
+    int y = 0;
+    while (const auto flags = input.u8())
+    {
+        if (!(flags & 128))
+            throw std::runtime_error("Enregistrement de texte SWF invalide.");
+        if (flags & 8)
+            read_style.font = input.u16();
+        if (flags & 4)
+        {
+            auto color = input.take(alpha ? 4 : 3);
+            std::ranges::copy(color, read_style.color.begin());
+        }
+        if (flags & 1)
+            x = std::bit_cast<std::int16_t>(input.u16());
+        if (flags & 2)
+            y = std::bit_cast<std::int16_t>(input.u16());
+        if (flags & 8)
+            read_style.height = input.u16();
+        const auto count = input.u8();
+        if (count)
+        {
+            if (style && *style != read_style)
+                throw std::runtime_error("Ce texte statique utilise plusieurs styles de glyphes.");
+            style = read_style;
+            if (origins.empty() || origins.back().second != y)
+                origins.emplace_back(x, y);
+        }
+        BitReader entries(input);
+        for (unsigned i = 0; i < count; ++i)
+        {
+            const auto glyph = entries.unsigned_bits(glyph_bits);
+            const auto advance = entries.signed_bits(advance_bits);
+            advances.try_emplace(glyph, advance);
+            x += advance;
+        }
+    }
+    if (!style || !style->font || !style->height)
+        throw std::runtime_error("Le texte statique n’a pas de police incorporée.");
+    const auto font = font_codes(movie, style->font);
+    const auto glyph_count = font.codes.size() / (font.wide ? 2 : 1);
+    std::unordered_map<wchar_t, unsigned> glyphs;
+    for (unsigned i = 0; i < glyph_count; ++i)
+        if (const auto glyph = font.glyph(i); glyph != L'\uFFFD')
+            glyphs.try_emplace(glyph, i);
+    const auto index_width = std::max(1u, static_cast<unsigned>(
+        std::bit_width(static_cast<unsigned>(glyph_count ? glyph_count - 1 : 0))));
+    const auto allowed = [](std::int64_t value) { return value >= INT16_MIN && value <= INT16_MAX; };
+    const int step = origins.size() > 1 ? origins[1].second - origins[0].second : static_cast<int>(style->height * 6 / 5);
+    Bytes records;
+    std::size_t line = 0;
+    for (std::size_t start = 0; start < text.size(); ++line)
+    {
+        const auto end = text.find_first_of(L"\r\n", start);
+        const auto current = text.substr(start, end == std::wstring_view::npos ? end : end - start);
+        auto baseline = line < origins.size() ? std::int64_t{origins[line].second} :
+            origins.back().second + static_cast<std::int64_t>(line + 1 - origins.size()) * step;
+        const auto origin = line < origins.size() ? origins[line].first : origins.back().first;
+        if (!allowed(origin) || !allowed(baseline))
+            throw std::runtime_error("Le texte dépasse les coordonnées SWF disponibles.");
+        auto right = origin;
+        for (std::size_t first = 0; first < current.size() || !first; first += 255)
+        {
+            records.push_back(first ? 0x80 : 0x8F);
+            if (!first)
+            {
+                put16(records, static_cast<std::uint16_t>(style->font));
+                append(records, ByteView{style->color}.first(alpha ? 4 : 3));
+                put16(records, static_cast<std::uint16_t>(origin));
+                put16(records, static_cast<std::uint16_t>(baseline));
+                put16(records, static_cast<std::uint16_t>(style->height));
+            }
+            const auto part = current.substr(first, 255);
+            records.push_back(static_cast<std::uint8_t>(part.size()));
+            TextBits entries(records);
+            for (const auto letter : part)
+            {
+                const auto glyph = glyphs.find(letter);
+                if (glyph == glyphs.end())
+                    throw std::runtime_error(std::format("Le caractère U+{:04X} est absent de la police incorporée.",
+                        static_cast<unsigned>(letter)));
+                int advance = static_cast<int>(style->height / 2);
+                if (const auto previous = advances.find(glyph->second); previous != advances.end())
+                    advance = previous->second;
+                else if (glyph->second < font.advances.size() / 2)
+                {
+                    Reader metric(font.advances.subspan(glyph->second * 2));
+                    advance = std::bit_cast<std::int16_t>(metric.u16()) * static_cast<int>(style->height) /
+                        static_cast<int>(font.units);
+                }
+                if (!allowed(advance))
+                    throw std::runtime_error("Avance de glyphe hors limites.");
+                entries.put(glyph->second, index_width);
+                entries.put(static_cast<std::uint16_t>(advance), 16);
+                right += advance;
+                if (right < -(1ll << 30) || right >= (1ll << 30))
+                    throw std::runtime_error("Largeur du texte SWF hors limites.");
+            }
+        }
+        bounds[0] = static_cast<std::int32_t>(std::min<std::int64_t>(bounds[0], origin));
+        bounds[1] = static_cast<std::int32_t>(std::max<std::int64_t>(bounds[1], right));
+        bounds[2] = static_cast<std::int32_t>(std::min<std::int64_t>(bounds[2], baseline - style->height));
+        bounds[3] = static_cast<std::int32_t>(std::max<std::int64_t>(bounds[3], baseline + style->height / 4));
+        if (end == std::wstring_view::npos)
+            break;
+        start = end + 1 + (text[end] == L'\r' && end + 1 < text.size() && text[end + 1] == L'\n');
+    }
+    Bytes payload;
+    put16(payload, character);
+    unsigned width = 1;
+    for (const auto coordinate : bounds)
+        width = std::max(width, 1u + std::bit_width(static_cast<unsigned>(coordinate < 0 ? ~coordinate : coordinate)));
+    if (width > 31)
+        throw std::runtime_error("Bornes de texte SWF hors limites.");
+    TextBits rectangle(payload);
+    rectangle.put(width, 5);
+    for (const auto coordinate : bounds)
+        rectangle.put(static_cast<std::uint32_t>(coordinate), width);
+    append(payload, original.subspan(matrix_start, matrix_length));
+    payload.push_back(static_cast<std::uint8_t>(index_width));
+    payload.push_back(16);
+    append(payload, records);
+    payload.push_back(0);
+    return payload;
+}
+}
+
+std::vector<wchar_t> font_glyph_labels(const Movie& movie, unsigned id)
+{
+    const auto table = font_codes(movie, id);
+    std::vector<wchar_t> labels;
+    const auto count = table.codes.size() / (table.wide ? 2 : 1);
+    labels.reserve(count);
+    for (unsigned i = 0; i < count; ++i)
+        labels.push_back(table.glyph(i));
+    return labels;
 }
 
 std::string extract_text(const Movie& movie, std::size_t index)
@@ -216,13 +414,15 @@ std::string extract_text(const Movie& movie, std::size_t index)
 Movie Movie::replace_text(std::size_t index, std::string_view utf8) const
 {
     const auto code = tags_.at(index).code;
-    if (code != 37 && code != 77)
-        throw std::runtime_error("Seuls les champs de texte dynamiques et les métadonnées peuvent être édités ici.");
+    if (code != 11 && code != 33 && code != 37 && code != 77)
+        throw std::runtime_error("Ce tag ne contient pas de texte éditable.");
     if (utf8.size() > max_text_size || utf8.find('\0') != std::string_view::npos)
         throw std::runtime_error("Texte trop long ou contenant un caractère nul.");
     if (utf8.starts_with("\xEF\xBB\xBF"))
         utf8.remove_prefix(3);
     const auto decoded = decode_string(utf8, CP_UTF8, MB_ERR_INVALID_CHARS);
+    if (code == 11 || code == 33)
+        return replace_tag(index, edit_static_text(*this, index, decoded));
     const auto text = code == 37 && header_.version < 6 ? encode_string(decoded, windows_latin) : std::string(utf8);
     Bytes payload;
     if (code == 37)
