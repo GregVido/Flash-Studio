@@ -54,6 +54,18 @@ struct ScriptTraits
 
 using CapturedVariables = std::map<unsigned, std::string>;
 using DecoderName = std::pair<std::string, std::string>;
+using SymbolNames = std::set<std::string, std::less<>>;
+using NameReplacements = std::map<std::string, std::string, std::less<>>;
+
+bool obfuscated_identifier(std::string_view word)
+{
+    if (word.empty())
+        return false;
+    const auto pattern = word.starts_with("_e_") ? word.substr(3) : word;
+    return word.size() >= 96 || std::ranges::any_of(word, [](unsigned char c) { return c < 32 || c == 127; }) ||
+        (pattern.find('-') != std::string_view::npos && pattern.find_first_not_of("-_") == std::string_view::npos);
+}
+
 struct StringDecoders
 {
     std::map<DecoderName, StringDecoder> methods;
@@ -270,6 +282,9 @@ public:
     Bytes replace_method(unsigned method, std::string_view assembly) const;
     Bytes replace_string(unsigned index, std::string_view text) const;
     std::size_t obfuscated_methods() const;
+    void collect_obfuscated_names(SymbolNames& symbols, SymbolNames* classes = nullptr) const;
+    void collect_renamed_classes(const NameReplacements& symbols, NameReplacements& links) const;
+    Bytes rename_identifiers(const NameReplacements& symbols) const;
     AbcDeobfuscation deobfuscate(std::optional<std::size_t> type, StringDecoders* decoders = nullptr) const;
     void register_string_decoders(StringDecoders& decoders, const std::map<std::string, std::size_t>& class_counts) const;
     std::vector<AbcMethod> catalog() const;
@@ -316,6 +331,7 @@ private:
     std::vector<float> floats_;
     std::vector<std::array<float, 4>> float4s_;
     std::vector<std::string> strings_;
+    std::set<unsigned> parameter_names_;
     std::size_t strings_begin_{}, strings_end_{};
     std::vector<std::pair<std::size_t, std::size_t>> string_ranges_{{0, 0}};
     std::vector<Multiname> multinames_;
@@ -429,7 +445,11 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
         for (unsigned i = 0; i < params; ++i)
         {
             const auto fallback = std::format("arg{}", i + 1);
-            auto parameter = (flags & 128) ? identifier(at(strings_, input.u30()), fallback) : fallback;
+            const auto index = flags & 128 ? input.u30() : 0;
+            const auto& raw = at(strings_, index);
+            if (obfuscated_identifier(raw))
+                parameter_names_.insert(index);
+            auto parameter = identifier(raw, fallback);
             if (!used.insert(parameter).second)
             {
                 parameter = fallback;
@@ -2380,8 +2400,61 @@ std::size_t Abc::obfuscated_methods() const
     {
         const auto& method = methods_[body.method];
         const auto first_local = static_cast<unsigned>(method.types.size() + 1 + (method.rest || method.arguments));
-        return has_boolean_prelude(body.code, first_local, body.locals);
+        return has_boolean_prelude(body.code, first_local, body.locals) || has_discarded_closure_prelude(body.code);
     }));
+}
+
+void Abc::collect_obfuscated_names(SymbolNames& symbols, SymbolNames* classes) const
+{
+    const auto collect = [this](SymbolNames& names, unsigned index)
+    {
+        if (index < strings_.size() && obfuscated_identifier(strings_[index]))
+            names.insert(strings_[index]);
+    };
+    for (const auto& entry : multinames_)
+        if (entry.kind == 0x07 || entry.kind == 0x09 || entry.kind == 0x0F)
+            collect(symbols, entry.string);
+    for (const auto index : parameter_names_)
+        collect(symbols, index);
+    if (classes)
+        for (const auto index : class_names_)
+            collect(*classes, at(multinames_, index).string);
+}
+
+void Abc::collect_renamed_classes(const NameReplacements& symbols, NameReplacements& links) const
+{
+    for (const auto index : class_names_)
+    {
+        const auto& entry = at(multinames_, index);
+        const auto& name = at(strings_, entry.string);
+        const auto& package = at(strings_, at(namespaces_, entry.ns));
+        if (const auto found = symbols.find(name); found != symbols.end())
+        {
+            if (package.empty())
+                links.emplace(name, found->second);
+            else
+                for (const auto separator : {".", "::"})
+                    links.emplace(package + separator + name, package + separator + found->second);
+        }
+    }
+}
+
+Bytes Abc::rename_identifiers(const NameReplacements& symbols) const
+{
+    Bytes result;
+    std::size_t copied = 0;
+    for (unsigned i = 1; i < strings_.size(); ++i)
+        if (const auto alias = symbols.find(strings_[i]); alias != symbols.end())
+        {
+            const auto [begin, end] = string_ranges_[i];
+            append(result, bytes_.subspan(copied, begin - copied));
+            put_u30(result, static_cast<unsigned>(alias->second.size()));
+            append(result, {reinterpret_cast<const std::uint8_t*>(alias->second.data()), alias->second.size()});
+            copied = end;
+        }
+    if (copied)
+        append(result, bytes_.subspan(copied));
+    return result;
 }
 
 bool Abc::public_name(unsigned index, std::string_view package, std::string_view local) const
@@ -3185,20 +3258,67 @@ Movie replace_abc(const Movie& movie, std::size_t index, ByteView abc)
     return movie.replace_tag(index, bytes);
 }
 
-std::size_t detect_as3_obfuscation(const Movie& movie)
+As3Obfuscation detect_as3_obfuscation(const Movie& movie)
 {
-    std::size_t total = 0;
+    As3Obfuscation result;
+    script::SymbolNames symbols;
     for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
         if (movie.tags()[tag].code == 72 || movie.tags()[tag].code == 82)
         {
-            try { total += AbcModule(abc_bytecode(movie, tag)).obfuscated_methods(); }
+            try
+            {
+                const script::Abc module(abc_bytecode(movie, tag));
+                result.methods += module.obfuscated_methods();
+                module.collect_obfuscated_names(symbols);
+            }
             catch (const std::runtime_error&) {}
         }
-    return total;
+    result.identifiers = symbols.size();
+    return result;
 }
 
 namespace
 {
+void append_linked_class(Bytes& result, const script::NameReplacements& names, Reader& input, bool& changed)
+{
+    const auto name = input.cstring();
+    const auto found = names.find(name);
+    const auto& value = found == names.end() ? name : found->second;
+    changed |= found != names.end();
+    append(result, {reinterpret_cast<const std::uint8_t*>(value.data()), value.size()});
+    result.push_back(0);
+}
+
+Bytes rename_linked_classes(unsigned code, ByteView payload, const script::NameReplacements& names)
+{
+    Reader input(payload);
+    Bytes result;
+    bool changed = false;
+    if (code == 76)
+    {
+        const auto count = input.u16();
+        append(result, payload.first(2));
+        for (unsigned i = 0; i < count; ++i)
+        {
+            append(result, input.take(2));
+            append_linked_class(result, names, input, changed);
+        }
+    }
+    else
+    {
+        const auto flags = input.u8(), extra = input.u8();
+        if (!(extra & 8) && !((extra & 16) && (flags & 2)))
+            return {};
+        input.skip(2);
+        append(result, payload.first(input.position()));
+        append_linked_class(result, names, input, changed);
+    }
+    if (!changed)
+        return {};
+    append(result, input.take(input.remaining()));
+    return result;
+}
+
 SwfDeobfuscation rewrite_as3(const Movie& movie, std::optional<std::size_t> selected, std::optional<std::size_t> type,
     script::StringDecoders* decoders)
 {
@@ -3262,5 +3382,56 @@ SwfDeobfuscation simplify_as3_strings(const Movie& movie, std::optional<std::siz
     if (decoders.methods.empty())
         return {};
     return rewrite_as3(movie, selected, type, &decoders);
+}
+
+SwfDeobfuscation rename_as3_identifiers(const Movie& movie)
+{
+    std::vector<std::pair<std::size_t, script::Abc>> modules;
+    script::SymbolNames names, classes;
+    for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
+        if (movie.tags()[tag].code == 72 || movie.tags()[tag].code == 82)
+        {
+            try { modules.emplace_back(tag, script::Abc(abc_bytecode(movie, tag))); }
+            catch (const std::runtime_error&) { return {}; }
+            modules.back().second.collect_obfuscated_names(names, &classes);
+        }
+    if (names.empty())
+        return {};
+
+    // Pick a single spelling for each identifier across ABC blocks, including dynamic lookups by exact name.
+    std::set<std::string_view> occupied;
+    for (const auto& module : modules)
+        occupied.insert(module.second.strings().begin(), module.second.strings().end());
+    script::NameReplacements replacements, class_links;
+    unsigned class_number = 0, member_number = 0;
+    for (const auto& name : names)
+    {
+        std::string alias;
+        const bool is_class = classes.contains(name);
+        do
+        {
+            alias = is_class ? std::format("Class_{}", ++class_number) : std::format("symbol_{}", ++member_number);
+        } while (occupied.contains(alias));
+        replacements.emplace(name, std::move(alias));
+    }
+    for (const auto& module : modules)
+        module.second.collect_renamed_classes(replacements, class_links);
+    replacements.insert(class_links.begin(), class_links.end());
+
+    SwfDeobfuscation result;
+    const auto current = [&]() -> const Movie& { return result.movie ? *result.movie : movie; };
+    for (const auto& [tag, module] : modules)
+        if (const auto abc = module.rename_identifiers(replacements); !abc.empty())
+            result.movie = replace_abc(current(), tag, abc);
+    if (!class_links.empty())
+        for (std::size_t tag = 0; tag < movie.tags().size(); ++tag)
+        {
+            const auto code = movie.tags()[tag].code;
+            if (code == 76 || code == 70 || code == 94)
+                if (const auto linkage = rename_linked_classes(code, movie.data(tag), class_links); !linkage.empty())
+                    result.movie = current().replace_tag(tag, linkage);
+        }
+    result.report.renamed_identifiers = names.size();
+    return result;
 }
 }

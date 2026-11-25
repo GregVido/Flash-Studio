@@ -188,6 +188,14 @@ constexpr unsigned nop = 0x02, pop = 0x29, dup = 0x2A, swap = 0x2B;
 constexpr unsigned jump = 0x10, if_true = 0x11, if_false = 0x12;
 constexpr unsigned push_true = 0x26, push_false = 0x27;
 
+bool discarded_closure(std::span<const Instruction> code, std::size_t offset, std::size_t end)
+{
+    const auto& branch = code[offset + 2];
+    return code[offset].op == 0x40 && code[offset + 1].op == pop && branch.op == jump &&
+        branch.args[0] > static_cast<std::int64_t>(branch.offset) + 4 &&
+        branch.args[0] < static_cast<std::int64_t>(end);
+}
+
 bool bool_value(unsigned op) { return op == push_true || op == push_false; }
 bool padding(unsigned op) { return op == nop || op == 0x09 || (op >= 0xEF && op <= 0xF3); }
 
@@ -224,6 +232,23 @@ std::set<std::int64_t> incoming_offsets(std::span<const Instruction> code, std::
     for (const auto& exception : exceptions)
         targets.insert(exception.target);
     return targets;
+}
+
+std::size_t remove_discarded_closures(std::vector<Instruction>& code, std::size_t end,
+    std::span<const ExceptionEntry> exceptions)
+{
+    if (std::ranges::none_of(code, [](const Instruction& item) { return item.op == 0x40; }))
+        return 0;
+    const auto incoming = incoming_offsets(code, exceptions);
+    std::size_t removed = 0;
+    for (std::size_t i = 0; i + 2 < code.size(); ++i)
+        if (discarded_closure(code, i, end) && !incoming.contains(static_cast<std::int64_t>(code[i + 1].offset)))
+        {
+            erase_instruction(code[i]);
+            erase_instruction(code[i + 1]);
+            removed += 2;
+        }
+    return removed;
 }
 
 struct ConstantStore { unsigned reg, value; };
@@ -527,10 +552,36 @@ bool has_boolean_prelude(ByteView bytes, unsigned first_local, unsigned locals)
     return false;
 }
 
+bool has_discarded_closure_prelude(ByteView bytes)
+{
+    try
+    {
+        Reader input(bytes);
+        std::array<Instruction, 3> window;
+        for (unsigned i = 0; i < 12 && input.remaining(); ++i)
+        {
+            auto item = decode(input);
+            const auto op = item.op;
+            if (i == 0 && op != 0xD0)
+                return false;
+            window[0] = std::move(window[1]);
+            window[1] = std::move(window[2]);
+            window[2] = std::move(item);
+            if (i >= 2 && discarded_closure(window, 0, bytes.size()))
+                return true;
+            if ((op >= 0x0C && op <= 0x1B) || op == 0x47 || op == 0x48 || op == 0x03)
+                break;
+        }
+    }
+    catch (const std::runtime_error&) {}
+    return false;
+}
+
 FlowChanges deobfuscate_flow(std::vector<Instruction>& code, std::size_t end,
     std::span<const ExceptionEntry> exceptions, unsigned locals_begin, unsigned local_count)
 {
     FlowChanges total;
+    total.removed = remove_discarded_closures(code, end, exceptions);
     for (unsigned pass = 0; pass < 32; ++pass)
     {
         const auto cleaned = simplify_flow(code, end, exceptions);

@@ -188,7 +188,7 @@ private:
     void status(std::wstring_view message, bool error = false);
     winrt::fire_and_forget save_movie();
     winrt::Windows::Foundation::IAsyncAction open_file(std::filesystem::path path, std::optional<std::size_t> initial_tag = {});
-    winrt::Windows::Foundation::IAsyncAction prompt_deobfuscation(std::size_t methods);
+    winrt::Windows::Foundation::IAsyncAction prompt_deobfuscation(flash::As3Obfuscation detection);
     winrt::Windows::Foundation::IAsyncAction deobfuscate_swf(bool whole_document);
     winrt::fire_and_forget show_selection();
     winrt::fire_and_forget export_tag(Export format);

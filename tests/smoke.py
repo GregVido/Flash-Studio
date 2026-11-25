@@ -408,6 +408,54 @@ jump exit
     assert "0 en échec" in run("abc-audit", clean_movie, "0")
     recompile(clean_source, "asc-desobfuscation")
 
+    closure = folder / "Fausse fermeture.swf"
+    closure_clean = folder / "Fausse fermeture nettoyée.swf"
+    closure_pcode = folder / "fermeture.pcode"
+    closure_pcode.write_text(""".stack 2
+.locals 1
+.scope 0 1
+getlocal0
+pushscope
+newfunction 2
+pop
+jump code
+pushbyte 99
+pop
+code: pushbyte 42
+returnvalue
+""", encoding="utf-8")
+    run("abc-edit", class_movie, "0", "2", closure_pcode, closure)
+    assert run("obfuscation-info", closure).strip() == "1"
+    run("deobfuscate", closure, closure_clean)
+    assert run("obfuscation-info", closure_clean).strip() == "0"
+    closure_result = run("abc-pcode", closure_clean, "0", "2")
+    assert "newfunction" not in closure_result and "pushbyte 99" not in closure_result
+    assert "return 42;" in run("abc-class", closure_clean, "0", "0")
+
+    long_class = b"\x01\x04\x05" * 36
+    long_literal = b"a text constant which should remain the same " * 2 + b"and is deliberately long"
+    obfuscated_names = class_abc.replace(b"\x05Probe", bytes([len(long_class)]) + long_class, 1)
+    obfuscated_names = obfuscated_names.replace(b"\x05value", b"\x06_e_-_-", 1)
+    obfuscated_names = obfuscated_names.replace(
+        b"\x07counter", b"\x07Class_1" + bytes([len(long_literal)]) + long_literal, 1)
+    obfuscated_names = obfuscated_names.replace(b"\x0b\x04demo", b"\x0c\x04demo", 1)
+    old_name = b"demo." + long_class + b"\0"
+    symbols = tag(76, struct.pack("<HH", 1, 0) + old_name)
+    placement = tag(70, struct.pack("<BBH", 0, 8, 1) + old_name)
+    name_body = class_header + tag(82, abc_header + obfuscated_names) + symbols + placement + tag(1) + tag(0)
+    name_movie, renamed = folder / "Noms obfusqués.swf", folder / "Noms nettoyés.swf"
+    name_original = swf(b"CWS", name_body, zlib.compress(name_body))
+    name_movie.write_bytes(name_original)
+    assert run("obfuscation-info", name_movie).strip() == "2"
+    assert "2 identifiants renommés" in run("deobfuscate", name_movie, renamed, "0", "0", "--names")
+    assert run("obfuscation-info", renamed).strip() == "0"
+    assert "Classe du document : demo.Class_2" in run("info", renamed)
+    assert "demo.Class_2" in run("inspect", renamed, "2")
+    renamed_source = run("abc-class", renamed, "0", "0")
+    assert "class Class_2" in renamed_source and "var symbol_1:int;" in renamed_source
+    assert long_literal in zlib.decompress(renamed.read_bytes()[8:])
+    assert name_movie.read_bytes() == name_original
+
     scrambled_code = loop_pcode.read_text(encoding="utf-8").replace(
         "payload: pushbyte 42\njump exit",
         "payload: getlocal0\niffalse alternative\npushbyte 42\njump exit\n"

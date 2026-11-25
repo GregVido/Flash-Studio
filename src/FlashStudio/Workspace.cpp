@@ -851,14 +851,14 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
     std::shared_ptr<flash::Movie> movie;
     std::vector<Row> rows;
     std::wstring problem;
-    std::size_t obfuscated_methods = 0;
+    flash::As3Obfuscation detection;
     try
     {
         const auto extension = lower(path.extension().wstring());
         movie = std::make_shared<flash::Movie>(extension == L".xml" ?
             flash::Movie::import_xml(flash::read_file(path)) : flash::Movie::open(path));
         rows = index_rows(*movie);
-        obfuscated_methods = flash::detect_as3_obfuscation(*movie);
+        detection = flash::detect_as3_obfuscation(*movie);
     }
     catch (const std::exception& error) { problem = widen(error.what()); }
     co_await ui;
@@ -882,11 +882,11 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
         status(problem, true);
     }
     save_.IsEnabled(static_cast<bool>(movie_));
-    if (obfuscated_methods && problem.empty())
-        co_await prompt_deobfuscation(obfuscated_methods);
+    if ((detection.methods || detection.identifiers) && problem.empty())
+        co_await prompt_deobfuscation(detection);
 }
 
-Windows::Foundation::IAsyncAction Workspace::prompt_deobfuscation(std::size_t methods)
+Windows::Foundation::IAsyncAction Workspace::prompt_deobfuscation(flash::As3Obfuscation detection)
 {
     const auto lifetime = shared_from_this();
     const auto input = movie_;
@@ -900,8 +900,8 @@ Windows::Foundation::IAsyncAction Workspace::prompt_deobfuscation(std::size_t me
         prompt.XamlRoot(root_.XamlRoot());
         prompt.Title(box_value(tr(L"Obfuscation ActionScript possible")));
         auto message = label(format_message(
-            L"Ce SWF semble obfusqué. Des motifs ont été détectés dans {} méthodes. Voulez-vous le désobfusquer ? Le résultat sera enregistré dans une copie.",
-            methods));
+            L"Ce SWF semble obfusqué ({} méthodes et {} identifiants suspects). Voulez-vous le désobfusquer ? Le résultat sera enregistré dans une copie.",
+            detection.methods, detection.identifiers));
         message.TextWrapping(TextWrapping::WrapWholeWords);
         message.TextTrimming(TextTrimming::None);
         prompt.Content(message);
@@ -924,7 +924,7 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
     const auto input = movie_;
     const auto original = file_;
     const auto current = mode_ == Mode::scripts && selected_script_ ? &script_entries_.at(*selected_script_) : nullptr;
-    const auto target = current && current->type ?
+    auto target = current && current->type ?
         std::optional(ScriptTarget{current->tag, current->type, current->qualified, {}, {}, View::source}) : std::nullopt;
     const auto tag = whole_document ? std::nullopt : selected_;
     const auto type = tag && current && current->tag == *tag ? current->type : std::nullopt;
@@ -956,34 +956,38 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
     co_await ui;
     if (closed_)
         co_return;
-    bool simplify_strings = false;
+    bool simplify_expressions = false;
     if (problem.empty())
     {
         try
         {
             ContentDialog prompt;
             prompt.XamlRoot(root_.XamlRoot());
-            prompt.Title(box_value(tr(L"Simplifier les chaînes ?")));
-            auto message = label(tr(L"Remplacer les appels aux décodeurs reconnus par les chaînes qu’ils renvoient ? Flash Studio évalue les calculs compatibles sans lancer le SWF."));
+            prompt.Title(box_value(tr(L"Simplifier les expressions et les noms ?")));
+            auto message = label(tr(L"Remplacer les appels aux décodeurs reconnus par leurs chaînes et renommer les identifiants obfusqués dans tout le SWF ? Flash Studio analyse le bytecode sans lancer le SWF."));
             message.TextWrapping(TextWrapping::WrapWholeWords);
             message.TextTrimming(TextTrimming::None);
             prompt.Content(message);
-            prompt.PrimaryButtonText(tr(L"Simplifier les chaînes"));
-            prompt.CloseButtonText(tr(L"Garder les appels"));
+            prompt.PrimaryButtonText(tr(L"Simplifier"));
+            prompt.CloseButtonText(tr(L"Passer la simplification"));
             prompt.DefaultButton(ContentDialogButton::Close);
-            simplify_strings = co_await prompt.ShowAsync() == ContentDialogResult::Primary;
+            simplify_expressions = co_await prompt.ShowAsync() == ContentDialogResult::Primary;
         }
         catch (const hresult_error& error) { problem = error.message(); }
     }
     if (closed_)
         co_return;
-    if (problem.empty() && (cleaned || simplify_strings))
+    if (problem.empty() && (cleaned || simplify_expressions))
     {
         co_await resume_background();
         try
         {
-            if (simplify_strings)
+            if (simplify_expressions)
             {
+                auto renamed = flash::rename_as3_identifiers(cleaned ? *cleaned : *input);
+                if (renamed.movie)
+                    cleaned = std::make_shared<flash::Movie>(std::move(*renamed.movie));
+                report.renamed_identifiers = renamed.report.renamed_identifiers;
                 auto simplified = flash::simplify_as3_strings(cleaned ? *cleaned : *input, tag, type);
                 if (simplified.movie)
                     cleaned = std::make_shared<flash::Movie>(std::move(*simplified.movie));
@@ -1001,7 +1005,7 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
     {
         set_busy(false);
         if (problem.empty())
-            status(tr(L"Aucune méthode n’a pu être simplifiée dans cette sélection."));
+            status(tr(L"Aucune modification à enregistrer."));
         else
             status(problem, true);
         co_return;
@@ -1045,13 +1049,18 @@ Windows::Foundation::IAsyncAction Workspace::deobfuscate_swf(bool whole_document
     remember_recent(*path);
     add_document(*path, std::move(cleaned), std::move(rows), tag);
     if (target)
+    {
+        if (report.renamed_identifiers)
+            target->qualified.clear();
         open_script_target(*target);
+    }
     else if (mode_ != Mode::scripts)
         switch_mode(Mode::scripts);
     auto summary = format_message(L"{} méthodes nettoyées · {} branchements constants simplifiés · {} méthodes ignorées",
         report.changed_methods, report.constant_branches, report.skipped_methods);
-    if (simplify_strings)
-        summary += format_message(L" · {} appels remplacés par des chaînes", report.resolved_strings);
+    if (simplify_expressions)
+        summary += format_message(L" · {} appels remplacés par des chaînes · {} identifiants renommés",
+            report.resolved_strings, report.renamed_identifiers);
     status(summary);
 }
 

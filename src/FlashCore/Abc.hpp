@@ -35,7 +35,13 @@ struct AbcClassSource
 
 struct DeobfuscationReport
 {
-    std::size_t changed_methods{}, removed_instructions{}, constant_branches{}, skipped_methods{}, resolved_strings{};
+    std::size_t changed_methods{}, removed_instructions{}, constant_branches{}, skipped_methods{}, resolved_strings{},
+        renamed_identifiers{};
+};
+
+struct As3Obfuscation
+{
+    std::size_t methods{}, identifiers{};
 };
 
 struct AbcDeobfuscation
@@ -79,9 +85,10 @@ private:
 
 ByteView abc_bytecode(const Movie& movie, std::size_t index);
 Movie replace_abc(const Movie& movie, std::size_t index, ByteView abc);
-std::size_t detect_as3_obfuscation(const Movie& movie);
+As3Obfuscation detect_as3_obfuscation(const Movie& movie);
 SwfDeobfuscation deobfuscate_as3(const Movie& movie, std::optional<std::size_t> tag = {},
     std::optional<std::size_t> type = {});
 SwfDeobfuscation simplify_as3_strings(const Movie& movie, std::optional<std::size_t> tag = {},
     std::optional<std::size_t> type = {});
+SwfDeobfuscation rename_as3_identifiers(const Movie& movie);
 }
