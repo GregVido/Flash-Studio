@@ -192,6 +192,107 @@ std::optional<unsigned> store_register(const Instruction& item)
     return {};
 }
 
+struct DirectCalls
+{
+    std::vector<bool> skipped, rewritten;
+};
+
+DirectCalls direct_receiver_calls(std::span<const Instruction> code, std::span<const Multiname> names,
+    const std::set<std::size_t>& entries, unsigned first_local)
+{
+    struct Call { std::size_t duplicate, receiver, call, kill; unsigned temporary; };
+    std::vector<Call> calls;
+    std::map<unsigned, unsigned> accesses, covered;
+    const auto member_kind = [&](const Instruction& item)
+    {
+        const auto index = static_cast<std::size_t>(item.args[0]);
+        return index < names.size() ? names[index].kind : 0;
+    };
+    const auto argument_inputs = [&](const Instruction& item, unsigned temporary) -> std::optional<unsigned>
+    {
+        if (const auto local = load_register(item))
+            return *local == temporary ? std::nullopt : std::optional{0u};
+        switch (item.op)
+        {
+        case 0x20: case 0x21: case 0x24: case 0x25: case 0x26: case 0x27: case 0x28:
+        case 0x2C: case 0x2D: case 0x2E: case 0x2F: case 0x5D: case 0x5E: case 0x60:
+            return 0;
+        case 0x66:
+            if (member_kind(item) == 0x07 || member_kind(item) == 0x09)
+                return 1;
+            break;
+        case 0x46:
+            if ((member_kind(item) == 0x07 || member_kind(item) == 0x09) && item.args[1] < 128)
+                return static_cast<unsigned>(item.args[1]) + 1;
+            break;
+        default:
+            if (item.op >= 0xA0 && item.op <= 0xAA)
+                return 2;
+        }
+        return {};
+    };
+    for (std::size_t i = 0; i + 7 < code.size(); ++i)
+    {
+        if (code[i].op != 0x2A)
+            continue;
+        const auto temporary = store_register(code[i + 1]);
+        if (!temporary || *temporary < first_local)
+            continue;
+        auto property = i + 2;
+        if (code[property].op == 0x2C)
+            ++property;
+        else if (load_register(code[property]) == 0u && code[property + 1].op == 0x66 &&
+            (member_kind(code[property + 1]) == 0x07 || member_kind(code[property + 1]) == 0x09))
+            property += 2;
+        else
+            continue;
+        const auto receiver = property + 1;
+        if (code[property].op != 0x66 || member_kind(code[property]) != 0x1B ||
+            load_register(code[receiver]) != temporary)
+            continue;
+        const auto next_entry = entries.upper_bound(code[i].offset);
+        unsigned arguments = 0;
+        for (auto j = receiver + 1; j + 2 < code.size() && j - i < 64; ++j)
+        {
+            if (next_entry != entries.end() && *next_entry <= code[j + 2].offset)
+                break;
+            if (code[j].op == 0x41 && code[j].args[0] == arguments && code[j + 1].op == 0x29 &&
+                code[j + 2].op == 0x08 && code[j + 2].args[0] == *temporary)
+            {
+                calls.push_back({i, receiver, j, j + 2, *temporary});
+                covered[*temporary] += 3;
+                i = j + 2;
+                break;
+            }
+            const auto consumed = argument_inputs(code[j], *temporary);
+            if (!consumed || *consumed > arguments)
+                break;
+            arguments = arguments + 1 - *consumed;
+        }
+    }
+    DirectCalls result{std::vector<bool>(code.size()), std::vector<bool>(code.size())};
+    if (calls.empty())
+        return result;
+    for (const auto& item : code)
+    {
+        if (const auto local = load_register(item))
+            ++accesses[*local];
+        if (const auto local = store_register(item))
+            ++accesses[*local];
+        if (item.op == 0x08 || item.op == 0x32 || item.op == 0x92 || item.op == 0x94 || item.op == 0xC2 || item.op == 0xC3)
+            for (const auto local : item.args)
+                ++accesses[static_cast<unsigned>(local)];
+    }
+    for (const auto& call : calls)
+        if (accesses.at(call.temporary) == covered.at(call.temporary))
+        {
+            result.skipped[call.duplicate] = result.skipped[call.duplicate + 1] =
+                result.skipped[call.receiver] = result.skipped[call.kill] = true;
+            result.rewritten[call.call] = true;
+        }
+    return result;
+}
+
 struct EnumerationLoop
 {
     unsigned object, variable, coercion, coercion_type;
@@ -284,6 +385,7 @@ public:
     std::size_t obfuscated_methods() const;
     void collect_obfuscated_names(SymbolNames& symbols, SymbolNames* classes = nullptr) const;
     void collect_renamed_classes(const NameReplacements& symbols, NameReplacements& links) const;
+    void suggest_field_names(NameReplacements& suggestions) const;
     Bytes rename_identifiers(const NameReplacements& symbols) const;
     AbcDeobfuscation deobfuscate(std::optional<std::size_t> type, StringDecoders* decoders = nullptr) const;
     void register_string_decoders(StringDecoders& decoders, const std::map<std::string, std::size_t>& class_counts) const;
@@ -332,6 +434,8 @@ private:
     std::vector<std::array<float, 4>> float4s_;
     std::vector<std::string> strings_;
     std::set<unsigned> parameter_names_;
+    std::map<unsigned, unsigned> property_keys_;
+    std::map<unsigned, std::string> field_names_;
     std::size_t strings_begin_{}, strings_end_{};
     std::vector<std::pair<std::size_t, std::size_t>> string_ranges_{{0, 0}};
     std::vector<Multiname> multinames_;
@@ -556,6 +660,47 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
     }
     if (input.remaining())
         throw std::runtime_error("Des octets suivent les corps de méthodes ABC.");
+
+    if (!property_keys_.empty())
+    {
+        try
+        {
+            for (const auto& body : bodies_)
+            {
+                Reader code(body.code);
+                while (!property_keys_.empty() && code.remaining())
+                {
+                    const auto item = decode(code);
+                    if (item.op == 0x6D || item.op == 0x6F || item.op == 0x6B)
+                    {
+                        property_keys_.clear();
+                        break;
+                    }
+                    if (item.op != 0x05 && item.op != 0x61 && item.op != 0x68 && item.op != 0x6A)
+                        continue;
+                    const auto& target = at(multinames_, static_cast<unsigned>(item.args[0]));
+                    if (!target.string)
+                    {
+                        if (target.kind != 0x1B)
+                            property_keys_.clear();
+                        else
+                            std::erase_if(property_keys_, [&](const auto& key)
+                            {
+                                const auto ns = at(multinames_, key.first).ns;
+                                const auto& namespaces = at(namespace_sets_, target.set);
+                                return std::ranges::find(namespaces, ns) != namespaces.end();
+                            });
+                        continue;
+                    }
+                    std::erase_if(property_keys_, [&](const auto& key)
+                    {
+                        return at(strings_, at(multinames_, key.first).string) == at(strings_, target.string);
+                    });
+                }
+            }
+        }
+        catch (const std::runtime_error&) { property_keys_.clear(); }
+    }
 }
 
 void Abc::label(unsigned method, std::string text)
@@ -618,6 +763,22 @@ void Abc::read_traits(Reader& input, AbcClass* type, bool static_member, ScriptT
             {
                 auto member = name(named, false);
                 auto declaration = modifier() + ((flags & 15) == 6 ? "const " : "var ") + member + ':' + name(field_type);
+                const auto& raw = at(strings_, at(multinames_, named).string);
+                const auto string_key = kind == 0x01 && public_name(field_type, "", "String") ?
+                    identifier(at(strings_, index), "") : std::string{};
+                if (!static_member && access(named) == "private " && !string_key.empty())
+                    property_keys_.try_emplace(named, index);
+                if (obfuscated_identifier(raw))
+                {
+                    std::string hint;
+                    if (!string_key.empty()) hint = string_key + "Name";
+                    else if (public_name(field_type, "flash.display", "Loader")) hint = "loader";
+                    else if (public_name(field_type, "flash.system", "LoaderContext")) hint = "loaderContext";
+                    else if (public_name(field_type, "flash.utils", "ByteArray")) hint = "byteArray";
+                    else if (public_name(field_type, "", "Class")) hint = "assetClass";
+                    if (!hint.empty())
+                        field_names_.try_emplace(named, std::move(hint));
+                }
                 if (index)
                 {
                     const auto value = initial_value(index, kind);
@@ -910,7 +1071,19 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             throw std::runtime_error("Trop d’instructions pour reconstruire cette méthode.");
         instructions.push_back(decode(code));
     }
+    if (body.exceptions.empty())
+        simplify_source_flow(instructions, body.code.size(), static_cast<unsigned>(argument_count + 1), body.locals);
     order_between_handlers(instructions, body);
+    std::set<std::size_t> control_entries;
+    for (const auto& item : instructions)
+        if (item.op >= 0x0C && item.op <= 0x1B)
+            for (const auto target : item.args)
+                if (target >= 0)
+                    control_entries.insert(static_cast<std::size_t>(target));
+    for (const auto& exception : body.exceptions)
+        control_entries.insert({exception.from, exception.to, exception.target});
+    auto direct_calls = direct_receiver_calls(instructions, multinames_, control_entries,
+        static_cast<unsigned>(argument_count + 1));
     const bool own_scope = instructions.size() >= 2 && instructions[0].op == 0xD0 && instructions[1].op == 0x30;
     const auto scope_start = own_scope ? std::size_t{2} : 0;
     std::optional<unsigned> activation;
@@ -922,8 +1095,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             throw std::runtime_error("Portée d’activation partagée avec un argument.");
     }
     const auto body_start = activation ? scope_start + 4 : 0;
-    for (const auto& item : instructions)
+    for (std::size_t i = 0; i < instructions.size(); ++i)
     {
+        if (direct_calls.skipped[i])
+            continue;
+        const auto& item = instructions[i];
         switch (item.op)
         {
         case 0x08: case 0x62: case 0x63: case 0x92: case 0x94: case 0xC2: case 0xC3:
@@ -1347,8 +1523,22 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 i = guarded->join - 1;
                 continue;
             }
+            if (direct_calls.skipped[i])
+                continue;
             const auto& item = instructions[i];
             const auto op = item.op;
+            if (i + 3 < last && instructions[i + 3].op == 0x29 &&
+                ((instructions[i + 2].op >= 0xA1 && instructions[i + 2].op <= 0xAA) ||
+                    (instructions[i + 2].op >= 0xC5 && instructions[i + 2].op <= 0xC7)) &&
+                numeric_constant(item) && numeric_constant(instructions[i + 1]))
+            {
+                const auto next_entry = control_entries.upper_bound(item.offset);
+                if (next_entry == control_entries.end() || *next_entry > instructions[i + 3].offset)
+                {
+                    i += 3;
+                    continue;
+                }
+            }
             const auto arg = [&](std::size_t index) { return static_cast<unsigned>(item.args.at(index)); };
             const auto lexical = [&]
             {
@@ -1371,7 +1561,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 {
                     if (descendant)
                         throw std::runtime_error("Nom de descendant XML calculé à l’exécution.");
-                    return '[' + stack.pop() + ']';
+                    const auto value = stack.pop();
+                    if (value.size() > 2 && value.front() == '"' && value.back() == '"')
+                        if (const auto key = identifier(std::string_view(value).substr(1, value.size() - 2), ""); !key.empty())
+                            return '.' + key;
+                    return '[' + value + ']';
                 }
                 if (entry.kind == 0x1C)
                     return separator + "@[" + stack.pop() + ']';
@@ -1408,6 +1602,15 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             {
                 const auto field = property();
                 return member(stack.pop(), field);
+            };
+            const auto read_property = [&]
+            {
+                const auto field = property();
+                const auto owner = stack.pop();
+                if (owner == "this")
+                    if (const auto key = property_keys_.find(arg(0)); key != property_keys_.end())
+                        return quote(at(strings_, key->second));
+                return member(owner, field);
             };
             const auto writable_local = [&](unsigned index)
             {
@@ -1776,6 +1979,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             case 0x41:
             {
                 const auto arguments = stack.arguments(arg(0), true, true);
+                if (direct_calls.rewritten[i])
+                {
+                    stack.push(stack.pop() + '(' + arguments + ')');
+                    break;
+                }
                 const auto receiver = stack.pop();
                 const auto function = stack.pop();
                 if (receiver == global_scope)
@@ -1811,7 +2019,8 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                     if (depth != 1 || i + 1 != instructions.size())
                         throw std::runtime_error("Retour conditionnel de l’initialiseur statique.");
                 }
-                else if (depth != 1 || i + 1 != last || name(method.result) != "void")
+                else if (depth != 1 || i + 1 != last ||
+                    (name(method.result) != "void" && !method.label.ends_with("::<init>")))
                     emit("return");
                 break;
             case 0x48: emit("return " + stack.pop_as3_value()); break;
@@ -1880,7 +2089,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 else
                     throw std::runtime_error("Objet de portée non reconnu.");
                 break;
-            case 0x66: stack.push(reference()); break;
+            case 0x66: stack.push(read_property()); break;
             case 0x6A: stack.push("delete " + reference()); break;
             case 0x6C: stack.push(slot_name(stack.pop())); break;
             case 0x6D:
@@ -2436,6 +2645,17 @@ void Abc::collect_renamed_classes(const NameReplacements& symbols, NameReplaceme
                 for (const auto separator : {".", "::"})
                     links.emplace(package + separator + name, package + separator + found->second);
         }
+    }
+}
+
+void Abc::suggest_field_names(NameReplacements& suggestions) const
+{
+    for (const auto& [id, hint] : field_names_)
+    {
+        const auto& name = at(strings_, at(multinames_, id).string);
+        const auto [known, inserted] = suggestions.try_emplace(name, hint);
+        if (!inserted && known->second != hint)
+            known->second.clear();
     }
 }
 
@@ -3402,16 +3622,27 @@ SwfDeobfuscation rename_as3_identifiers(const Movie& movie)
     std::set<std::string_view> occupied;
     for (const auto& module : modules)
         occupied.insert(module.second.strings().begin(), module.second.strings().end());
-    script::NameReplacements replacements, class_links;
+    script::NameReplacements replacements, class_links, suggestions;
+    for (const auto& module : modules)
+        module.second.suggest_field_names(suggestions);
+    script::SymbolNames aliases;
     unsigned class_number = 0, member_number = 0;
     for (const auto& name : names)
     {
         std::string alias;
         const bool is_class = classes.contains(name);
-        do
+        if (const auto hint = suggestions.find(name); !is_class && hint != suggestions.end() && !hint->second.empty())
         {
-            alias = is_class ? std::format("Class_{}", ++class_number) : std::format("symbol_{}", ++member_number);
-        } while (occupied.contains(alias));
+            alias = hint->second;
+            for (unsigned suffix = 2; occupied.contains(alias) || aliases.contains(alias); ++suffix)
+                alias = hint->second + std::to_string(suffix);
+        }
+        else
+            do
+            {
+                alias = is_class ? std::format("Class_{}", ++class_number) : std::format("symbol_{}", ++member_number);
+            } while (occupied.contains(alias) || aliases.contains(alias));
+        aliases.insert(alias);
         replacements.emplace(name, std::move(alias));
     }
     for (const auto& module : modules)

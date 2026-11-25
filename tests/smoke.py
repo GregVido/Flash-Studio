@@ -426,11 +426,68 @@ returnvalue
 """, encoding="utf-8")
     run("abc-edit", class_movie, "0", "2", closure_pcode, closure)
     assert run("obfuscation-info", closure).strip() == "1"
+    assert "return 42;" in run("abc-class", closure, "0", "0")
     run("deobfuscate", closure, closure_clean)
     assert run("obfuscation-info", closure_clean).strip() == "0"
     closure_result = run("abc-pcode", closure_clean, "0", "2")
     assert "newfunction" not in closure_result and "pushbyte 99" not in closure_result
     assert "return 42;" in run("abc-class", closure_clean, "0", "0")
+
+    undefined_local = folder / "Branchement sur un registre vierge.swf"
+    closure_pcode.write_text(""".stack 1
+.locals 2
+.scope 0 1
+getlocal0
+pushscope
+getlocal1
+not
+iftrue live
+pushbyte 99
+returnvalue
+live: pushbyte 42
+returnvalue
+""", encoding="utf-8")
+    run("abc-edit", class_movie, "0", "2", closure_pcode, undefined_local)
+    local_source = run("abc-class", undefined_local, "0", "0")
+    assert "return 42;" in local_source and "return 99;" not in local_source
+
+    dynamic_calls = class_abc.replace(b"\x07counter", b"\x07counter\x08toString", 1)
+    dynamic_calls = dynamic_calls.replace(b"\x0b\x04demo", b"\x0c\x04demo", 1)
+    old_namespaces = bytes([4, 0x16, 1, 0x16, 0, 0x16, 7, 0, 9])
+    new_namespaces = bytes([4, 0x16, 1, 0x16, 0, 0x16, 7, 2, 1, 2, 10])
+    dynamic_calls = dynamic_calls.replace(old_namespaces, new_namespaces, 1)
+    last_qname = dynamic_calls.index(b"\x07\x02\x0a") + 3
+    dynamic_calls = dynamic_calls[:last_qname] + bytes([0x1B, 1]) + dynamic_calls[last_qname:]
+    dynamic_input = folder / "Appel dynamique.swf"
+    dynamic_body = class_header + tag(82, abc_header + dynamic_calls) + class_suffix
+    dynamic_input.write_bytes(swf(b"FWS", dynamic_body, dynamic_body))
+    indirect_call = """.stack 2
+.locals 2
+.scope 0 1
+getlocal0
+pushscope
+getlocal0
+dup
+setlocal1
+pushstring 11
+getproperty 9
+getlocal1
+call 0
+pop
+kill 1
+pushbyte 42
+returnvalue
+"""
+    for code, output, compact in (
+        (indirect_call, "Appel compact.swf", True),
+        (indirect_call.replace("kill 1\n", "kill 1\ngetlocal1\npop\n"), "Registre relu après l’appel.swf", False),
+    ):
+        closure_pcode.write_text(code, encoding="utf-8")
+        destination = folder / output
+        run("abc-edit", dynamic_input, "0", "2", closure_pcode, destination)
+        direct_source = run("abc-class", destination, "0", "0")
+        assert ("this.toString();" in direct_source) == compact
+        assert (".call(local1)" in direct_source) != compact
 
     long_class = b"\x01\x04\x05" * 36
     long_literal = b"a text constant which should remain the same " * 2 + b"and is deliberately long"

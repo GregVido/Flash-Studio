@@ -110,6 +110,8 @@ FlowChanges simplify_flow(std::vector<Instruction>& instructions, std::size_t en
     std::span<const ExceptionEntry> exceptions = {});
 bool has_boolean_prelude(ByteView code, unsigned first_local, unsigned locals);
 bool has_discarded_closure_prelude(ByteView code);
+void simplify_source_flow(std::vector<Instruction>& code, std::size_t end,
+    unsigned first_local, unsigned locals);
 FlowChanges deobfuscate_flow(std::vector<Instruction>& instructions, std::size_t end,
     std::span<const ExceptionEntry> exceptions, unsigned first_local, unsigned locals);
 AssembledMethod assemble_method(std::string_view text);

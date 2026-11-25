@@ -234,21 +234,51 @@ std::set<std::int64_t> incoming_offsets(std::span<const Instruction> code, std::
     return targets;
 }
 
-std::size_t remove_discarded_closures(std::vector<Instruction>& code, std::size_t end,
-    std::span<const ExceptionEntry> exceptions)
+std::size_t remove_discarded_closures(std::vector<Instruction>& code, std::span<const ExceptionEntry> exceptions)
 {
     if (std::ranges::none_of(code, [](const Instruction& item) { return item.op == 0x40; }))
         return 0;
     const auto incoming = incoming_offsets(code, exceptions);
     std::size_t removed = 0;
-    for (std::size_t i = 0; i + 2 < code.size(); ++i)
-        if (discarded_closure(code, i, end) && !incoming.contains(static_cast<std::int64_t>(code[i + 1].offset)))
+    for (std::size_t i = 0; i + 1 < code.size(); ++i)
+        if (code[i].op == 0x40 && code[i + 1].op == pop &&
+            !incoming.contains(static_cast<std::int64_t>(code[i + 1].offset)))
         {
             erase_instruction(code[i]);
             erase_instruction(code[i + 1]);
             removed += 2;
         }
     return removed;
+}
+
+std::vector<std::size_t> unwritten_local_tests(std::span<const Instruction> code,
+    unsigned first_local, unsigned locals)
+{
+    if (first_local >= locals)
+        return {};
+    std::set<unsigned> written;
+    for (const auto& item : code)
+    {
+        if (const auto local = register_store(item))
+            written.insert(*local);
+        if (item.op == 0x32 || item.op == 0x92 || item.op == 0x94 || item.op == 0xC2 || item.op == 0xC3)
+            for (const auto local : item.args)
+                written.insert(static_cast<unsigned>(local));
+    }
+    std::vector<std::size_t> tests;
+    for (std::size_t i = 0; i + 1 < code.size(); ++i)
+    {
+        const auto local = register_read(code[i]);
+        if (!local || *local < first_local || *local >= locals || written.contains(*local))
+            continue;
+        auto consumer = i + 1;
+        if (code[consumer].op == 0x96)
+            ++consumer;
+        if (consumer == code.size() || (code[consumer].op != if_true && code[consumer].op != if_false))
+            continue;
+        tests.push_back(i);
+    }
+    return tests;
 }
 
 struct ConstantStore { unsigned reg, value; };
@@ -581,18 +611,25 @@ FlowChanges deobfuscate_flow(std::vector<Instruction>& code, std::size_t end,
     std::span<const ExceptionEntry> exceptions, unsigned locals_begin, unsigned local_count)
 {
     FlowChanges total;
-    total.removed = remove_discarded_closures(code, end, exceptions);
+    total.removed = remove_discarded_closures(code, exceptions);
     for (unsigned pass = 0; pass < 32; ++pass)
     {
         const auto cleaned = simplify_flow(code, end, exceptions);
         const auto jumps = flatten_adjacent_jumps(code);
         const auto locals = substitute_locals(code, exceptions, locals_begin, local_count);
+        const auto tests = unwritten_local_tests(code, locals_begin, local_count);
+        // Only substitute the Boolean conversion. Other uses must still see undefined.
+        for (const auto i : tests)
+        {
+            code[i].op = push_false;
+            code[i].args.clear();
+        }
         const auto folded = fold_boolean_sequences(code, exceptions);
         total.removed += cleaned.removed;
         total.redirected += cleaned.redirected + jumps;
         total.constant_branches += cleaned.constant_branches + folded.constant_branches;
-        total.constants += locals + folded.constants;
-        if (!cleaned.removed && !cleaned.redirected && !cleaned.constant_branches && !jumps && !locals &&
+        total.constants += locals + tests.size() + folded.constants;
+        if (!cleaned.removed && !cleaned.redirected && !cleaned.constant_branches && !jumps && !locals && tests.empty() &&
             !folded.constant_branches && !folded.constants)
             break;
     }
@@ -617,6 +654,17 @@ FlowChanges deobfuscate_flow(std::vector<Instruction>& code, std::size_t end,
         });
     }
     return total;
+}
+
+void simplify_source_flow(std::vector<Instruction>& code, std::size_t end,
+    unsigned first_local, unsigned locals)
+{
+    const auto closure = std::ranges::adjacent_find(code, [](const Instruction& left, const Instruction& right)
+    {
+        return left.op == 0x40 && right.op == pop;
+    });
+    if (closure != code.end() || !unwritten_local_tests(code, first_local, locals).empty())
+        deobfuscate_flow(code, end, {}, first_local, locals);
 }
 
 namespace
