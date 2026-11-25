@@ -1,4 +1,4 @@
-#include "Binary.hpp"
+#include "ShapeEditing.hpp"
 
 #include <array>
 #include <cmath>
@@ -39,42 +39,29 @@ struct Stroke
     std::vector<Edge> edges;
 };
 
-std::array<std::int32_t, 4> rect(Reader& input)
+Color svg_color(const ShapeColor& color)
 {
-    BitReader bits(input);
-    const auto size = bits.unsigned_bits(5);
-    return {bits.signed_bits(size), bits.signed_bits(size), bits.signed_bits(size), bits.signed_bits(size)};
+    return {color[0], color[1], color[2], color[3]};
 }
 
-Color rgb(Reader& input, bool alpha)
+Paint svg_paint(const ShapePaint& original, unsigned character, unsigned& serial)
 {
-    return {input.u8(), input.u8(), input.u8(), alpha ? input.u8() : 255u};
-}
-
-Paint read_paint(Reader& input, bool alpha, unsigned character, unsigned& serial)
-{
-    const auto type = input.u8();
+    const auto type = original.type;
     Paint paint;
-    if (type == 0)
+    if (!type)
     {
-        paint.color = rgb(input, alpha);
+        paint.color = svg_color(original.color);
         return paint;
     }
     if (type >= 0x40 && type <= 0x43)
     {
-        const auto id = input.u16();
         paint.id = std::format("clip-texture-{}-{}", character, ++serial);
-        paint.texture = Texture{id, read_matrix(input), (type & 1) == 0};
+        paint.texture = Texture{original.bitmap, original.matrix, (type & 1) == 0};
         return paint;
     }
-    if (type != 0x10 && type != 0x12 && type != 0x13)
-        throw std::runtime_error("Ce type de remplissage (texture ou bitmap) n’est pas pris en charge en SVG.");
-    const auto matrix = read_matrix(input);
-    const auto flags = input.u8();
+    const auto& matrix = original.matrix;
+    const auto flags = original.gradient_flags;
     constexpr std::string_view spread[]{"pad", "reflect", "repeat", "pad"};
-    const auto count = flags & 15;
-    if (!count)
-        throw std::runtime_error("Dégradé SWF sans points de couleur.");
     const auto element = type == 0x10 ? "linearGradient" : "radialGradient";
     paint.id = std::format("gradient-{}-{}", character, ++serial);
     paint.gradient = std::format("<{} id=\"{}\" gradientUnits=\"userSpaceOnUse\" "
@@ -86,18 +73,14 @@ Paint read_paint(Reader& input, bool alpha, unsigned character, unsigned& serial
     else
         paint.gradient += " cx=\"0\" cy=\"0\" r=\"16384\"";
     std::string stops;
-    for (int i = 0; i < count; ++i)
+    for (const auto& stop : original.stops)
     {
-        const auto ratio = input.u8() / 255.0;
-        const auto color = rgb(input, alpha);
+        const auto color = svg_color(stop.color);
         stops += std::format("<stop offset=\"{:g}\" stop-color=\"#{:02X}{:02X}{:02X}\" stop-opacity=\"{:g}\"/>",
-            ratio, color.r, color.g, color.b, color.a / 255.0);
+            stop.ratio / 255.0, color.r, color.g, color.b, color.a / 255.0);
     }
     if (type == 0x13)
-    {
-        const auto focal = std::bit_cast<std::int16_t>(input.u16()) / 256.0;
-        paint.gradient += std::format(" fx=\"{:g}\" fy=\"0\"", std::clamp(focal, -0.999, 0.999) * 16384);
-    }
+        paint.gradient += std::format(" fx=\"{:g}\" fy=\"0\"", std::clamp(original.focal / 256.0, -0.999, 0.999) * 16384);
     paint.gradient += std::format(">{}</{}>\n", stops, element);
     return paint;
 }
@@ -109,48 +92,6 @@ std::string paint_attribute(std::string_view attribute, const Paint& paint)
     const auto& color = paint.color;
     return std::format("{}=\"#{:02X}{:02X}{:02X}\" {}-opacity=\"{:g}\"",
         attribute, color.r, color.g, color.b, attribute, color.a / 255.0);
-}
-
-void styles(Reader& input, unsigned version, unsigned character, unsigned& serial,
-    std::vector<Fill>& fills, std::vector<Stroke>& lines)
-{
-    const auto count = [&]
-    {
-        const auto low = input.u8();
-        return low == 255 && version > 1 ? static_cast<unsigned>(input.u16()) : low;
-    };
-    const auto fill_count = count();
-    if (fills.size() + fill_count > 65536)
-        throw std::runtime_error("Trop de styles de remplissage.");
-    for (unsigned i = 0; i < fill_count; ++i)
-        fills.push_back({read_paint(input, version >= 3, character, serial), {}});
-    const auto line_count = count();
-    if (lines.size() + line_count > 65536)
-        throw std::runtime_error("Trop de styles de contour.");
-    for (unsigned i = 0; i < line_count; ++i)
-    {
-        Stroke line{};
-        line.width = input.u16();
-        if (version < 4)
-            line.paint.color = rgb(input, version == 3);
-        else
-        {
-            BitReader flags(input);
-            line.cap = flags.unsigned_bits(2);
-            line.join = flags.unsigned_bits(2);
-            const auto filled = flags.unsigned_bits(1);
-            flags.unsigned_bits(8);
-            line.no_close = flags.unsigned_bits(1) != 0;
-            flags.unsigned_bits(2);
-            if (line.join == 2)
-                line.miter = input.u16() / 256.0;
-            if (filled)
-                line.paint = read_paint(input, true, character, serial);
-            else
-                line.paint.color = rgb(input, true);
-        }
-        lines.push_back(std::move(line));
-    }
 }
 
 std::string coordinates(Point point) { return std::format("{} {}", point.x, point.y); }
@@ -265,94 +206,37 @@ std::string stroke_path(const Stroke& line)
 
 Asset export_shape(unsigned code, ByteView payload, const Movie* movie)
 {
-    const auto version = code == 2 ? 1u : code == 22 ? 2u : code == 32 ? 3u : 4u;
-    Reader input(payload);
-    const auto character = input.u16();
-    const auto bounds = rect(input);
-    bool winding = false;
-    if (version == 4)
-    {
-        rect(input);
-        winding = (input.u8() & 4) != 0;
-    }
+    const auto drawing = read_shape_drawing(code, payload);
+    const auto character = drawing.character;
+    const auto& bounds = drawing.bounds;
+    const bool winding = (drawing.flags & 4) != 0;
 
+    unsigned serial = 0;
     std::vector<Fill> fills(1);
     std::vector<Stroke> lines(1);
-    unsigned serial = 0;
-    styles(input, version, character, serial, fills, lines);
-    BitReader bits(input);
-    auto fill_bits = bits.unsigned_bits(4), line_bits = bits.unsigned_bits(4);
-    std::size_t fill0 = 0, fill1 = 0, line = 0, base_fill = 0, base_line = 0;
-    Point pen;
-    unsigned edges = 0;
-    const auto index = [&](unsigned size, std::size_t base, std::size_t count)
+    for (std::size_t i = 1; i < drawing.fills.size(); ++i)
+        fills.push_back({svg_paint(drawing.fills[i], character, serial), {}});
+    for (std::size_t i = 1; i < drawing.strokes.size(); ++i)
     {
-        const auto local = bits.unsigned_bits(size);
-        const auto global = local ? base + local : 0;
-        if (global >= count)
-            throw std::runtime_error("Indice de style de forme invalide.");
-        return global;
-    };
-    for (;;)
+        const auto& stroke = drawing.strokes[i];
+        lines.push_back({svg_paint(stroke.paint, character, serial), stroke.width,
+            static_cast<unsigned>(stroke.flags >> 14), static_cast<unsigned>((stroke.flags >> 12) & 3),
+            stroke.miter / 256.0, (stroke.flags & 4) != 0, {}});
+    }
+    const auto point = [](ShapePoint value) { return Point{value.x, value.y}; };
+    for (const auto& element : drawing.edges)
     {
-        if (bits.unsigned_bits(1))
+        Edge edge{point(element.from), point(element.to), {}};
+        if (element.control)
+            edge.bezier = point(*element.control);
+        if (element.stroke)
+            lines[element.stroke].edges.push_back(edge);
+        if (element.fill0 != element.fill1)
         {
-            if (++edges > 60'000)
-                throw std::runtime_error("Trop d’arêtes pour un export SVG.");
-            Edge edge{pen, {}, {}};
-            const auto straight = bits.unsigned_bits(1);
-            const auto size = bits.unsigned_bits(4) + 2;
-            if (!straight)
-            {
-                pen.x += bits.signed_bits(size);
-                pen.y += bits.signed_bits(size);
-                edge.bezier = pen;
-                pen.x += bits.signed_bits(size);
-                pen.y += bits.signed_bits(size);
-            }
-            else if (bits.unsigned_bits(1))
-            {
-                pen.x += bits.signed_bits(size);
-                pen.y += bits.signed_bits(size);
-            }
-            else if (bits.unsigned_bits(1))
-                pen.y += bits.signed_bits(size);
-            else
-                pen.x += bits.signed_bits(size);
-            edge.to = pen;
-            if (line)
-                lines[line].edges.push_back(edge);
-            if (fill0 != fill1)
-            {
-                if (fill0)
-                    fills[fill0].edges.push_back(edge);
-                if (fill1)
-                    fills[fill1].edges.push_back({edge.to, edge.from, edge.bezier});
-            }
-            continue;
-        }
-        const auto flags = bits.unsigned_bits(5);
-        if (!flags)
-            break;
-        if (flags & 1)
-        {
-            const auto size = bits.unsigned_bits(5);
-            pen = {bits.signed_bits(size), bits.signed_bits(size)};
-        }
-        if (flags & 2)
-            fill0 = index(fill_bits, base_fill, fills.size());
-        if (flags & 4)
-            fill1 = index(fill_bits, base_fill, fills.size());
-        if (flags & 8)
-            line = index(line_bits, base_line, lines.size());
-        if (flags & 16)
-        {
-            bits.align();
-            base_fill = fills.size() - 1;
-            base_line = lines.size() - 1;
-            styles(input, version, character, serial, fills, lines);
-            fill_bits = bits.unsigned_bits(4);
-            line_bits = bits.unsigned_bits(4);
+            if (element.fill0)
+                fills[element.fill0].edges.push_back(edge);
+            if (element.fill1)
+                fills[element.fill1].edges.push_back({edge.to, edge.from, edge.bezier});
         }
     }
     const auto width = (std::max)(std::int64_t{bounds[1]} - bounds[0], std::int64_t{20});

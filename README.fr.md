@@ -19,6 +19,8 @@ Flash Studio est un atelier Windows pour inspecter, modifier et exporter des fic
 
 ## Prévisualiser et exporter
 
+- Sélectionnez une ressource **DefineShape**, puis **Éditer la forme**. Déplacez ou redimensionnez les éléments, retouchez les sommets et les poignées de courbe, modifiez les couleurs et les dégradés ou dessinez des rectangles, des ellipses, des lignes et des polygones. Enregistrez le dessin modifié dans une copie du SWF.
+
 ![Une forme en mouvement exportée depuis un sprite SWF de douze images](docs/media/sprite-export.gif)
 
 Lisez, mettez en pause et parcourez les sprites à la cadence du SWF. Exportez les formes et les images de la timeline en SVG, PNG, BMP, JPEG ou TIFF. Les sprites animés s’exportent en GIF, APNG ou SVG animé, avec une échelle réglable, par exemple 400 %. Vous pouvez exporter une ressource, un lot de visuels ou un projet extrait contenant ActionScript, P-code, données brutes et médias.

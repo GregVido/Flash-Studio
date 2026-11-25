@@ -1,4 +1,5 @@
 #include "Workspace.hpp"
+#include "../FlashCore/ShapeEditing.hpp"
 #include "UiStyle.hpp"
 #include "ResourceIds.h"
 
@@ -154,6 +155,7 @@ void Workspace::start(const std::filesystem::path& initial_file, std::optional<s
         closed_ = true;
         if (source_web_)
             source_web_.Close();
+        close_shape_editor();
         close_frame_player();
         if (thumbnails_cancel_)
             thumbnails_cancel_->store(true, std::memory_order_relaxed);
@@ -532,6 +534,12 @@ void Workspace::build()
     Automation::AutomationProperties::SetName(replace_, tr(L"Remplacer les données binaires"));
     replace_.Click([this](auto&&, auto&&) { edit_tag(); });
     view_actions.Children().Append(replace_);
+    shape_edit_ = Button();
+    shape_edit_.Content(box_value(tr(L"Éditer la forme")));
+    shape_edit_.FontSize(12);
+    shape_edit_.Visibility(Visibility::Collapsed);
+    shape_edit_.Click([this](auto&&, auto&&) { edit_shape(); });
+    view_actions.Children().Append(shape_edit_);
     source_edit_ = Button();
     source_edit_.Content(box_value(tr(L"Éditer le code")));
     source_edit_.FontSize(12);
@@ -869,7 +877,10 @@ Windows::Foundation::IAsyncAction Workspace::open_file(std::filesystem::path pat
         status(tr(L"Fichier ouvert"));
     }
     if (!problem.empty())
+    {
+        sync_folder_selection(false);
         status(problem, true);
+    }
     save_.IsEnabled(static_cast<bool>(movie_));
     if (obfuscated_methods && problem.empty())
         co_await prompt_deobfuscation(obfuscated_methods);
@@ -1053,6 +1064,7 @@ void Workspace::update_document()
         (static_cast<double>(header.right) - header.left) / 20.0,
         (static_cast<double>(header.bottom) - header.top) / 20.0, header.frames_per_second));
     window_.Title(L"Flash Studio — " + file_.filename().wstring());
+    sync_folder_selection();
     if (active_document_)
     {
         auto& document = documents_[*active_document_];
@@ -1203,6 +1215,8 @@ void Workspace::select_tag(std::optional<std::size_t> index, std::optional<View>
         return;
     const bool changed = selected_ != index;
     selected_ = index;
+    const bool editable_shape = index && flash::is_editable_shape(movie_->tags()[*index].code);
+    shape_edit_.Visibility(editable_shape ? Visibility::Visible : Visibility::Collapsed);
     if (changed)
     {
         abc_.reset();
@@ -1238,7 +1252,8 @@ void Workspace::select_tag(std::optional<std::size_t> index, std::optional<View>
     tabs_[3].IsEnabled(index.has_value());
     tabs_[4].IsEnabled(scene);
     for (std::size_t i = 0; i < tabs_.size(); ++i)
-        tabs_[i].Visibility(mode_ != Mode::tags && !tabs_[i].IsEnabled() ? Visibility::Collapsed : Visibility::Visible);
+        tabs_[i].Visibility((mode_ != Mode::tags || editable_shape) && !tabs_[i].IsEnabled() ?
+            Visibility::Collapsed : Visibility::Visible);
     if (view_ == View::frame && !scene)
         next = View::details;
     replace_.Visibility(can_replace ? Visibility::Visible : Visibility::Collapsed);
@@ -2056,9 +2071,10 @@ bool Workspace::find_class_compiler(bool prompt)
     return false;
 }
 
-std::optional<std::filesystem::path> Workspace::swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix)
+std::optional<std::filesystem::path> Workspace::swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix,
+    const Window& owner)
 {
-    const auto output = dialog(window_, true, L".swf", original.stem().wstring() + std::wstring(suffix));
+    const auto output = dialog(owner ? owner : window_, true, L".swf", original.stem().wstring() + std::wstring(suffix));
     if (output && (lower(output->extension().wstring()) != L".swf" ||
         CompareStringOrdinal(output->c_str(), -1, original.c_str(), -1, TRUE) == CSTR_EQUAL ||
         (std::filesystem::exists(*output) && std::filesystem::equivalent(*output, original))))

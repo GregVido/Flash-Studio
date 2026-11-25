@@ -26,7 +26,9 @@ bool has_fallback_bodies(std::string_view source)
         source.find("Initialiseur statique non reconstruit") != std::string_view::npos;
 }
 
-std::filesystem::path editor_assets()
+}
+
+std::filesystem::path Workspace::editor_assets()
 {
     std::array<wchar_t, 32768> path{};
     const auto length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
@@ -39,6 +41,8 @@ std::filesystem::path editor_assets()
     return assets;
 }
 
+namespace
+{
 void put(const JsonObject& target, std::wstring_view key, std::wstring_view text)
 {
     target.SetNamedValue(hstring(key), JsonValue::CreateStringValue(hstring(text)));

@@ -140,6 +140,7 @@ private:
     void build_folder_panel(const winrt::Microsoft::UI::Xaml::Controls::Grid& main);
     void toggle_folder_panel();
     void filter_folder();
+    void sync_folder_selection(bool scroll = true);
     void follow_swf_reference(std::wstring_view reference);
     winrt::Windows::Foundation::IAsyncAction open_folder(std::filesystem::path path);
     void register_shortcuts();
@@ -198,6 +199,11 @@ private:
     winrt::Windows::Foundation::IAsyncOperation<double> choose_export_scale();
     winrt::fire_and_forget edit_abc(AbcEdit operation);
     struct SourceEdit;
+    struct ShapeEdit;
+    static std::filesystem::path editor_assets();
+    winrt::fire_and_forget edit_shape();
+    winrt::fire_and_forget save_shape(std::shared_ptr<ShapeEdit> session, winrt::hstring message);
+    void close_shape_editor();
     void build_source_editor(const winrt::Microsoft::UI::Xaml::Controls::Grid& preview);
     winrt::fire_and_forget create_class();
     winrt::fire_and_forget edit_class();
@@ -209,7 +215,8 @@ private:
     void set_editor_state(std::wstring_view message, bool error = false);
     void post_editor_action(std::wstring_view action);
     bool find_class_compiler(bool prompt);
-    std::optional<std::filesystem::path> swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix);
+    std::optional<std::filesystem::path> swf_copy_path(const std::filesystem::path& original, std::wstring_view suffix,
+        const winrt::Microsoft::UI::Xaml::Window& owner = nullptr);
     winrt::fire_and_forget edit_tag();
     winrt::fire_and_forget drop(winrt::Microsoft::UI::Xaml::DragEventArgs args);
 
@@ -224,7 +231,7 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::Grid source_editor_{nullptr}, source_actions_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::WebView2 source_web_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button source_create_{nullptr}, source_edit_{nullptr}, source_save_{nullptr},
-        source_cancel_{nullptr}, script_pin_{nullptr};
+        source_cancel_{nullptr}, script_pin_{nullptr}, shape_edit_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock source_feedback_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ComboBox abc_owner_{nullptr}, abc_method_list_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutSubItem animation_export_{nullptr};
@@ -248,6 +255,7 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::TextBlock folder_title_{nullptr}, folder_count_{nullptr};
     struct FolderIndex;
     std::shared_ptr<const FolderIndex> folder_;
+    std::vector<std::size_t> folder_visible_;
     winrt::Microsoft::UI::Xaml::Controls::TabView documents_bar_{nullptr}, script_tabs_bar_{nullptr};
     std::vector<OpenDocument> documents_;
     std::optional<std::size_t> active_document_;
@@ -305,6 +313,7 @@ private:
     double export_scale_ = 1;
     std::filesystem::path class_compiler_;
     std::shared_ptr<SourceEdit> source_session_;
+    std::shared_ptr<ShapeEdit> shape_session_;
     std::uint64_t source_revision_ = 0;
     bool source_preparing_ = false, source_ready_ = false, code_initializing_ = false, code_unavailable_ = false;
     bool code_visible_ = false, code_instructions_ = false;

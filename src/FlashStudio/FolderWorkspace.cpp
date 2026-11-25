@@ -199,7 +199,10 @@ void Workspace::toggle_folder_panel()
     {
         folder_pane_.IsPaneOpen(!folder_pane_.IsPaneOpen());
         if (folder_pane_.IsPaneOpen())
+        {
+            sync_folder_selection();
             folder_search_.Focus(FocusState::Keyboard);
+        }
     }
 }
 
@@ -210,11 +213,48 @@ void Workspace::filter_folder()
     auto query = lower(folder_search_.Text().c_str());
     std::ranges::replace(query, L'\\', L'/');
     std::vector<Windows::Foundation::IInspectable> visible;
-    for (const auto& file : folder_->files)
+    folder_visible_.clear();
+    for (std::size_t index = 0; index < folder_->files.size(); ++index)
+    {
+        const auto& file = folder_->files[index];
         if (query.empty() || file.key.find(query) != std::wstring::npos)
+        {
+            folder_visible_.push_back(index);
             visible.push_back(box_value(hstring(file.relative)));
+        }
+    }
     folder_count_.Text(format_message(L"{} sur {} SWF", visible.size(), folder_->files.size()));
     folder_list_.ItemsSource(single_threaded_observable_vector<Windows::Foundation::IInspectable>(std::move(visible)));
+    sync_folder_selection(false);
+}
+
+void Workspace::sync_folder_selection(bool scroll)
+{
+    if (!folder_)
+        return;
+    int selected = -1;
+    if (!file_.empty())
+    {
+        const auto relative = std::filesystem::path(path_key(file_)).lexically_relative(path_key(folder_->root));
+        if (within(relative))
+        {
+            const auto key = path_key(relative);
+            const auto file_key = [&](std::size_t index) -> const std::wstring& { return folder_->files[index].key; };
+            const auto found = std::ranges::lower_bound(folder_visible_, key, {}, file_key);
+            if (found != folder_visible_.end() && file_key(*found) == key)
+                selected = static_cast<int>(found - folder_visible_.begin());
+            else if (scroll && folder_pane_.IsPaneOpen() && !folder_search_.Text().empty() && !folder_->exact(relative).empty())
+            {
+                folder_search_.Text(L"");
+                if (folder_list_.SelectedIndex() >= 0)
+                    folder_list_.ScrollIntoView(folder_list_.SelectedItem());
+                return;
+            }
+        }
+    }
+    folder_list_.SelectedIndex(selected);
+    if (selected >= 0 && scroll && folder_pane_.IsPaneOpen())
+        folder_list_.ScrollIntoView(folder_list_.SelectedItem());
 }
 
 Windows::Foundation::IAsyncAction Workspace::open_folder(std::filesystem::path path)
@@ -249,6 +289,7 @@ Windows::Foundation::IAsyncAction Workspace::open_folder(std::filesystem::path p
     else
         folder_search_.Text(L"");
     folder_pane_.IsPaneOpen(true);
+    sync_folder_selection();
     folder_search_.Focus(FocusState::Programmatic);
     status(format_message(L"{} SWF dans l’espace de travail", folder_->files.size()));
 }

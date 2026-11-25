@@ -40,6 +40,7 @@
     <ClCompile Include="Compression.cpp" />
     <ClCompile Include="Assets.cpp" />
     <ClCompile Include="Shapes.cpp" />
+    <ClCompile Include="ShapeEditing.cpp" />
     <ClCompile Include="Text.cpp" />
     <ClCompile Include="TextSvg.cpp" />
     <ClCompile Include="Xml.cpp" />
@@ -61,6 +62,7 @@
     <ClCompile Include="..\..\third_party\lzma\LzmaDec.c"><WarningLevel>Level3</WarningLevel></ClCompile>
     <ClInclude Include="Swf.hpp" />
     <ClInclude Include="Binary.hpp" />
+    <ClInclude Include="ShapeEditing.hpp" />
     <ClInclude Include="Compression.hpp" />
     <ClInclude Include="ActionScript.hpp" />
     <ClInclude Include="Avm2Code.hpp" />

@@ -19,6 +19,8 @@ Flash Studio is a Windows workbench for inspecting, editing and exporting SWF fi
 
 ## Preview and export
 
+- Select a **DefineShape** resource and choose **Edit shape**. Move or resize elements, edit vertices and curve handles, change solid fills and gradients, or draw rectangles, ellipses, lines and polygons. Save a copy of the SWF with the edited drawing.
+
 ![A moving shape exported from a twelve-frame SWF sprite](docs/media/sprite-export.gif)
 
 Play, pause and scrub sprite previews at the SWF's frame rate. Export shapes and frames as SVG, PNG, BMP, JPEG or TIFF. Export an animated sprite as GIF, APNG or animated SVG, with an optional output scale such as 400%. Export individual resources, visual batches or an extracted project containing ActionScript, P-code, raw tags and media.

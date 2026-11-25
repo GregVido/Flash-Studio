@@ -250,11 +250,11 @@ def check(exe, folder, asc=None):
     assert "<path" not in first_frame.read_text(encoding="utf-8")
     assert "<path" in last_frame.read_text(encoding="utf-8")
 
-    class_abc = struct.pack("<HH", 16, 46) + bytes([0, 0, 0, 10])
-    for item in (b"demo", b"Probe", b"Base", b"value", b"int", b"read", b"library", b"XML", b"flag"):
+    class_abc = struct.pack("<HH", 16, 46) + bytes([2, 7, 0, 0, 11])  # int pool includes the value 7
+    for item in (b"demo", b"Probe", b"Base", b"value", b"int", b"read", b"library", b"XML", b"flag", b"counter"):
         class_abc += bytes([len(item)]) + item
-    class_abc += bytes([4, 0x16, 1, 0x16, 0, 0x16, 7, 0, 8])  # Namespaces and multinames
-    for namespace, name in ((1, 2), (3, 3), (2, 4), (2, 5), (2, 6), (2, 8), (2, 9)):
+    class_abc += bytes([4, 0x16, 1, 0x16, 0, 0x16, 7, 0, 9])  # Namespaces and multinames
+    for namespace, name in ((1, 2), (3, 3), (2, 4), (2, 5), (2, 6), (2, 8), (2, 9), (2, 10)):
         class_abc += bytes([7, namespace, name])
     class_abc += bytes([3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0])  # Three method signatures
     class_abc += bytes([0, 1, 1, 2, 1, 0, 0, 2])  # Metadata and the instance header
@@ -441,6 +441,40 @@ returnvoid
     initialized_source = run("abc-class", initialized, "0", "0")
     assert "public static const flag:int = 42;" in initialized_source, initialized_source
     recompile(initialized_source, "asc-initialiseur-statique")
+
+    defaults_abc = class_abc[:static_traits] + bytes([
+        2, 8, 0, 1, 4, 1, 3, 7, 0, 2, 4, 0
+    ]) + class_abc[static_traits + 1:]
+    defaults_body = class_header + tag(82, abc_header + defaults_abc) + class_suffix
+    defaults_movie = folder / "Valeur statique déclarée.swf"
+    defaults_movie.write_bytes(swf(b"FWS", defaults_body, defaults_body))
+    static_pcode = """.stack 2
+.locals 1
+.scope 0 1
+getlocal0
+pushscope
+findproperty 7
+pushbyte 42
+setproperty 7
+findproperty 8
+pushbyte 7
+setproperty 8
+returnvoid
+"""
+    loop_pcode.write_text(static_pcode, encoding="utf-8")
+    repeated = folder / "Valeur statique répétée.swf"
+    run("abc-edit", defaults_movie, "0", "1", loop_pcode, repeated)
+    static_source = run("abc-class", repeated, "0", "0")
+    assert static_source.index("public static var flag:int = 42;") < static_source.index(
+        "public static var counter:int = 7;") < static_source.index("public function Probe()")
+    assert "\n        flag = " not in static_source and "\n        counter = " not in static_source
+    recompile(static_source, "asc-valeurs-statiques")
+
+    loop_pcode.write_text(static_pcode.replace("pushbyte 7\n", "pushbyte 8\n"), encoding="utf-8")
+    different = folder / "Valeur statique différente.swf"
+    run("abc-edit", defaults_movie, "0", "1", loop_pcode, different)
+    different_source = run("abc-class", different, "0", "0")
+    assert "public static var counter:int = 7;" in different_source and "\n        counter = 8;" in different_source
 
     loop_pcode.write_text(""".stack 2
 .locals 2

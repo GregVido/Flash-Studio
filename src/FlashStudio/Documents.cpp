@@ -236,6 +236,7 @@ void Workspace::close_document(std::size_t index)
     abc_.reset();
     abc_method_.reset();
     file_.clear();
+    sync_folder_selection(false);
     reset_explorer();
     refresh_script_tabs();
     workarea_.Visibility(Visibility::Collapsed);

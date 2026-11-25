@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="stylesheet" href="shape-editor.css">
+  <title>Éditeur de formes</title>
+</head>
+<body>
+  <header>
+    <div class="identity"><span class="mark">⌑</span><strong id="title">Forme</strong></div>
+    <div class="actions">
+      <button id="undo" data-label="undo">Annuler la modification</button>
+      <button id="redo" data-label="redo">Rétablir</button>
+      <button id="close" data-label="close">Fermer</button>
+      <button class="primary" id="save" data-label="save" disabled>Enregistrer une copie</button>
+    </div>
+  </header>
+  <main>
+    <nav id="tools" aria-label="Outils">
+      <button data-tool="select" data-label="select" aria-pressed="true"><span>↖</span><kbd>V</kbd></button>
+      <button data-tool="nodes" data-label="nodes" aria-pressed="false"><span>◇</span><kbd>A</kbd></button>
+      <div class="rule"></div>
+      <button data-tool="rectangle" data-label="rectangle" aria-pressed="false"><span>□</span><kbd>R</kbd></button>
+      <button data-tool="ellipse" data-label="ellipse" aria-pressed="false"><span>○</span><kbd>O</kbd></button>
+      <button data-tool="line" data-label="line" aria-pressed="false"><span>╱</span><kbd>L</kbd></button>
+      <button data-tool="pen" data-label="pen" aria-pressed="false"><span>⬡</span><kbd>P</kbd></button>
+    </nav>
+    <section id="stage" aria-label="Dessin">
+      <svg id="canvas" tabindex="0" xmlns="http://www.w3.org/2000/svg">
+        <defs id="definitions"></defs>
+        <g id="drawing"></g>
+        <g id="transient" pointer-events="none"></g>
+        <g id="selection"></g>
+      </svg>
+      <div class="zoom">
+        <button id="zoom-out" data-label="zoomOut">−</button>
+        <output id="zoom-level">100 %</output>
+        <button id="zoom-in" data-label="zoomIn">+</button>
+        <button id="fit" data-label="fit">Ajuster</button>
+      </div>
+    </section>
+    <aside aria-label="Propriétés">
+      <section class="elements">
+        <h2 data-label="elements">Éléments</h2>
+        <div id="elements" role="list"></div>
+      </section>
+      <section id="properties"></section>
+    </aside>
+  </main>
+  <footer><output id="status" aria-live="polite"></output><span id="dimensions"></span></footer>
+  <script type="module" src="shape-editor.js"></script>
+</body>
+</html>

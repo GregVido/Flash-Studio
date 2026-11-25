@@ -2940,8 +2940,8 @@ AbcClassSource Abc::render_class(std::size_t index) const
     std::map<std::size_t, std::string> static_values;
     std::vector<std::size_t> static_order;
     std::string static_code;
-    if (const auto initializer = std::ranges::find_if(type.members, [](const auto& member) { return member.declaration.empty(); });
-        initializer != type.members.end() && initializer->method && at(body_by_method_, *initializer->method))
+    const auto initializer = std::ranges::find_if(type.members, [](const auto& member) { return member.declaration.empty(); });
+    if (initializer != type.members.end() && initializer->method && at(body_by_method_, *initializer->method))
     {
         try
         {
@@ -2965,18 +2965,27 @@ AbcClassSource Abc::render_class(std::size_t index) const
                 auto field = statement.substr(4, equal - 4);
                 if (field.starts_with(prefix))
                     field.remove_prefix(prefix.size());
-                const auto member = std::ranges::find_if(type.members, [&](const auto& value)
+                const auto matches_field = [&](const auto& value)
                 {
-                    return !value.method && value.name == field && value.declaration.find("static ") != std::string::npos &&
-                        value.declaration.find(" = ") == std::string::npos;
-                });
+                    return !value.method && value.name == field && value.declaration.find("static ") != std::string::npos;
+                };
+                const auto member = std::ranges::find_if(type.members, matches_field);
                 const auto position = static_cast<std::size_t>(member - type.members.begin());
-                if (member == type.members.end() || static_values.contains(position))
+                if (member == type.members.end() || static_values.contains(position) ||
+                    std::ranges::find_if(std::next(member), type.members.end(), matches_field) != type.members.end())
                 {
                     declarations_only = false;
                     break;
                 }
-                static_values.emplace(position, std::string(statement.substr(equal + 3, statement.size() - equal - 4)));
+                const auto value = statement.substr(equal + 3, statement.size() - equal - 4);
+                if (const auto declared = member->declaration.find(" = "); declared != std::string::npos &&
+                    std::string_view(member->declaration).substr(declared + 3) != value)
+                {
+                    declarations_only = false;
+                    break;
+                }
+                // Compilers can emit the same default in the trait table and in the class initializer.
+                static_values.emplace(position, value);
                 static_order.push_back(position);
                 remaining.remove_prefix(end == std::string_view::npos ? remaining.size() : end + 2);
             }
@@ -3013,36 +3022,60 @@ AbcClassSource Abc::render_class(std::size_t index) const
             remaining.remove_prefix(end == std::string_view::npos ? remaining.size() : end + 1);
         }
     };
-    bool previous_field = false;
-    result.member_lines.resize(type.members.size());
+    std::vector<std::size_t> order;
+    order.reserve(type.members.size());
     auto next_static = static_order.begin();
-    for (std::size_t slot = 0; slot < type.members.size(); ++slot)
+    for (std::size_t i = 0; i < type.members.size(); ++i)
+        if (!type.members[i].method)
+            // Preserve the execution order of the assignments folded into these declarations.
+            order.push_back(static_values.contains(i) ? *next_static++ : i);
+    if (initializer != type.members.end())
+        order.push_back(static_cast<std::size_t>(initializer - type.members.begin()));
+    for (std::size_t i = 0; i < type.members.size(); ++i)
+        if (type.members[i].method && !type.members[i].declaration.empty())
+            order.push_back(i);
+
+    bool previous_field = false;
+    std::optional<std::size_t> first_static_line;
+    result.member_lines.resize(type.members.size());
+    for (const auto position : order)
     {
-        // Initializers may reference fields initialized earlier in the original bytecode.
-        const auto position = static_values.contains(slot) ? *next_static++ : slot;
         const auto& member = type.members[position];
+        if (member.declaration.empty())
+        {
+            result.member_lines[position] = first_static_line.value_or(line);
+            if (!static_code.empty())
+            {
+                if (previous_field)
+                    add("\n");
+                result.member_lines[position] = line;
+                append_body(static_code, "    ");
+                add("\n");
+                previous_field = false;
+            }
+            continue;
+        }
         if (previous_field && member.method)
             add("\n");
         result.member_lines[position] = line;
         previous_field = !member.method;
-        if (member.declaration.empty())
-        {
-            if (!static_code.empty())
-                append_body("\n" + static_code, "    ");
-            continue;
-        }
         add("        " + names.spell(member.declaration));
         if (const auto value = static_values.find(position); value != static_values.end())
         {
-            add(" = ");
-            std::string_view remaining(value->second);
-            for (auto end = remaining.find('\n'); end != std::string_view::npos; end = remaining.find('\n'))
+            if (!first_static_line)
+                first_static_line = line;
+            if (member.declaration.find(" = ") == std::string::npos)
             {
-                add(remaining.substr(0, end + 1));
-                add("    ");
-                remaining.remove_prefix(end + 1);
+                add(" = ");
+                std::string_view remaining(value->second);
+                for (auto end = remaining.find('\n'); end != std::string_view::npos; end = remaining.find('\n'))
+                {
+                    add(remaining.substr(0, end + 1));
+                    add("    ");
+                    remaining.remove_prefix(end + 1);
+                }
+                add(remaining);
             }
-            add(remaining);
         }
         if (!member.method || !at(body_by_method_, *member.method) || type.interface_type)
         {
