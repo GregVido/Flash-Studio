@@ -700,6 +700,35 @@ returnvalue
     assert "return value;" in activation_source, activation_source
     recompile(activation_source, "asc-activation")
 
+    no_default = folder / "Initialisation implicite d’une variable capturée.swf"
+    activation_code = loop_pcode.read_text(encoding="utf-8").replace(
+        "getscopeobject 1\npushbyte 42", "getscopeobject 1\npushbyte 0\nsetslot 1\ngetscopeobject 1\npushbyte 42")
+    loop_pcode.write_text(activation_code, encoding="utf-8")
+    run("abc-edit", activation_movie, "0", "2", loop_pcode, no_default)
+    assert "value = 0;" not in run("abc-class", no_default, "0", "0")
+
+    shared_exit = folder / "Retour partagé.swf"
+    loop_pcode.write_text(""".stack 1
+.locals 1
+.scope 0 1
+getlocal0
+pushscope
+getlocal0
+iffalse done
+getlocal0
+iffalse other
+jump done
+other: getlocal0
+iftrue done
+pushbyte 42
+returnvalue
+done: returnvoid
+""", encoding="utf-8")
+    run("abc-edit", class_movie, "0", "1", loop_pcode, shared_exit)
+    shared_exit_source = run("abc-source", shared_exit, "0", "1")
+    assert shared_exit_source.count("if (") == 3 and "return 42;" in shared_exit_source, shared_exit_source
+    assert "Reconstruction indisponible" not in shared_exit_source, shared_exit_source
+
     loop_pcode.write_text(""".stack 1
 .locals 1
 .scope 0 0

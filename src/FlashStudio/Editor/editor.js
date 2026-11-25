@@ -39,10 +39,12 @@ const theme = EditorView.theme({
     ".cm-scroller::-webkit-scrollbar": { width: "10px", height: "10px" },
     ".cm-scroller::-webkit-scrollbar-thumb": { backgroundColor: "#4e5967", border: "2px solid #121418", borderRadius: "6px" },
     ".cm-scroller::-webkit-scrollbar-corner": { backgroundColor: "#121418" },
-    ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "#1d242f" },
+    ".cm-activeLine": { backgroundColor: "#7394c012" },
+    ".cm-activeLineGutter": { backgroundColor: "#1d242f" },
     ".cm-cursor": { borderLeftColor: "#ffba72" },
-    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
-        { backgroundColor: "#34435c" },
+    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#355278" },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#3b65a2" },
+    ".cm-content ::selection": { backgroundColor: "#3b65a2" },
     ".cm-tooltip": { backgroundColor: "#20242c", color: "#f2f4f8", borderColor: "#414a58", borderRadius: "5px" },
     ".cm-tooltip-autocomplete ul": { fontFamily: "Consolas, monospace", fontSize: "13px" },
     ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "#354969", color: "#fff" },
@@ -110,6 +112,7 @@ function openPreview(message) {
         doc: message.source,
         extensions: [
             theme, basicSetup, message.instructions ? assembly : language(catalog), syntaxHighlighting(colors),
+            message.instructions ? [] : EditorView.lineWrapping,
             EditorState.readOnly.of(true),
             EditorState.phrases.of(french ? frenchPhrases : {}),
             EditorView.contentAttributes.of({ tabindex: "0", "aria-label": document.title }),
@@ -163,7 +166,7 @@ function replaceSession(message) {
     const state = EditorState.create({
         doc: message.source,
         extensions: [
-            theme, basicSetup, locking.of([]), language(catalog), syntaxHighlighting(colors),
+            theme, basicSetup, EditorView.lineWrapping, locking.of([]), language(catalog), syntaxHighlighting(colors),
             autocompletion({ override: [suggest(catalog, message.qualified)], maxRenderedOptions: 10 }),
             lintGutter(),
             EditorState.phrases.of(french ? frenchPhrases : {}),

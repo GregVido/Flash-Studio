@@ -1075,11 +1075,12 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         simplify_source_flow(instructions, body.code.size(), static_cast<unsigned>(argument_count + 1), body.locals);
     order_between_handlers(instructions, body);
     std::set<std::size_t> control_entries;
+    std::set<std::size_t> shared_entries;
     for (const auto& item : instructions)
         if (item.op >= 0x0C && item.op <= 0x1B)
             for (const auto target : item.args)
-                if (target >= 0)
-                    control_entries.insert(static_cast<std::size_t>(target));
+                if (target >= 0 && !control_entries.insert(static_cast<std::size_t>(target)).second)
+                    shared_entries.insert(static_cast<std::size_t>(target));
     for (const auto& exception : body.exceptions)
         control_entries.insert({exception.from, exception.to, exception.target});
     auto direct_calls = direct_receiver_calls(instructions, multinames_, control_entries,
@@ -1308,6 +1309,42 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             }
             slot_declarations.add(variable + ";\n");
         }
+    auto first_statement = body_start;
+    if (activation && body.exceptions.empty())
+        while (first_statement + 2 < instructions.size())
+        {
+            const auto& scope = instructions[first_statement];
+            const auto& value = instructions[first_statement + 1];
+            auto store = first_statement + 2;
+            const auto& conversion = instructions[store];
+            const auto op = conversion.op;
+            const bool coerced = (op >= 0x73 && op <= 0x76) || (op >= 0x80 && op <= 0x85) || op == 0x88;
+            if (coerced)
+                ++store;
+            if (scope.op != 0x65 || scope.args[0] != static_cast<unsigned>(own_scope) ||
+                store >= instructions.size() || instructions[store].op != 0x6D)
+                break;
+            const auto entry = control_entries.lower_bound(scope.offset);
+            if (entry != control_entries.end() && *entry <= instructions[store].offset)
+                break;
+            const auto slot = std::ranges::find(body.slots, static_cast<unsigned>(instructions[store].args[0]), &ActivationSlot::id);
+            if (slot == body.slots.end() || slot->initial)
+                break;
+            const auto type = name(slot->type);
+            const auto default_value =
+                (type == "*" && value.op == 0x21 && (!coerced || op == 0x82)) ||
+                (type == "Number" && value.op == 0x28 && (!coerced || op == 0x75 || op == 0x84)) ||
+                (type == "Boolean" && value.op == 0x27 && (!coerced || op == 0x76 || op == 0x81)) ||
+                (type == "int" && value.op == 0x24 && value.args[0] == 0 && (!coerced || op == 0x73 || op == 0x83)) ||
+                (type == "uint" && value.op == 0x24 && value.args[0] == 0 && (!coerced || op == 0x74 || op == 0x88)) ||
+                (type == "String" && value.op == 0x20 && (!coerced || op == 0x85)) ||
+                (value.op == 0x20 && op == 0x80 && conversion.args[0] == slot->type &&
+                    type != "*" && type != "int" && type != "uint" && type != "Number" && type != "Boolean" &&
+                    type != "float" && type != "float4");
+            if (!default_value)
+                break;
+            first_statement = store + 1;
+        }
     CapturedVariables lexical_variables = captured ? *captured : CapturedVariables{};
     for (const auto& [index, slot] : variable_slots)
         lexical_variables.insert_or_assign(index, slot_variables.at(slot));
@@ -1351,7 +1388,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
     {
         if (op == 0x11 || op == 0x12)
         {
-            auto value = stack.pop();
+            auto value = stack.pop_as3_value();
             validate_expression(value);
             return taken == (op == 0x11) ? std::move(value) : "!(" + value + ')';
         }
@@ -1367,6 +1404,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         }
         auto condition = std::format("{} {} {}", left, comparisons[op - 0x0C], right);
         return taken == (op >= 0x13) ? std::move(condition) : "!(" + condition + ')';
+    };
+    const auto shared_return = [&](std::size_t index)
+    {
+        return body.exceptions.empty() && static_owner.empty() && index < instructions.size() &&
+            instructions[index].op == 0x47 && shared_entries.contains(instructions[index].offset);
     };
     struct Loop { std::size_t next, exit; };
     struct CatchVariable { std::string name, instance; };
@@ -1497,8 +1539,12 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             while (true)
             {
                 const auto end = remaining.find('\n');
-                out.add(indent);
-                out.add(remaining.substr(0, end));
+                const auto line = remaining.substr(0, end);
+                if (line.find_first_not_of(" \t") != std::string_view::npos)
+                {
+                    out.add(indent);
+                    out.add(line);
+                }
                 if (end == std::string_view::npos)
                     break;
                 out.add("\n");
@@ -1656,6 +1702,11 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             if (op == 0x10 && !expression && stack.empty())
             {
                 const auto target = destination(item.args[0]);
+                if (i + 1 == last && shared_return(target))
+                {
+                    emit("return");
+                    continue;
+                }
                 if (loop && (target == loop->next || target == loop->exit))
                 {
                     emit(target == loop->next ? "continue" : "break");
@@ -1766,13 +1817,23 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             }
             if (op >= 0x0C && op <= 0x1A && op != 0x10)
             {
+                auto end_then = destination(item.args[0]);
+                const bool guard = !expression && end_then > i && shared_return(end_then) &&
+                    stack.size() == (op == 0x11 || op == 0x12 ? 1 : 2);
+                if (guard)
+                {
+                    const auto condition = branch_condition(op, stack, true);
+                    out.add(indent + "if (" + condition + ")\n" + indent + "{\n" + indent + "    return;\n" + indent + "}\n");
+                    if (depth == 1 && i + 1 < last)
+                        out.add("\n");
+                    continue;
+                }
                 std::string value;
                 auto condition = branch_condition(op, stack, false);
                 if (op == 0x11)
                     value = condition.substr(2, condition.size() - 3);
                 else if (op == 0x12)
                     value = condition;
-                auto end_then = destination(item.args[0]);
                 if (loop && !expression && stack.empty() && (end_then == loop->next || end_then == loop->exit) && end_then > last)
                 {
                     out.add(indent + "if (!(" + condition + "))\n" + indent + "{\n" + indent + "    " +
@@ -1780,13 +1841,15 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                     continue;
                 }
                 if (end_then <= i || end_then > last)
-                    throw std::runtime_error("Fusion ou saut conditionnel complexe.");
+                    throw std::runtime_error(std::format("Fusion ou saut conditionnel complexe à 0x{:04X} vers 0x{:04X}.",
+                        item.offset, item.args[0]));
                 if ((op == 0x11 || op == 0x12) && !stack.empty() && end_then > i + 2 &&
                     instructions[i + 1].op == 0x29)
                 {
-                    auto retained = stack.pop();
+                    auto retained = stack.pop_as3_value();
                     if (retained != value)
-                        throw std::runtime_error("Valeurs différentes sur les branches du court-circuit.");
+                        throw std::runtime_error(std::format("Valeurs différentes sur les branches du court-circuit à 0x{:04X}.",
+                            item.offset));
                     const auto right = visit(visit, i + 2, end_then, depth + 1, true);
                     stack.push(value);
                     stack.push(right);
@@ -1799,7 +1862,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 {
                     const auto successor = destination(instructions[end_then - 1].args[0]);
                     const bool loop_edge = loop && (successor == loop->next || successor == loop->exit);
-                    if (!loop_edge && successor != end_then)
+                    if (!loop_edge && successor != end_then && !shared_return(successor))
                     {
                         if (successor < end_then || successor > last)
                             throw std::runtime_error("Branchement ActionScript non structuré.");
@@ -1833,6 +1896,8 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                     visit(visit, end_then + 1, end_else, depth + 1, false, false, loop);
                 }
                 out.add(indent + "}\n");
+                if (depth == 1 && end_else < last)
+                    out.add("\n");
                 i = end_else - 1;
                 continue;
             }
@@ -2052,16 +2117,20 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                         throw std::runtime_error("Clé d’objet non littérale.");
                     fields.push_back(key + ": " + value);
                 }
-                std::string object = "({ ";
+                std::size_t width = 0;
+                for (const auto& field : fields)
+                    width += field.size() + 2;
+                if (width > 4096)
+                    throw std::runtime_error("Objet littéral trop grand.");
+                const bool multiline = fields.size() > 1 && width > 100;
+                std::string object = multiline ? "({\n    " : "({ ";
                 for (auto field = fields.rbegin(); field != fields.rend(); ++field)
                 {
                     if (field != fields.rbegin())
-                        object += ", ";
+                        object += multiline ? ",\n    " : ", ";
                     object += *field;
-                    if (object.size() > 4096)
-                        throw std::runtime_error("Objet littéral trop grand.");
                 }
-                stack.push(object + " })");
+                stack.push(object + (multiline ? "\n})" : " })"));
                 break;
             }
             case 0x56: stack.push(stack.as3_list(arg(0), "[", "]")); break;
@@ -2114,6 +2183,13 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 break;
             case 0x80:
             {
+                if (i > first && !control_entries.contains(item.offset))
+                {
+                    const auto& prior = instructions[i - 1];
+                    if ((prior.op == 0x4A && prior.args[0] == arg(0)) ||
+                        (prior.op == 0x40 && public_name(arg(0), "", "Function")))
+                        break;
+                }
                 const auto value = stack.pop();
                 const auto type = qualified_name(arg(0));
                 if (type == "int" || type == "uint" || type == "Number" || type == "Boolean" || type == "String")
@@ -2179,7 +2255,7 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             throw std::runtime_error("La pile d’expressions traverse une frontière de bloc.");
         return result;
     };
-    statement_block(statement_block, body_start, instructions.size(), 1);
+    statement_block(statement_block, first_statement, instructions.size(), 1);
     if (emitted_try.size() != regions.size())
         throw unsupported_try();
     for (const auto& [index, declaration] : local_declarations)
@@ -3329,6 +3405,7 @@ AbcClassSource Abc::render_class(std::size_t index) const
             order.push_back(i);
 
     bool previous_field = false;
+    bool previous_static_field = false;
     std::optional<std::size_t> first_static_line;
     result.member_lines.resize(type.members.size());
     for (const auto position : order)
@@ -3348,10 +3425,12 @@ AbcClassSource Abc::render_class(std::size_t index) const
             }
             continue;
         }
-        if (previous_field && member.method)
+        const bool static_field = !member.method && member.declaration.find("static ") != std::string::npos;
+        if (previous_field && (member.method || static_field != previous_static_field))
             add("\n");
         result.member_lines[position] = line;
         previous_field = !member.method;
+        previous_static_field = static_field;
         add("        " + names.spell(member.declaration));
         if (const auto value = static_values.find(position); value != static_values.end())
         {

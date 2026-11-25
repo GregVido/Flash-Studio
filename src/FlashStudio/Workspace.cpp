@@ -193,7 +193,7 @@ void Workspace::build()
             args.AcceptedOperation(Windows::ApplicationModel::DataTransfer::DataPackageOperation::Copy);
     });
     root_.Drop([this](auto&&, const DragEventArgs& args) { drop(args); });
-    row(root_, 48, GridUnitType::Pixel);
+    row(root_, 40, GridUnitType::Pixel);
     row(root_);
     row(root_, 1, GridUnitType::Star);
     row(root_);
@@ -212,6 +212,7 @@ void Workspace::build()
     ToolTipService::SetToolTip(header_logo, box_value(L"Flash Studio"));
     place(title_bar, header_logo, 0);
     build_documents();
+    documents_bar_.VerticalAlignment(VerticalAlignment::Bottom);
     place(title_bar, documents_bar_, 0, 1);
     Grid drag_area;
     drag_area.Background(brush(base));
@@ -651,6 +652,7 @@ void Workspace::build()
     output_.AcceptsReturn(true);
     output_.TextWrapping(TextWrapping::NoWrap);
     output_.Background(brush(base));
+    output_.SelectionHighlightColor(brush(0x3b65a2u));
     output_.BorderBrush(brush(stroke));
     output_.Padding(pad(14));
     ScrollViewer::SetHorizontalScrollBarVisibility(output_, ScrollBarVisibility::Auto);
@@ -754,7 +756,7 @@ void Workspace::build()
     place(root_, footer, 3);
     window_.ExtendsContentIntoTitleBar(true);
     const auto caption = window_.AppWindow().TitleBar();
-    caption.PreferredHeightOption(Microsoft::UI::Windowing::TitleBarHeightOption::Tall);
+    caption.PreferredHeightOption(Microsoft::UI::Windowing::TitleBarHeightOption::Standard);
     caption.ButtonForegroundColor(color(primary));
     caption.ButtonInactiveForegroundColor(color(secondary));
     caption.ButtonBackgroundColor(Windows::UI::Color{0, 0, 0, 0});

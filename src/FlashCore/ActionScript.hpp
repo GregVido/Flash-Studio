@@ -31,6 +31,7 @@ class Expressions
 public:
     explicit Expressions(std::size_t limit = 4096) : limit_(limit) {}
     bool empty() const noexcept { return items_.empty(); }
+    std::size_t size() const noexcept { return items_.size(); }
     void push(std::string value)
     {
         push(Value{std::move(value), {}});
