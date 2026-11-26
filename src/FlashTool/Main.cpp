@@ -80,6 +80,9 @@ void usage()
   FlashTool class-new <film.swf> <classe> <source.as> <copie.swf> <asc.jar>
   FlashTool export-all <film.swf> <dossier>
   FlashTool export-project <film.swf> <dossier vide>
+  FlashTool export-html5 <film.swf> <dossier vide> [espace de travail]
+  FlashTool export-html5-classes <film.swf> <classes.js>
+  FlashTool export-html5-workspace <dossier source> <dossier vide> [film principal]
   FlashTool abc-list <film.swf> <tag>
   FlashTool abc-classes <film.swf> <tag>
   FlashTool abc-class <film.swf> <tag> <classe>
@@ -189,6 +192,31 @@ int wmain(int argc, wchar_t** argv)
             std::cout << std::format("{} fichiers exportés, {} tags en échec.\n", report.files, report.failed);
             for (const auto& error : report.errors)
                 std::cerr << error << '\n';
+            return report.failed ? 3 : 0;
+        }
+        else if (argc == 4 && command == L"export-html5-classes")
+        {
+            flash::write_text(argv[3], flash::html5_classes(flash::Movie::open(argv[2])));
+        }
+        else if ((argc == 4 || argc == 5) && command == L"export-html5")
+        {
+            const auto movie = flash::Movie::open(argv[2]);
+            const auto source = std::filesystem::path(argv[2]);
+            const auto report = flash::export_html5(movie, argv[3], utf8(source.stem().wstring()), source,
+                argc == 5 ? std::filesystem::path(argv[4]) : std::filesystem::path{});
+            std::cout << std::format("Projet HTML5 : {} fichiers et {} points de portage (LISEZ-MOI.txt).\n", report.files, report.failed);
+            return report.failed ? 3 : 0;
+        }
+        else if ((argc == 4 || argc == 5) && command == L"export-html5-workspace")
+        {
+            const auto report = flash::export_html5_workspace(argv[2], argv[3],
+                argc == 5 ? std::filesystem::path(argv[4]) : std::filesystem::path{}, {}, [](auto done, auto total)
+                {
+                    if (!done || done == total || done % 100 == 0)
+                        std::cerr << std::format("HTML5 : {}/{}\n", done, total);
+                });
+            std::cout << std::format("{} SWF exportés, {} avec des points de portage, {} échecs.\n",
+                report.converted, report.partial, report.failed);
             return report.failed ? 3 : 0;
         }
         else if (argc == 4 && command == L"abc-list")

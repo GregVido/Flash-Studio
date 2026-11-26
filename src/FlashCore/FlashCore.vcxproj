@@ -47,6 +47,14 @@
     <ClCompile Include="Timeline.cpp" />
     <ClCompile Include="BatchExport.cpp" />
     <ClCompile Include="ProjectExport.cpp" />
+    <ClCompile Include="WebExport.cpp" />
+    <ClCompile Include="WebScripts.cpp" />
+    <ClCompile Include="WebAs3.cpp" />
+    <ClInclude Include="WebExport.hpp" />
+    <ClInclude Include="WebClassRuntime.hpp" />
+    <ClInclude Include="WebText.hpp" />
+    <ClInclude Include="WebMedia.hpp" />
+    <ClInclude Include="WebServer.hpp" />
     <ClCompile Include="ActionScript.cpp" />
     <ClCompile Include="ClassEditing.cpp" />
     <ClCompile Include="AbcLink.cpp" />

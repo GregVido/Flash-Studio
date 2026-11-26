@@ -1,4 +1,5 @@
 #include "Binary.hpp"
+#include "WebExport.hpp"
 
 #include <Windows.h>
 #include <array>
@@ -47,13 +48,20 @@ struct Field
     std::size_t text_offset;
     std::size_t end_offset;
     std::string initial;
+    std::array<int, 4> bounds{};
+    unsigned font_height = 240;
+    std::array<unsigned, 4> color{0, 0, 0, 255};
+    unsigned alignment{}, left_margin{}, right_margin{}, maximum{}, flags{}, layout{};
+    int leading{};
 };
 
 Field edit_field(ByteView bytes)
 {
     Reader input(bytes);
     input.skip(2);
-    skip_rect(input);
+    BitReader box(input);
+    const auto width = box.unsigned_bits(5);
+    const std::array bounds{box.signed_bits(width), box.signed_bits(width), box.signed_bits(width), box.signed_bits(width)};
     const auto position = input.position();
     const auto flags = input.u8();
     const auto layout = input.u8();
@@ -61,18 +69,32 @@ Field edit_field(ByteView bytes)
         input.skip(2);
     if (layout & 128)
         input.cstring();
+    Field field{};
+    field.bounds = bounds;
+    field.flags = flags;
+    field.layout = layout;
     if (flags & 1)
-        input.skip(2);
+        field.font_height = input.u16();
     if (flags & 4)
-        input.skip(4);
+        for (auto& channel : field.color)
+            channel = input.u8();
     if (flags & 2)
-        input.skip(2);
+        field.maximum = input.u16();
     if (layout & 32)
-        input.skip(9);
+    {
+        field.alignment = input.u8();
+        field.left_margin = input.u16();
+        field.right_margin = input.u16();
+        input.skip(2);
+        field.leading = std::bit_cast<std::int16_t>(input.u16());
+    }
     input.cstring();
-    const auto start = input.position();
-    auto text = flags & 128 ? input.cstring() : std::string{};
-    return {position, start, input.position(), std::move(text)};
+    field.flags_offset = position;
+    field.text_offset = input.position();
+    if (flags & 128)
+        field.initial = input.cstring();
+    field.end_offset = input.position();
+    return field;
 }
 
 struct CodeTable
@@ -409,6 +431,22 @@ std::string extract_text(const Movie& movie, std::size_t index)
     if (code == 77)
         return Reader(movie.data(index)).cstring();
     throw std::runtime_error("Ce tag ne contient pas de texte pris en charge.");
+}
+
+std::string web::text_field_json(const Movie& movie, std::size_t index)
+{
+    const auto field = edit_field(movie.data(index));
+    const auto text = movie.header().version >= 6 ? field.initial : encode_string(decode_string(field.initial, windows_latin), CP_UTF8);
+    const auto [left, right, top, bottom] = field.bounds;
+    return std::format("{{\"text\":{},\"bounds\":[{},{},{},{}],\"height\":{},\"fill\":\"#{:02x}{:02x}{:02x}\","
+        "\"alpha\":{:g},\"alignment\":{},\"margins\":[{},{}],\"leading\":{},\"html\":{},"
+        "\"wrap\":{},\"multiline\":{},\"editable\":{},\"password\":{},\"selectable\":{},\"border\":{},\"maximum\":{},\"autoSize\":{}}}",
+        json_string(text), left, top, std::max(1, right - left), std::max(1, bottom - top),
+        field.font_height, field.color[0], field.color[1], field.color[2], field.color[3] / 255.0,
+        field.alignment, field.left_margin, field.right_margin, field.leading, bool(field.layout & 2),
+        bool(field.flags & 64), bool(field.flags & 32), !(field.flags & 8), bool(field.flags & 16),
+        !(field.layout & 16), bool(field.layout & 8), field.maximum,
+        json_string(field.layout & 64 ? "left" : "none"));
 }
 
 Movie Movie::replace_text(std::size_t index, std::string_view utf8) const

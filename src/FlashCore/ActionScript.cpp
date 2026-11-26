@@ -83,6 +83,18 @@ std::string Expressions::pop_as3_value()
     return std::string(value.ungrouped());
 }
 
+bool Expressions::replace_value(std::string_view value, std::string_view replacement)
+{
+    bool changed = false;
+    for (auto& item : items_)
+        if (!item.precedence && item.text == value)
+        {
+            item.text = replacement;
+            changed = true;
+        }
+    return changed;
+}
+
 void Expressions::as3_binary(std::string_view op)
 {
     // AS3 binary operators associate to the left. Keep equal-precedence right operands grouped.

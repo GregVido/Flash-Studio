@@ -23,6 +23,8 @@ struct AbcMember
 struct AbcClass
 {
     std::string package, name, qualified, declaration;
+    std::string base;
+    std::vector<std::string> interfaces;
     bool interface_type = false;
     std::vector<AbcMember> members;
 };

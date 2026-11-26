@@ -659,6 +659,28 @@ FlowChanges deobfuscate_flow(std::vector<Instruction>& code, std::size_t end,
 void simplify_source_flow(std::vector<Instruction>& code, std::size_t end,
     unsigned first_local, unsigned locals)
 {
+    // Some compilers leave a jump between a return and the next block.
+    // If the jump is unreachable, even an unaligned destination has no effect on the program.
+    for (std::size_t i = 1; i < code.size();)
+    {
+        const auto previous = code[i - 1].op;
+        const auto& item = code[i];
+        if (item.op == jump && (previous == 0x03 || previous == 0x47 || previous == 0x48))
+        {
+            const auto target = item.args.front();
+            if (target != static_cast<std::int64_t>(end) &&
+                (target < 0 || !std::ranges::binary_search(code, static_cast<std::size_t>(target), {}, &Instruction::offset)) &&
+                std::ranges::none_of(code, [&](const Instruction& branch) {
+                    return branch.op >= 0x0C && branch.op <= 0x1B && &branch != &item &&
+                        std::ranges::find(branch.args, static_cast<std::int64_t>(item.offset)) != branch.args.end();
+                }))
+            {
+                code.erase(code.begin() + i);
+                continue;
+            }
+        }
+        ++i;
+    }
     const auto closure = std::ranges::adjacent_find(code, [](const Instruction& left, const Instruction& right)
     {
         return left.op == 0x40 && right.op == pop;

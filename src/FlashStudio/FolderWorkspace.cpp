@@ -53,15 +53,21 @@ struct Workspace::FolderIndex
     std::filesystem::path root;
     std::vector<File> files;
 
-    explicit FolderIndex(const std::filesystem::path& path) : root(std::filesystem::canonical(path))
+    explicit FolderIndex(const std::filesystem::path& path)
     {
         std::error_code error;
+        root = std::filesystem::canonical(path, error);
+        if (error)
+            root = std::filesystem::absolute(path).lexically_normal();
         auto iterator = std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::skip_permission_denied, error);
         if (error)
             throw std::filesystem::filesystem_error("Index du dossier", root, error);
         for (const std::filesystem::recursive_directory_iterator end; iterator != end;)
         {
             const auto& file = iterator->path();
+            const auto name = lower(file.filename().wstring());
+            if ((name == L".git" || name == L"node_modules" || name == L"__flashstudio") && iterator->is_directory(error))
+                iterator.disable_recursion_pending();
             if (lower(file.extension().wstring()) == L".swf" &&
                 std::filesystem::is_regular_file(iterator->symlink_status(error)) && !error)
             {
@@ -127,6 +133,7 @@ void Workspace::build_folder_panel(const Grid& main)
     row(pane);
     row(pane);
     row(pane);
+    row(pane);
     row(pane, 1, GridUnitType::Star);
     Grid heading;
     heading.ColumnSpacing(6);
@@ -169,6 +176,12 @@ void Workspace::build_folder_panel(const Grid& main)
     place(pane, folder_search_, 1);
     folder_count_ = label(L"", 12, secondary);
     place(pane, folder_count_, 2);
+    folder_export_ = Button();
+    folder_export_.Content(box_value(tr(L"Exporter le dossier en HTML5…")));
+    folder_export_.HorizontalAlignment(HorizontalAlignment::Stretch);
+    folder_export_.IsEnabled(false);
+    folder_export_.Click([this](auto&&, auto&&) { export_folder_html5(); });
+    place(pane, folder_export_, 3);
     folder_list_ = ListView();
     folder_list_.IsItemClickEnabled(true);
     folder_list_.SelectionMode(ListViewSelectionMode::Single);
@@ -184,7 +197,7 @@ void Workspace::build_folder_panel(const Grid& main)
             open_file(std::move(path));
         }
     });
-    place(pane, folder_list_, 3);
+    place(pane, folder_list_, 4);
     folder_pane_.Pane(pane);
     place(root_, folder_pane_, 2);
 }
@@ -281,6 +294,7 @@ Windows::Foundation::IAsyncAction Workspace::open_folder(std::filesystem::path p
         co_return;
     }
     folder_ = std::move(indexed);
+    folder_export_.IsEnabled(true);
     const auto name = folder_->root.filename();
     folder_title_.Text(name.empty() ? folder_->root.wstring() : name.wstring());
     ToolTipService::SetToolTip(folder_title_, box_value(hstring(folder_->root.wstring())));
@@ -292,6 +306,11 @@ Windows::Foundation::IAsyncAction Workspace::open_folder(std::filesystem::path p
     sync_folder_selection();
     folder_search_.Focus(FocusState::Programmatic);
     status(format_message(L"{} SWF dans l’espace de travail", folder_->files.size()));
+}
+
+std::filesystem::path Workspace::folder_root() const
+{
+    return folder_ ? folder_->root : std::filesystem::path{};
 }
 
 void Workspace::follow_swf_reference(std::wstring_view reference)

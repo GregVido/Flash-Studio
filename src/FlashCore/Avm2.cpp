@@ -323,7 +323,8 @@ std::optional<EnumerationLoop> enumeration_loop(const std::vector<Instruction>& 
         return {};
     auto assignment = start + 3;
     unsigned coercion = 0, coercion_type = 0;
-    if (code[assignment].op == 0x80 || code[assignment].op == 0x82 || code[assignment].op == 0x85)
+    const auto conversion = code[assignment].op;
+    if ((conversion >= 0x73 && conversion <= 0x76) || conversion == 0x80 || conversion == 0x82 || conversion == 0x85)
     {
         if (code[assignment].op == 0x80)
             coercion_type = static_cast<unsigned>(code[assignment].args[0]);
@@ -583,6 +584,8 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
             type.package = type.qualified.substr(0, separator);
         const auto base = input.u30();
         class_bases_.push_back(base);
+        if (base)
+            type.base = name(base);
         const auto flags = input.u8();
         type.interface_type = (flags & 4) != 0;
         type.declaration = access(class_name);
@@ -605,7 +608,8 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
         for (unsigned j = 0; j < interfaces; ++j)
         {
             type.declaration += j ? ", " : type.interface_type ? " extends " : " implements ";
-            type.declaration += name(input.u30());
+            type.interfaces.push_back(name(input.u30()));
+            type.declaration += type.interfaces.back();
         }
         const auto constructor = input.u30();
         label(constructor, type.qualified + "::<init>");
@@ -1521,6 +1525,14 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
         }
         return {};
     };
+    unsigned snapshot_count = 0;
+    const auto snapshot_name = [&]
+    {
+        auto snapshot = std::format("savedValue{}", ++snapshot_count);
+        while (used_names.contains(snapshot))
+            snapshot += '_';
+        return snapshot;
+    };
     const auto statement_block = [&](auto&& visit, std::size_t first, std::size_t last, unsigned depth,
         bool expression = false, bool loop_test = false, std::optional<Loop> loop = {}, std::optional<std::string> initial = {}) -> std::string
     {
@@ -1598,6 +1610,34 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                     throw std::runtime_error("Nom de propriété non représentable.");
                 return entry.ns && at(namespace_kinds_, entry.ns) == 0x16 ? qualified_name(arg(0)) : id;
             };
+            if ((op == 0x5D || op == 0x5E) && i + 10 < last && instructions[i + 1].op == 0x2A &&
+                instructions[i + 3].op == 0x66 && instructions[i + 3].args[0] == arg(0))
+            {
+                const auto receiver = store_register(instructions[i + 2]), temporary = store_register(instructions[i + 5]);
+                const auto arithmetic = instructions[i + 4].op;
+                const auto& store = instructions[i + 8];
+                const auto& release_value = instructions[i + 9];
+                const auto& release_receiver = instructions[i + 10];
+                const auto entry = control_entries.upper_bound(item.offset);
+                if (receiver && temporary && *receiver != *temporary &&
+                    (arithmetic == 0x91 || arithmetic == 0x93 || arithmetic == 0xC0 || arithmetic == 0xC1) &&
+                    load_register(instructions[i + 6]) == receiver && load_register(instructions[i + 7]) == temporary &&
+                    (store.op == 0x61 || store.op == 0x68) && store.args[0] == arg(0) &&
+                    release_value.op == 0x08 && release_value.args[0] == *temporary &&
+                    release_receiver.op == 0x08 && release_receiver.args[0] == *receiver &&
+                    (entry == control_entries.end() || *entry > release_receiver.offset))
+                {
+                    // AVM2 saves the lexical property receiver in a temporary register for compound updates.
+                    const auto property = lexical();
+                    const auto operation = arithmetic == 0x91 || arithmetic == 0xC0 ? " + 1" : " - 1";
+                    auto value = "Number(" + property + ')' + operation;
+                    if (arithmetic >= 0xC0)
+                        value = "int(" + value + ')';
+                    emit(property + " = " + value);
+                    i += 10;
+                    continue;
+                }
+            }
             const auto property = [&]
             {
                 const auto& entry = at(multinames_, arg(0));
@@ -1780,7 +1820,16 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                                     const auto variable = enumeration->slot ? named->second : local(enumeration->variable);
                                     auto entry = variable;
                                     const auto cast_string = enumeration->coercion == 0x85;
-                                    const auto typed = enumeration->coercion == 0x80;
+                                    std::string type;
+                                    switch (enumeration->coercion)
+                                    {
+                                    case 0x73: type = "int"; break;
+                                    case 0x74: type = "uint"; break;
+                                    case 0x75: type = "Number"; break;
+                                    case 0x76: type = "Boolean"; break;
+                                    case 0x80: type = qualified_name(enumeration->coercion_type); break;
+                                    }
+                                    const auto typed = !type.empty();
                                     if (cast_string || typed)
                                     {
                                         entry = "item";
@@ -1794,7 +1843,6 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                                         out.add(indent + "    " + variable + " = " + entry + " == null ? null : String(" + entry + ");\n");
                                     if (typed)
                                     {
-                                        const auto type = qualified_name(enumeration->coercion_type);
                                         const auto scalar = type == "int" || type == "uint" || type == "Number" || type == "Boolean" || type == "String";
                                         const auto checked = scalar ? type + '(' + entry + ')' : '(' + entry + " as " + type + ')';
                                         out.add(indent + "    " + variable + " = " + checked + ";\n");
@@ -1847,11 +1895,14 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                     instructions[i + 1].op == 0x29)
                 {
                     auto retained = stack.pop_as3_value();
-                    if (retained != value)
+                    const auto coerces_duplicate = i >= 2 && instructions[i - 2].op == 0x2A &&
+                        (instructions[i - 1].op == 0x76 || instructions[i - 1].op == 0x81) &&
+                        value == "Boolean(" + retained + ')';
+                    if (retained != value && !coerces_duplicate)
                         throw std::runtime_error(std::format("Valeurs différentes sur les branches du court-circuit à 0x{:04X}.",
                             item.offset));
                     const auto right = visit(visit, i + 2, end_then, depth + 1, true);
-                    stack.push(value);
+                    stack.push(std::move(retained));
                     stack.push(right);
                     stack.as3_binary(op == 0x11 ? "||" : "&&");
                     i = end_then - 1;
@@ -1987,7 +2038,21 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 break;
             }
             case 0x07: emit("default xml namespace = " + stack.pop()); break;
-            case 0x08: emit(writable_local(arg(0)) + " = undefined"); break;
+            case 0x08:
+            {
+                const auto variable = writable_local(arg(0));
+                if (!stack.empty())
+                {
+                    const auto snapshot = snapshot_name();
+                    if (stack.replace_value(variable, snapshot))
+                    {
+                        used_names.insert(snapshot);
+                        emit("var " + snapshot + ":* = " + variable);
+                    }
+                }
+                emit(variable + " = undefined");
+                break;
+            }
             case 0x20: stack.push("null"); break;
             case 0x21: stack.push("undefined"); break;
             case 0x22: case 0x2D: case 0x2E: case 0x2F: case 0x54:
@@ -2014,6 +2079,30 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                         ++i;
                         break;
                     }
+                if (i > first && i + 2 < last)
+                {
+                    const auto numeric_conversion = [](unsigned code)
+                    {
+                        return (code >= 0x73 && code <= 0x75) || code == 0x83 || code == 0x84 || code == 0x88;
+                    };
+                    const auto operation = instructions[i + 1].op;
+                    const bool update = operation == 0x91 || operation == 0x93 || operation == 0xC0 || operation == 0xC1;
+                    const auto load = numeric_conversion(instructions[i - 1].op) && i > first + 1 ? i - 2 : i - 1;
+                    const auto store = i + 2 + numeric_conversion(instructions[i + 2].op);
+                    if (const auto reg = load_register(instructions[load]); update && reg && store < last &&
+                        store_register(instructions[store]) == reg)
+                    {
+                        const auto entry = control_entries.lower_bound(item.offset);
+                        if (entry == control_entries.end() || *entry > instructions[store].offset)
+                        {
+                            const auto snapshot = snapshot_name();
+                            used_names.insert(snapshot);
+                            // The retained operand still contains the value from before the write.
+                            emit("var " + snapshot + ":* = " + stack.pop_as3_value());
+                            stack.push(snapshot);
+                        }
+                    }
+                }
                 stack.duplicate();
                 break;
             case 0x2B:
@@ -2060,7 +2149,10 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
             case 0x42:
             {
                 const auto arguments = stack.arguments(arg(0), true, true);
-                stack.push("new " + stack.pop() + '(' + arguments + ')');
+                auto constructor = stack.pop();
+                if (constructor.find('(') != std::string::npos)
+                    constructor = '(' + constructor + ')';
+                stack.push("new " + constructor + '(' + arguments + ')');
                 break;
             }
             case 0x45: case 0x46: case 0x4A: case 0x4C: case 0x4E: case 0x4F:

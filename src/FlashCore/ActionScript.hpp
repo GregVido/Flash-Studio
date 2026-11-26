@@ -41,6 +41,7 @@ public:
         return take().text;
     }
     std::string pop_as3_value();
+    bool replace_value(std::string_view value, std::string_view replacement);
     void duplicate()
     {
         if (items_.empty())

@@ -566,6 +566,10 @@ void Workspace::build()
     project.Text(tr(L"Exporter le projet…"));
     project.Click([this](auto&&, auto&&) { export_all(true); });
     options.Items().Append(project);
+    MenuFlyoutItem html5;
+    html5.Text(tr(L"Exporter en HTML5…"));
+    html5.Click([this](auto&&, auto&&) { export_all(false, {}, true); });
+    options.Items().Append(html5);
     export_.Flyout(options);
     export_.IsEnabled(false);
     actions.Children().Append(export_);
@@ -1919,7 +1923,63 @@ fire_and_forget Workspace::choose_visual_batch()
     catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
 }
 
-fire_and_forget Workspace::export_all(bool project, std::wstring visual_format)
+fire_and_forget Workspace::export_folder_html5()
+{
+    if (busy_ || closed_)
+        co_return;
+    const auto source = folder_root();
+    if (source.empty())
+        co_return;
+    const auto lifetime = shared_from_this();
+    std::optional<std::filesystem::path> destination;
+    try { destination = dialog(window_, false, L"", {}, nullptr, true); }
+    catch (const hresult_error& error) { status(error.message(), true); }
+    if (!destination)
+        co_return;
+    const auto selected = file_;
+    flash::WebMovieOverrides open_movies;
+    for (const auto& document : documents_)
+        if (document.dirty)
+            open_movies.emplace_back(document.path, document.movie);
+    const auto name = (source.filename().empty() ? std::wstring(L"Flash Studio") : source.filename().wstring()) + L"-html5";
+    auto target = *destination / name;
+    busy_ = true;
+    folder_export_.IsEnabled(false);
+    folder_button_.IsEnabled(false);
+    const auto dispatcher = root_.DispatcherQueue();
+    status(tr(L"Export HTML5…"));
+    const apartment_context ui;
+    co_await resume_background();
+    flash::WebWorkspaceReport report;
+    std::wstring failure;
+    try
+    {
+        for (unsigned sequence = 2; !std::filesystem::create_directory(target); ++sequence)
+            target = *destination / std::format(L"{}-{}", name, sequence);
+        report = flash::export_html5_workspace(source, target, selected, open_movies, [dispatcher, lifetime](auto done, auto total)
+        {
+            dispatcher.TryEnqueue([lifetime, done, total]
+            {
+                if (!lifetime->closed_ && lifetime->busy_)
+                    lifetime->status(format_message(L"Export HTML5 · {} sur {} SWF", done, total));
+            });
+        });
+    }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    busy_ = false;
+    folder_button_.IsEnabled(true);
+    folder_export_.IsEnabled(true);
+    if (!failure.empty())
+        status(failure, true);
+    else
+        status(format_message(L"Espace HTML5 exporté dans {} · {} films · {} à compléter · {} échecs",
+            target.wstring(), report.converted, report.partial, report.failed), report.failed != 0);
+}
+
+fire_and_forget Workspace::export_all(bool project, std::wstring visual_format, bool html5)
 {
     if (!movie_ || busy_)
         co_return;
@@ -1930,12 +1990,15 @@ fire_and_forget Workspace::export_all(bool project, std::wstring visual_format)
     catch (const hresult_error& error) { status(error.message(), true); }
     if (!destination)
         co_return;
-    const auto name = file_.stem().wstring() + (!visual_format.empty() ? tr(L"-visuels-") + visual_format.substr(1) :
+    const auto source = file_;
+    const auto folder = html5 ? folder_root() : std::filesystem::path{};
+    const auto title = source.stem().wstring();
+    const auto name = title + (html5 ? L"-html5" : !visual_format.empty() ? tr(L"-visuels-") + visual_format.substr(1) :
         project ? tr(L"-projet") : tr(L"-ressources"));
     auto target = *destination / name;
     busy_ = true;
     export_.IsEnabled(false);
-    status(project ? tr(L"Export du projet…") : tr(L"Export des ressources…"));
+    status(html5 ? tr(L"Export HTML5…") : project ? tr(L"Export du projet…") : tr(L"Export des ressources…"));
     const apartment_context ui;
     co_await resume_background();
     std::wstring failure;
@@ -1944,7 +2007,8 @@ fire_and_forget Workspace::export_all(bool project, std::wstring visual_format)
     {
         for (unsigned sequence = 2; !std::filesystem::create_directory(target); ++sequence)
             target = *destination / std::format(L"{}-{}", name, sequence);
-        report = !visual_format.empty() ? flash::export_visuals(*movie, target, visual_format) :
+        report = html5 ? flash::export_html5(*movie, target, to_string(hstring(title)), source, folder) :
+            !visual_format.empty() ? flash::export_visuals(*movie, target, visual_format) :
             project ? flash::export_project(*movie, target) : flash::export_all(*movie, target);
     }
     catch (const std::exception& error) { failure = widen(error.what()); }
@@ -1955,6 +2019,9 @@ fire_and_forget Workspace::export_all(bool project, std::wstring visual_format)
     export_.IsEnabled(true);
     if (!failure.empty())
         status(failure, true);
+    else if (html5)
+        status(format_message(L"Projet HTML5 exporté dans {} · {} points de portage · LISEZ-MOI.txt",
+            target.wstring(), report.failed), report.failed != 0);
     else
         status(format_message(L"{} fichiers exportés dans {} · {} tags en échec", report.files,
             target.filename().wstring(), report.failed), report.failed != 0);

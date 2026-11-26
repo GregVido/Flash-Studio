@@ -130,6 +130,18 @@ ExportReport export_all(const Movie& movie, const std::filesystem::path& destina
 ExportReport export_visuals(const Movie& movie, const std::filesystem::path& destination, std::wstring_view extension);
 ExportReport export_project(const Movie& movie, const std::filesystem::path& destination);
 
+ExportReport export_html5(const Movie& movie, const std::filesystem::path& destination, std::string_view title,
+    const std::filesystem::path& source = {}, const std::filesystem::path& workspace = {});
+std::string html5_classes(const Movie& movie);
+struct WebWorkspaceReport
+{
+    std::size_t converted{}, partial{}, failed{};
+};
+using WebMovieOverrides = std::vector<std::pair<std::filesystem::path, std::shared_ptr<const Movie>>>;
+WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
+    const std::filesystem::path& preferred = {}, const WebMovieOverrides& open_movies = {},
+    const std::function<void(std::size_t, std::size_t)>& progress = {});
+
 std::optional<Asset> extract(const Movie& movie, std::size_t index);
 bool is_visual_tag(unsigned code) noexcept;
 Asset visual_asset(const Movie& movie, std::size_t index);

@@ -27,6 +27,14 @@ Flash Studio est un atelier Windows pour inspecter, modifier et exporter des fic
 
 Lisez, mettez en pause et parcourez les sprites à la cadence du SWF. Exportez les formes et les images de la timeline en SVG, PNG, BMP, JPEG ou TIFF. Les sprites animés s’exportent en GIF, APNG ou SVG animé, avec une échelle réglable, par exemple 400 %. Vous pouvez exporter une ressource, un lot de visuels ou un projet extrait contenant ActionScript, P-code, données brutes et médias.
 
+Choisissez **Exporter → Exporter en HTML5** pour convertir la scène, la cadence d’origine, les effets visuels et les pistes audio prises en charge en un projet web statique. L’export génère du JavaScript pour les méthodes, scripts d’images et événements ActionScript pris en charge. Les références SWF explicites trouvées dans l’espace de travail sont converties en projets web liés. Lancez le serveur fourni avec `py -3 serve.py` ou publiez le dossier sur un hébergement statique. Consultez `LISEZ-MOI.txt` pour les effets, scripts et dépendances à porter manuellement. L’ActionScript récupéré se trouve dans `sources/`.
+
+Pour convertir un site ou une bibliothèque entière, utilisez **Ouvrir un dossier**, puis **Exporter le dossier en HTML5** dans le panneau Espace de travail. Flash Studio parcourt les sous-dossiers et inclut les modifications des onglets ouverts dans l’espace de travail. L’export fournit une page d’entrée et un catalogue des animations. Le lecteur commun résout les chemins assemblés à l’exécution par ActionScript et charge les films convertis dans la même liste d’affichage. Publiez à la racine du site pour conserver les chemins absolus des ressources. Les jeux qui utilisent des services HTTP ou WebSocket ont toujours besoin de leur serveur. Les réglages de connexion locale se trouvent dans `__flashstudio/network.json`.
+
+Le compilateur AS3 relie les classes de plusieurs blocs ABC et génère le JavaScript hors ligne dans `classes.js`. Il prend en charge l’héritage, `super`, les champs privés, l’initialisation statique et les objets auxiliaires. Les adaptateurs web couvrent des événements, les minuteries et le dessin vectoriel. Les diagnostics identifient les méthodes et API Flash qui restent à porter.
+
+Le navigateur affiche les balises Flash prises en charge dans `htmlText` et gère les symboles de la timeline, l’ordre d’affichage, les messages locaux, les projets liés, les requêtes HTTP et l’audio. Dans `network.json`, associez les chemins HTTP d’origine à leurs nouvelles adresses sous `http` et les adresses `hôte:port` aux points d’accès WebSocket sous `sockets`. Pour un service TCP, associez le socket à `/__flashstudio_socket/chat` et renseignez `host` et `port` sous `tcp.chat`. Le pont fourni par `serve.py` écoute sur la boucle locale. Les services HTTP distants doivent autoriser l’origine de la page.
+
 ## Compiler sous Windows
 
 Installez Visual Studio 2022 17.14 ou Visual Studio 2026 avec **Développement Desktop en C++** et le SDK Windows 10.0.26100. Ouvrez `FlashStudio.slnx`, choisissez **FlashStudio** comme projet de démarrage, puis sélectionnez **x64** ou **ARM64** avec les outils MSVC correspondants.
@@ -64,9 +72,11 @@ $asc = "$app\tools\as3\asc.jar"
 & $flash class-edit film.swf 8 demo.Probe Probe.as film-modifie.swf $asc
 & $flash sprite-animation film.swf 127 sprite.gif 4
 & $flash export-project film.swf projet-extrait
+& $flash export-html5 film.swf projet-html5
+& $flash export-html5 site\chat\chat.swf chat-html5 site
 ```
 
-Les indices de tags commencent à zéro. `FlashTool --help` affiche la liste des commandes.
+Les indices de tags commencent à zéro. L’export HTML5 renvoie le code 3 quand le projet généré contient des points de portage. `FlashTool --help` affiche la liste des commandes.
 
 ## Vérifications
 

@@ -1,10 +1,12 @@
 #include "Binary.hpp"
+#include "WebExport.hpp"
 
 #include <array>
 #include <cmath>
 #include <format>
 #include <map>
 #include <set>
+#include <utility>
 
 namespace flash
 {
@@ -13,6 +15,7 @@ namespace
 struct Position
 {
     double a = 1, b = 0, c = 0, d = 1, x = 0, y = 0;
+    bool operator==(const Position&) const = default;
 };
 
 Position operator*(const Position& l, const Position& r)
@@ -56,12 +59,26 @@ struct Bounds
     }
 };
 
+struct ColorTransform
+{
+    std::array<int, 4> multiplier{256, 256, 256, 256};
+    std::array<int, 4> addition{};
+    bool operator==(const ColorTransform&) const = default;
+
+    double opacity() const { return std::clamp(multiplier[3] / 256.0 + addition[3] / 255.0, 0.0, 1.0); }
+};
+
 struct Instance
 {
     unsigned id{}, placed{}, clip_end{};
     Position transform;
     double opacity = 1.0;
+    ColorTransform color;
     bool unsupported = false, visible = true;
+    std::string name;
+    std::string filters;
+    unsigned blend{};
+    bool operator==(const Instance&) const = default;
 };
 
 struct Display
@@ -70,34 +87,112 @@ struct Display
     std::optional<std::array<unsigned, 3>> background;
 };
 
-double color_alpha(Reader& input, bool alpha)
+ColorTransform read_color_transform(Reader& input, bool alpha)
 {
     BitReader bits(input);
     const auto has_addition = bits.unsigned_bits(1), has_multiplier = bits.unsigned_bits(1);
     const auto width = bits.unsigned_bits(4);
-    double multiplier = 1.0, addition = 0.0;
+    ColorTransform color;
+    const auto channels = alpha ? 4 : 3;
     if (has_multiplier)
-    {
-        for (int channel = 0; channel < 3; ++channel)
-            bits.signed_bits(width);
-        if (alpha)
-            multiplier = bits.signed_bits(width) / 256.0;
-    }
+        for (int channel = 0; channel < channels; ++channel)
+            color.multiplier[channel] = bits.signed_bits(width);
     if (has_addition)
-    {
-        for (int channel = 0; channel < 3; ++channel)
-            bits.signed_bits(width);
-        if (alpha)
-            addition = bits.signed_bits(width) / 255.0;
-    }
-    return std::clamp(multiplier + addition, 0.0, 1.0);
+        for (int channel = 0; channel < channels; ++channel)
+            color.addition[channel] = bits.signed_bits(width);
+    return color;
 }
 
-void skip_filters(Reader& input)
+std::string read_filters(Reader& input, bool* omitted)
 {
+    std::string filters;
+    const auto emit = [&](std::string filter)
+    {
+        if (!filters.empty())
+            filters += ',';
+        filters += std::move(filter);
+    };
+    const auto fixed = [&] { return std::bit_cast<std::int32_t>(input.u32()) / 65536.0; };
+    const auto scalar = [&] { return static_cast<double>(std::bit_cast<float>(input.u32())); };
     const auto count = input.u8();
     for (unsigned i = 0; i < count; ++i)
-        switch (input.u8())
+    {
+        const auto kind = input.u8();
+        if (omitted)
+            switch (kind)
+            {
+            case 0: case 1: case 2:
+            {
+                std::array<unsigned, 4> color{};
+                if (kind != 1)
+                    for (auto& channel : color)
+                        channel = input.u8();
+                const auto x = fixed(), y = fixed();
+                const auto angle = kind == 0 ? fixed() : 0;
+                const auto distance = kind == 0 ? fixed() : 0;
+                const auto strength = kind == 1 ? 1.0 : input.u16() / 256.0;
+                const auto flags = input.u8();
+                if (x < 0 || y < 0 || x > 255 || y > 255 || std::abs(distance) > 255)
+                {
+                    *omitted = true;
+                    continue;
+                }
+                if (kind == 1)
+                    emit(std::format("[1,{:g},{:g},{}]", x, y, flags >> 3));
+                else
+                    emit(std::format("[{},{:g},{:g},{:g},{:g},\"#{:02x}{:02x}{:02x}\",{:g},{},{}]",
+                        kind, x, y, distance * std::cos(angle), distance * std::sin(angle), color[0], color[1], color[2],
+                        color[3] * strength / 255.0, flags & 0xe0, flags & 31));
+                continue;
+            }
+            case 6:
+            {
+                std::string matrix = "[6";
+                bool finite = true;
+                for (unsigned term = 0; term < 20; ++term)
+                {
+                    const auto value = scalar();
+                    finite &= std::isfinite(value);
+                    matrix += std::format(",{:g}", term % 5 == 4 ? value / 255.0 : value);
+                }
+                if (finite)
+                    emit(matrix + ']');
+                else
+                    *omitted = true;
+                continue;
+            }
+            case 5:
+            {
+                const auto columns = input.u8(), rows = input.u8();
+                const auto divisor = scalar(), bias = scalar();
+                std::vector<double> kernel(columns * rows);
+                bool finite = std::isfinite(divisor) && std::isfinite(bias);
+                for (auto& coefficient : kernel)
+                {
+                    coefficient = scalar();
+                    finite &= std::isfinite(coefficient);
+                }
+                input.skip(3);
+                const auto alpha = input.u8();
+                const auto flags = input.u8();
+                if (!finite || !divisor || !columns || !rows || columns > 15 || rows > 15 || (!(flags & 2) && alpha))
+                {
+                    *omitted = true;
+                    continue;
+                }
+                auto filter = std::format("[5,{},{},{:g},{:g},{},[", columns, rows, divisor, bias / 255.0, flags);
+                for (auto coefficient = kernel.rbegin(); coefficient != kernel.rend(); ++coefficient)
+                {
+                    if (coefficient != kernel.rbegin())
+                        filter += ',';
+                    filter += std::format("{:g}", *coefficient);
+                }
+                emit(filter + "]]");
+                continue;
+            }
+            default: *omitted = true; break;
+            }
+        switch (kind)
         {
         case 0: input.skip(23); break;
         case 1: input.skip(9); break;
@@ -118,9 +213,18 @@ void skip_filters(Reader& input)
         case 6: input.skip(80); break;
         default: throw std::runtime_error("Filtre SWF inconnu.");
         }
+    }
+    return filters;
 }
 
-void place_object(Display& display, unsigned code, ByteView payload, unsigned frame)
+std::string_view blend_name(unsigned mode)
+{
+    constexpr std::string_view names[]{"", "", "isolate", "multiply", "screen", "lighten", "darken",
+        "difference", "plus-lighter", "", "", "", "", "overlay", "hard-light"};
+    return mode < std::size(names) ? names[mode] : std::string_view{};
+}
+
+void place_object(Display& display, unsigned code, ByteView payload, unsigned frame, bool* omitted = nullptr)
 {
     Reader input(payload);
     if (code == 4)
@@ -131,7 +235,7 @@ void place_object(Display& display, unsigned code, ByteView payload, unsigned fr
         item.placed = frame;
         item.transform = position(read_matrix(input));
         if (input.remaining())
-            color_alpha(input, false);
+            item.color = read_color_transform(input, false);
         display.layers[depth] = item;
         return;
     }
@@ -152,25 +256,35 @@ void place_object(Display& display, unsigned code, ByteView payload, unsigned fr
     if (flags & 4)
         item.transform = position(read_matrix(input));
     if (flags & 8)
-        item.opacity = color_alpha(input, true);
+    {
+        item.color = read_color_transform(input, true);
+        item.opacity = item.color.opacity();
+    }
     if (flags & 16)
         input.skip(2);
     if (flags & 32)
-        input.cstring();
+        item.name = input.cstring();
     if (flags & 64)
         item.clip_end = input.u16();
     if (!item.id)
         return;
-    if (extra & 32)
+    if ((extra & 32) || omitted)
     {
         if (extra & 1)
-            skip_filters(input);
+            item.filters = read_filters(input, omitted);
         if (extra & 2)
-            input.skip(1);
+        {
+            item.blend = input.u8();
+            if (omitted && item.blend > 1 && blend_name(item.blend).empty())
+                *omitted = true;
+        }
         if (extra & 4)
             input.skip(1);
-        item.visible = input.u8() != 0;
     }
+    if (extra & 32)
+        item.visible = input.u8() != 0;
+    if (omitted && (extra & 64))
+        *omitted = true;
     if (extra & 67)
         item.unsupported = true;
     display.layers[depth] = item;
@@ -513,5 +627,474 @@ void render_sprite_frames(const Movie& movie, std::size_t sprite, const std::fun
     }
     for (unsigned i = 1; i <= count; ++i)
         accept(i, scene.render(i, sprite, &viewport));
+}
+
+namespace web
+{
+namespace
+{
+void item_json(std::string& text, unsigned depth, const Instance& item)
+{
+    const auto& p = item.transform;
+    text += std::format("[{},{},[{:.12g},{:.12g},{:.12g},{:.12g},{:.12g},{:.12g}],{:g},{},{},{},{}",
+        depth, item.id, p.a, p.b, p.c, p.d, p.x, p.y, item.opacity, json_string(item.name),
+        item.clip_end, item.visible ? "true" : "false", item.placed);
+    if (item.color != ColorTransform{})
+        text += std::format(",[{},{},{},{},{},{},{},{}]",
+            item.color.multiplier[0], item.color.multiplier[1], item.color.multiplier[2], item.color.multiplier[3],
+            item.color.addition[0], item.color.addition[1], item.color.addition[2], item.color.addition[3]);
+    else if (!item.filters.empty() || item.blend > 1)
+        text += ",null";
+    if (!item.filters.empty() || item.blend > 1)
+        text += ",[" + item.filters + "]," + json_string(blend_name(item.blend));
+    text += ']';
+}
+
+template<class Range, class Emit>
+void array_json(std::string& text, const Range& values, Emit emit)
+{
+    text += '[';
+    bool comma = false;
+    for (const auto& value : values)
+    {
+        if (std::exchange(comma, true))
+            text += ',';
+        emit(text, value);
+    }
+    text += ']';
+}
+
+void merge_frame_action(const Movie& movie, std::size_t index, std::string& code, ExportReport& report)
+{
+    try { code += frame_action(movie.data(index)); }
+    catch (const std::exception& error)
+    {
+        omission(report, std::format("Script du tag {} : {}", index, error.what()));
+    }
+}
+
+std::string store_action(std::vector<std::string>& actions, std::string code)
+{
+    if (code.empty())
+        return "null";
+    actions.push_back("clip => {\n" + code + "}");
+    return std::to_string(actions.size() - 1);
+}
+
+std::string buttons_json(const Movie& movie, std::size_t index, std::vector<std::string>& actions, ExportReport& report)
+{
+    const auto modern = movie.tags()[index].code == 34;
+    Reader input(movie.data(index));
+    input.skip(2);
+    unsigned offset = 0;
+    if (modern)
+    {
+        input.skip(1);
+        offset = input.u16();
+    }
+    std::array<std::map<unsigned, Instance>, 4> states;
+    while (const auto flags = input.u8())
+    {
+        Instance item;
+        item.id = input.u16();
+        item.placed = 1;
+        const auto depth = input.u16();
+        item.transform = position(read_matrix(input));
+        if (modern)
+        {
+            item.color = read_color_transform(input, true);
+            item.opacity = item.color.opacity();
+            bool omitted = false;
+            if (flags & 16)
+                item.filters = read_filters(input, &omitted);
+            if (flags & 32)
+            {
+                item.blend = input.u8();
+                omitted |= item.blend > 1 && blend_name(item.blend).empty();
+            }
+            if (omitted)
+                omission(report, std::format("Bouton {} : filtre ou mode de fusion à porter.", index));
+        }
+        for (unsigned state = 0; state < states.size(); ++state)
+            if (flags & (1u << state))
+                states[state][depth] = item;
+    }
+    std::array<std::string, 5> handlers;
+    if (!modern)
+    {
+        try { handlers[0] = frame_action(input.take(input.remaining())); }
+        catch (const std::exception& error) { omission(report, std::format("Bouton {} : {}", index, error.what())); }
+    }
+    else if (offset)
+    {
+        // The offset is relative to the start of the ActionOffset field.
+        if (3 + offset >= movie.data(index).size())
+            throw std::runtime_error("Position des événements de bouton hors limites.");
+        Reader events(movie.data(index).subspan(3 + offset));
+        for (unsigned count = 0;; ++count)
+        {
+            if (count >= 1024)
+                throw std::runtime_error("Trop d’événements dans le bouton.");
+            const auto size = events.u16();
+            if (size && size < 4)
+                throw std::runtime_error("Taille d’événement SWF invalide.");
+            Reader event(events.take(size ? size - 2 : events.remaining()));
+            const auto flags = event.u8();
+            const auto key = event.u8();
+            try
+            {
+                const auto code = frame_action(event.take(event.remaining()));
+                constexpr std::array<std::uint8_t, 5> supported{8, 4, 1, 2, 64};
+                for (std::size_t i = 0; i < supported.size(); ++i)
+                    if (flags & supported[i])
+                        handlers[i] += code;
+                if (key || (flags & 0xB0))
+                    omission(report, std::format("Bouton {} : transition clavier ou glisser à porter.", index));
+            }
+            catch (const std::exception& error)
+            {
+                omission(report, std::format("Bouton {} : {}", index, error.what()));
+            }
+            if (!size)
+                break;
+        }
+    }
+    std::string json = "{\"states\":";
+    array_json(json, states, [](std::string& output, const auto& state)
+    {
+        array_json(output, state, [](std::string& result, const auto& layer)
+        {
+            item_json(result, layer.first, layer.second);
+        });
+    });
+    json += ",\"handlers\":";
+    array_json(json, handlers, [&](std::string& output, const std::string& handler)
+    {
+        output += store_action(actions, handler);
+    });
+    return json + '}';
+}
+
+std::string timeline_json(const Movie& movie, std::optional<std::size_t> sprite, std::vector<std::string>& actions,
+    ExportReport& report, const std::set<unsigned>& visual, const ScriptAsset* script, const std::filesystem::path& destination)
+{
+    Display display, previous;
+    std::string frames = "[";
+    std::map<std::string, unsigned> labels;
+    std::string action;
+    std::vector<std::array<unsigned, 6>> sounds;
+    struct Stream
+    {
+        unsigned settings{}, first{}, last{};
+        std::optional<std::size_t> tag;
+        double offset{};
+        Bytes samples;
+    };
+    Stream stream;
+    std::string tracks = "[";
+    const auto save_stream = [&]
+    {
+        if (stream.samples.empty())
+            return;
+        const auto mp3 = stream.settings >> 4 == 2;
+        const auto filename = std::format("stream-{}{}", *stream.tag, mp3 ? ".mp3" : ".wav");
+        if (mp3)
+            write_file(destination / "assets" / filename, stream.samples);
+        else
+            write_file(destination / "assets" / filename, pcm_audio(stream.settings, stream.samples).bytes);
+        ++report.files;
+        if (tracks.size() > 1)
+            tracks += ',';
+        tracks += std::format("[{},{},{},{:g}]", stream.first, stream.last, json_string("assets/" + filename), stream.offset);
+    };
+    std::set<unsigned> unsupported;
+    unsigned frame = 1;
+    const auto flush = [&]
+    {
+        if (frame > 1)
+            frames += ',';
+        frames += "[[";
+        bool comma = false;
+        for (const auto& [depth, item] : display.layers)
+        {
+            const auto old = previous.layers.find(depth);
+            if (old != previous.layers.end() && old->second == item)
+                continue;
+            if (std::exchange(comma, true))
+                frames += ',';
+            item_json(frames, depth, item);
+            if (!visual.contains(item.id))
+                unsupported.insert(item.id);
+        }
+        frames += "],[";
+        comma = false;
+        for (const auto& [depth, item] : previous.layers)
+            if (!display.layers.contains(depth))
+            {
+                if (std::exchange(comma, true))
+                    frames += ',';
+                frames += std::to_string(depth);
+            }
+        frames += "],";
+        if (display.background != previous.background && display.background)
+        {
+            const auto& color = *display.background;
+            frames += std::format("\"#{:02x}{:02x}{:02x}\"", color[0], color[1], color[2]);
+        }
+        else
+            frames += "null";
+        frames += ',' + store_action(actions, std::exchange(action, {})) + ',';
+        array_json(frames, sounds, [](std::string& text, const auto& sound)
+        {
+            array_json(text, sound, [](std::string& output, unsigned value) { output += std::to_string(value); });
+        });
+        frames += ']';
+        sounds.clear();
+        previous = display;
+        ++frame;
+        if (frames.size() > 64 * 1024 * 1024)
+            throw std::runtime_error("Timeline HTML5 supérieure à 64 Mio.");
+    };
+    for (std::size_t i = sprite ? *sprite + 1 : 0; i < movie.tags().size(); i = movie.tags()[i].next_sibling)
+    {
+        const auto tag = movie.tags()[i].code;
+        if (!tag)
+            break;
+        if (tag == 1)
+        {
+            flush();
+            continue;
+        }
+        try
+        {
+            Reader input(movie.data(i));
+            switch (tag)
+            {
+            case 4: case 26: case 70: case 94:
+            {
+                const auto flags = tag == 4 ? 0 : input.u8();
+                bool omitted = false;
+                place_object(display, tag, movie.data(i), frame, &omitted);
+                if (flags & 128)
+                    omission(report, std::format("Placement {} : actions attachées au clip à porter.", i));
+                if (omitted)
+                    omission(report, std::format("Placement {} : filtre, mode de fusion ou fond opaque à porter.", i));
+                break;
+            }
+            case 5: case 28:
+                if (tag == 5)
+                    input.skip(2);
+                display.layers.erase(input.u16());
+                break;
+            case 9: display.background = {input.u8(), input.u8(), input.u8()}; break;
+            case 12: merge_frame_action(movie, i, action, report); break;
+            case 15:
+            {
+                const auto id = input.u16();
+                const auto flags = input.u8();
+                const auto from = flags & 1 ? input.u32() : 0u;
+                const auto to = flags & 2 ? input.u32() : 0u;
+                const auto loops = flags & 4 ? input.u16() : 1u;
+                sounds.push_back({id, from, to, loops, bool(flags & 16), bool(flags & 32)});
+                if (flags & 8)
+                    omission(report, std::format("Son {} : enveloppe audio à porter.", i));
+                break;
+            }
+            case 43:
+                labels.insert_or_assign(input.cstring(), frame);
+                break;
+            case 86:
+            {
+                for (const bool scenes : {true, false})
+                {
+                    const auto count = input.v32();
+                    if (count > input.remaining() / 2)
+                        throw std::runtime_error("Nombre d’étiquettes de la timeline invalide.");
+                    for (unsigned entry = 0; entry < count; ++entry)
+                    {
+                        const auto position = input.v32();
+                        auto name = input.cstring();
+                        if (!scenes && position < 65535)
+                            labels.insert_or_assign(std::move(name), position + 1);
+                    }
+                }
+                break;
+            }
+            case 18: case 45:
+                save_stream();
+                stream = {};
+                input.skip(1);
+                stream.tag = i;
+                stream.settings = input.u8();
+                input.skip(2);
+                if (const auto codec = stream.settings >> 4; codec != 0 && codec != 2 && codec != 3)
+                    omission(report, std::format("Tag {} : codec de streaming {} à porter.", i, codec));
+                break;
+            case 19:
+            {
+                if (!stream.tag)
+                    break;
+                const auto codec = stream.settings >> 4;
+                if (codec != 0 && codec != 2 && codec != 3)
+                    break;
+                if (codec == 2)
+                {
+                    input.skip(2);
+                    const auto skip = std::bit_cast<std::int16_t>(input.u16());
+                    constexpr unsigned rates[]{5512, 11025, 22050, 44100};
+                    if (!stream.first)
+                        stream.offset = static_cast<double>(skip) / rates[(stream.settings >> 2) & 3];
+                }
+                const auto bytes = input.take(input.remaining());
+                if (!bytes.empty())
+                {
+                    if (bytes.size() > 64 * 1024 * 1024 - stream.samples.size())
+                        throw std::runtime_error("Piste audio supérieure à 64 Mio.");
+                    if (!stream.first)
+                        stream.first = frame;
+                    stream.last = frame;
+                    append(stream.samples, bytes);
+                }
+                break;
+            }
+            case 89:
+                omission(report, std::format("Tag {} : lecture audio nommée à porter.", i));
+                break;
+            default: break;
+            }
+        }
+        catch (const std::exception& error) { omission(report, std::format("Timeline, tag {} : {}", i, error.what())); }
+    }
+    try { save_stream(); }
+    catch (const std::exception& error) { omission(report, std::format("Piste audio {} : {}", stream.tag.value_or(0), error.what())); }
+    if (frame == 1)
+        flush();
+    for (const auto id : unsupported)
+        omission(report, std::format("Ressource #{} : aucun visuel converti dans cette timeline.", id));
+    std::string label_json = "{";
+    for (const auto& [name, number] : labels)
+    {
+        if (label_json.size() > 1)
+            label_json += ',';
+        label_json += json_string(name) + ':' + std::to_string(number);
+    }
+    const auto legacy = script ? store_action(actions, script->legacy_initializer) : "null";
+    return "{\"frames\":" + frames + "],\"labels\":" + label_json + "},\"legacyInitialize\":" + legacy +
+        ",\"type\":" + (script && !script->type.empty() ? json_string(script->type) : "null") +
+        ",\"streams\":" + tracks + "]}";
+}
+}
+
+std::string export_timeline(const Movie& movie, const std::filesystem::path& destination, ExportReport& report,
+    std::vector<std::string>& actions, const std::map<unsigned, ScriptAsset>& scripts,
+    const std::function<std::string(const Asset&)>& share_visual)
+{
+    std::filesystem::create_directories(destination / "assets");
+    std::string assets = "{", audios = "{", audio_timing = "{", buttons = "{", clips = "{";
+    std::set<unsigned> visual;
+    std::vector<std::pair<unsigned, std::size_t>> sprites;
+    const auto entry = [](std::string& object, unsigned id, std::string value)
+    {
+        if (object.size() > 1)
+            object += ',';
+        object += json_string(std::to_string(id)) + ':' + value;
+    };
+    for (std::size_t index = 0; index < movie.tags().size(); ++index)
+    {
+        const auto& tag = movie.tags()[index];
+        if (!tag.character_id || movie.character(*tag.character_id) != index)
+            continue;
+        const auto id = *tag.character_id;
+        try
+        {
+            if (tag.code == 39)
+            {
+                visual.insert(id);
+                sprites.emplace_back(id, index);
+                continue;
+            }
+            if (tag.code == 7 || tag.code == 34)
+            {
+                entry(buttons, id, buttons_json(movie, index, actions, report));
+                visual.insert(id);
+                continue;
+            }
+            if (tag.code == 37)
+            {
+                entry(assets, id, text_field_json(movie, index));
+                visual.insert(id);
+                continue;
+            }
+            auto asset = tag.code == 11 || tag.code == 33 ? std::optional{text_svg(movie, index)} : extract(movie, index);
+            if (!asset && (tag.code == 10 || tag.code == 48 || tag.code == 75))
+                asset = font_svg(movie, index);
+            if (!asset)
+            {
+                if (tag.category == Category::sounds || tag.category == Category::shapes || tag.code == 60)
+                    omission(report, std::format("Ressource #{} ({}) à porter.", id, tag_name(tag.code)));
+                continue;
+            }
+            const auto file = std::format(L"asset-{}{}", id, asset->extension);
+            const auto displayed = tag.category == Category::shapes || tag.category == Category::images ||
+                tag.code == 11 || tag.code == 33;
+            std::string path;
+            if (displayed && share_visual)
+                path = share_visual(*asset);
+            else
+            {
+                write_file(destination / "assets" / file, asset->bytes);
+                ++report.files;
+                path = "assets/" + std::filesystem::path(file).generic_string();
+            }
+            if (tag.code == 14)
+            {
+                entry(audios, id, json_string(path));
+                Reader input(movie.data(index));
+                input.skip(2);
+                const auto flags = input.u8();
+                const auto samples = input.u32();
+                constexpr unsigned rates[]{5512, 11025, 22050, 44100};
+                const auto priming = flags >> 4 == 2 ? static_cast<std::int16_t>(input.u16()) : 0;
+                entry(audio_timing, id, std::format("[{},{},{}]", rates[(flags >> 2) & 3], samples, priming));
+            }
+            else if (displayed)
+            {
+                std::string view;
+                if (tag.category == Category::images)
+                {
+                    const auto [width, height] = bitmap_dimensions(*asset);
+                    view = std::format(",\"bounds\":[0,0,{},{}]", width * 20u, height * 20u);
+                }
+                else
+                {
+                    Reader input(movie.data(index));
+                    input.skip(2);
+                    BitReader box(input);
+                    const auto width = box.unsigned_bits(5);
+                    const auto x1 = box.signed_bits(width), x2 = box.signed_bits(width);
+                    const auto y1 = box.signed_bits(width), y2 = box.signed_bits(width);
+                    view = std::format(",\"bounds\":[{},{},{},{}]", x1, y1,
+                        std::max<std::int64_t>(20, std::int64_t{x2} - x1), std::max<std::int64_t>(20, std::int64_t{y2} - y1));
+                }
+                entry(assets, id, "{\"url\":" + json_string(path) + view + '}');
+                visual.insert(id);
+            }
+        }
+        catch (const std::exception& error) { omission(report, std::format("Ressource #{} : {}", id, error.what())); }
+    }
+    const auto add_timeline = [&](unsigned id, std::optional<std::size_t> sprite)
+    {
+        const auto script = scripts.find(id);
+        entry(clips, id, timeline_json(movie, sprite, actions, report, visual,
+            script == scripts.end() ? nullptr : &script->second, destination));
+    };
+    add_timeline(0, {});
+    for (const auto& [id, index] : sprites)
+        add_timeline(id, index);
+    const auto& h = movie.header();
+    return std::format("{{\"fps\":{:g},\"viewBox\":[{},{},{},{}],\"assets\":{},\"audio\":{},\"audioTiming\":{},\"buttons\":{},\"clips\":{}}}",
+        playback_fps(movie), h.left, h.top, std::max<std::int64_t>(20, std::int64_t{h.right} - h.left),
+        std::max<std::int64_t>(20, std::int64_t{h.bottom} - h.top), assets + '}', audios + '}', audio_timing + '}', buttons + '}', clips + '}');
+}
 }
 }

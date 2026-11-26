@@ -1,6 +1,7 @@
 """Generate small SWFs and exercise the native CLI with Python's standard library."""
 
 import argparse
+import json
 import lzma
 from pathlib import Path
 import struct
@@ -144,6 +145,89 @@ def check(exe, folder, asc=None):
     assert 'matrix(1 0 0 1 3520 0)' in last_frame.read_text(encoding="utf-8")
     run("sprite-frame", animation, "1", "13", last_frame, ok=False)
 
+    web = folder / "html5-sprite"
+    run("export-html5", animation, web)
+    scene = json.loads((web / "scene.json").read_text(encoding="utf-8"))
+    assert scene["fps"] == 2 and scene["viewBox"] == [0, 0, 12800, 7200]
+    assert scene["clips"]["0"]["frames"][0][0][0][1] == 7
+    frames = scene["clips"]["7"]["frames"]
+    assert len(frames) == 12 and frames[11][0][0][2] == [1, 0, 0, 1, 3520, 0]
+    assert (web / scene["assets"]["10"]["url"]).is_file()
+    original = (web / "scene.json").read_bytes()
+    run("export-html5", animation, web, ok=False)
+    assert (web / "scene.json").read_bytes() == original
+
+    web_folder = folder / "site-source"
+    web_root = web_folder / "htdocs"
+    (web_root / "data" / "fx").mkdir(parents=True)
+    (web_root / "data" / "skin").mkdir()
+    (web_root / "data" / "fx" / "asset.swf").write_bytes(animation.read_bytes())
+    (web_root / "data" / "skin" / "asset.swf").write_bytes(animation.read_bytes())
+    (web_folder / "app.js").write_text(
+        'app.get("/chat/app.swf", (req, res) => {\n'
+        f'  res.sendFile(path.join({json.dumps(str(animation))}));\n'
+        '});\napp.listen(config.webServerPort);\n', encoding="utf-8")
+    (web_root / "params.xml").write_text("<config/>", encoding="utf-8")
+    (web_folder / "config.json").write_text('{"webServerPort":36000,"secret":"must stay private"}', encoding="utf-8")
+    web_batch = folder / "html5-workspace"
+    run("export-html5-workspace", web_folder, web_batch)
+    web_index = json.loads((web_batch / "__flashstudio" / "catalog.json").read_text("utf-8"))
+    assert web_index["entry"] == web_index["movies"]["/chat/app.swf"]
+    assert len(web_index["movies"]) == 3 and len(set(web_index["movies"].values())) == 3
+    shared_shapes = set()
+    for url, page in web_index["movies"].items():
+        player = web_batch / page.lstrip("/")
+        assert "../../stage.js" in player.read_text("utf-8")
+        scene = json.loads(player.with_name("scene.json").read_text("utf-8"))
+        assert scene["workspace"]["source"] == url
+        shared_shapes.add((player.parent / scene["assets"]["10"]["url"]).resolve())
+        assert player.with_name("source.bin").read_bytes().startswith(b"FWS")
+    assert len(shared_shapes) == 1 and next(iter(shared_shapes)).is_file()
+    assert (web_batch / "params.xml").is_file() and not (web_batch / "config.json").exists()
+    assert sorted(web_folder.rglob("*.swf")) == sorted([
+        web_root / "data" / "fx" / "asset.swf", web_root / "data" / "skin" / "asset.swf"
+    ])
+    previous_export = web_root / "test" / "htdocs-html5"
+    (previous_export / "__flashstudio").mkdir(parents=True)
+    (previous_export / "__flashstudio" / "catalog.json").write_text("{}", encoding="utf-8")
+    (previous_export / "old.css").write_text("body {}", encoding="utf-8")
+    direct_batch = folder / "html5-direct-htdocs"
+    run("export-html5-workspace", web_root, direct_batch)
+    assert json.loads((direct_batch / "__flashstudio" / "catalog.json").read_text("utf-8")) == web_index
+    assert json.loads((direct_batch / "__flashstudio" / "network.json").read_text("utf-8"))["backendPort"] == 36000
+    assert (direct_batch / "params.xml").is_file() and not (direct_batch / "test").exists()
+
+    web_demo = folder / "html5-demo"
+    assert "points de portage" in run("export-html5", path, web_demo, ok=False)
+    scene = json.loads((web_demo / "scene.json").read_text(encoding="utf-8"))
+    assert (web_demo / scene["audio"]["11"]).is_file()
+    assert scene["audioTiming"]["11"] == [5512, 2, 0]
+    assert 'console.log("Bonjour, Flash Studio !");' in (web_demo / "actions.js").read_text(encoding="utf-8")
+    assert list((web_demo / "sources" / "avm1").glob("*.as"))
+    assert not list(web_demo.rglob("*.swf"))
+
+    web_effects = folder / "html5-effects"
+    effects_movie = folder / "Web effects.swf"
+    color_matrix = [1, 0, 0, 0, 64, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
+    filters = b"\x03\x01" + struct.pack("<IIB", 2 * 65536, 3 * 65536, 16)
+    filters += b"\x06" + struct.pack("<20f", *color_matrix)
+    filters += b"\x05\x02\x01" + struct.pack("<4f", 3, 0, 1, 2) + b"\x00\x00\x00\x00\x03"
+    placement = struct.pack("<BBHHB", 6, 3, 1, 10, 0) + filters + b"\x03"
+    samples = b"\x00\x00\x01\x00\x02\x00\x03\x00"
+    effects_body = (rectangle(12800, 7200) + struct.pack("<HH", 24 * 256, 1) + shape() +
+                    tag(70, placement) + tag(45, b"\x0e\x3e\x04\x00") + tag(19, samples) + tag(1) + tag(0))
+    effects_movie.write_bytes(swf(b"FWS", effects_body, effects_body))
+    run("export-html5", effects_movie, web_effects)
+    clip = json.loads((web_effects / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
+    layer = clip["frames"][0][0][0]
+    assert layer[9][0] == [1, 2, 3, 2] and abs(layer[9][1][5] - 64 / 255) < 1e-6
+    assert layer[9][2] == [5, 2, 1, 3, 0, 3, [2, 1]]
+    assert layer[10] == "multiply"
+    first, last, wav, offset = clip["streams"][0]
+    assert (first, last, offset) == (1, 1, 0)
+    with wave.open(str(web_effects / wav), "rb") as audio:
+        assert audio.getframerate() == 44100 and audio.readframes(4) == samples
+
     fractional = folder / "Sprite cadence fractionnaire.swf"
     fractional.write_bytes(animated_sprite(6138))
     anim_png = folder / "sprite.apng"
@@ -245,6 +329,11 @@ def check(exe, folder, asc=None):
     tag_movie.write_bytes(swf(b"FWS", fields, fields))
     assert "Image 2 · Fin" in run("inspect", tag_movie, "1")
     assert "Profondeur : 1" in run("inspect", tag_movie, "2")
+    web_tags = folder / "html5-labels"
+    run("export-html5", tag_movie, web_tags)
+    web_timeline = json.loads((web_tags / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
+    assert web_timeline["labels"]["Fin"] == 2
+    assert [frame[0][0][6] for frame in web_timeline["frames"]] == [False, True]
     run("frame", tag_movie, "1", first_frame)
     run("frame", tag_movie, "2", last_frame)
     assert "<path" not in first_frame.read_text(encoding="utf-8")
@@ -268,6 +357,195 @@ def check(exe, folder, asc=None):
         empty_as3 = folder / "Empty AS3.swf"
         empty_body = class_header + tag(69, b"\x08\x00\x00\x00") + tag(1) + tag(0)
         empty_as3.write_bytes(swf(b"CWS", empty_body, zlib.compress(empty_body)))
+        if (asc / "playerglobal.swc").exists():
+            base_source = folder / "WebBase.as"
+            base_source.write_text("""package demo {
+    import flash.display.MovieClip;
+    public class WebBase extends MovieClip {
+        private var tally:int;
+        public function WebBase(seed:int) { tally = seed; }
+        protected function get total():int { return tally; }
+        protected function measure():int { return tally + 1; }
+    }
+}""", encoding="utf-8")
+            web_base = folder / "web-base.swf"
+            run("class-new", empty_as3, "demo.WebBase", base_source, web_base, asc / "asc.jar")
+            helper_source = folder / "WebHelper.as"
+            helper_source.write_text("""package demo {
+    public class WebHelper {
+        private static var factor:int = 2;
+        private var value:int;
+        public function WebHelper(value:int) { this.value = value; }
+        public function result():int { return value * factor; }
+    }
+}""", encoding="utf-8")
+            web_helper = folder / "web-helper.swf"
+            run("class-new", web_base, "demo.WebHelper", helper_source, web_helper, asc / "asc.jar")
+            scene_source = folder / "WebScene.as"
+            scene_source.write_text("""package demo {
+    import flash.display.SimpleButton;
+    import flash.display.Sprite;
+    import flash.display.Loader;
+    import flash.events.Event;
+    import flash.events.MouseEvent;
+    import flash.events.ProgressEvent;
+    import flash.events.TextEvent;
+    import flash.events.TimerEvent;
+    import flash.media.Sound;
+    import flash.media.SoundChannel;
+    import flash.net.LocalConnection;
+    import flash.net.Socket;
+    import flash.net.URLLoader;
+    import flash.net.URLRequest;
+    import flash.text.TextField;
+    import flash.utils.Timer;
+    public class WebScene extends WebBase {
+        public var rich:TextField;
+        private var tally:int;
+        private var receiver:LocalConnection;
+        private var sender:LocalConnection;
+        private var loader:URLLoader;
+        private var library:Loader;
+        private var mapLibrary:Loader;
+        private var socket:Socket;
+        private var sound:Sound;
+        public function WebScene() {
+            super(5);
+            tally = 1;
+            addFrameScript(0, firstFrame);
+        }
+        override protected function measure():int { return super.measure() + tally; }
+        private function firstFrame():void {
+            stop();
+            var graphic:Sprite = new Sprite();
+            graphic.graphics.beginFill(0x339966, 0.8);
+            graphic.graphics.drawRect(2, 3, 9, 7);
+            graphic.graphics.endFill();
+            rich.x = NaN;
+            addChildAt(new SimpleButton(graphic, graphic, graphic, graphic), getChildIndex(rich));
+            addEventListener(MouseEvent.CLICK, clicked);
+        }
+        private function clicked(e:MouseEvent):void {
+            var owner:* = this;
+            owner.tally = int(owner.tally + 1);
+            if (owner == this && tally == 2) trace("Private alias OK");
+            tally = 1;
+            var helper:WebHelper = new WebHelper(measure());
+            if (total == 5 && helper.result() == 14 && e.currentTarget == this) { trace("Converted AS3"); }
+            var instance:WebBase = new WebBase(7);
+            addChild(instance);
+            if ((instance.getChildByName("caption") as TextField).text.indexOf("Initial") >= 0) trace("Symbol OK");
+            var timer:Timer = new Timer(10, 1);
+            timer.addEventListener(TimerEvent.TIMER_COMPLETE, timed);
+            timer.start();
+            rich.htmlText = "<p><b>Runtime</b> &amp; <font color='#ff0000'>couleur</font> <a href='event:probe'>test</a></p>";
+            rich.addEventListener(TextEvent.LINK, linkReady);
+            receiver = new LocalConnection();
+            receiver.client = this;
+            receiver.connect("conversion-probe");
+            sender = new LocalConnection();
+            sender.send("conversion-probe", "received", "LocalConnection OK");
+            loader = new URLLoader();
+            loader.addEventListener(Event.COMPLETE, httpReady);
+            loader.load(new URLRequest("response.txt"));
+            library = new Loader();
+            library.contentLoaderInfo.addEventListener(Event.INIT, libraryReady);
+            library.load(new URLRequest("../data/linked.swf"));
+            var mapRequest:URLLoader = new URLLoader();
+            mapRequest.dataFormat = "binary";
+            mapRequest.addEventListener(Event.COMPLETE, mapBytes);
+            mapRequest.load(new URLRequest("../data/" + ["linked"].join("") + ".swf?t=1"));
+            socket = new Socket();
+            socket.addEventListener(Event.CONNECT, socketReady);
+            socket.addEventListener(ProgressEvent.SOCKET_DATA, socketData);
+            socket.connect("fixture", 9000);
+            sound = new Sound(new URLRequest("tone.wav"));
+            var channel:SoundChannel = sound.play();
+            channel.addEventListener(Event.SOUND_COMPLETE, soundReady);
+        }
+        public function received(value:String):void { trace(value); receiver.close(); }
+        private function httpReady(e:Event):void {
+            var request:URLLoader = URLLoader(e.currentTarget);
+            var parsed:XML = new XML(request.data);
+            if (parsed.result.@code.length() == 1) trace(String(parsed.result.@code));
+        }
+        private function libraryReady(e:Event):void {
+            var maker:Class = Class(library.contentLoaderInfo.applicationDomain.getDefinition("demo.WebHelper"));
+            var helper:Object = new maker(8);
+            if (helper.result() == 16 && library.contentLoaderInfo.bytes[0] == 70) trace("Loader OK");
+        }
+        private function mapBytes(e:Event):void {
+            mapLibrary = new Loader();
+            mapLibrary.contentLoaderInfo.addEventListener(Event.INIT, mapReady);
+            mapLibrary.loadBytes(URLLoader(e.currentTarget).data);
+        }
+        private function mapReady(e:Event):void {
+            if (mapLibrary.contentLoaderInfo.applicationDomain.hasDefinition("demo.WebHelper")) trace("Bytes OK");
+        }
+        private function socketReady(e:Event):void { socket.writeUTFBytes("echo"); socket.flush(); }
+        private function socketData(e:ProgressEvent):void {
+            if (socket.bytesAvailable >= 4 && socket.readUTFBytes(4) == "echo") trace("Socket OK");
+        }
+        private function soundReady(e:Event):void { trace("Sound OK"); }
+        private function timed(e:TimerEvent):void {
+            var alert:TextEvent = null as TextEvent;
+            if ((e is TimerEvent) && (e as TextEvent) == null && alert == null) {
+                addEventListener("onFatalAlert", fatalAlert);
+                alert = new TextEvent("onFatalAlert");
+                alert.text = "modified text";
+                dispatchEvent(alert);
+                trace("Converted timer");
+            }
+        }
+        private function fatalAlert(e:Event):void {
+            var alert:TextEvent = TextEvent(e);
+            if ((alert is Event) && alert.text == "modified text" && !(new Event("link") is TextEvent)) trace("TextEvent OK");
+        }
+        private function linkReady(e:Event):void {
+            if ((e is TextEvent) && (e as TextEvent).text == "probe") trace("TextEvent link OK");
+        }
+        private function linked():String { return "../data/linked.swf"; }
+        private function outside():String { return "../../outside.swf"; }
+    }
+}""", encoding="utf-8")
+            web_class = folder / "web-class.swf"
+            run("class-new", web_helper, "demo.WebScene", scene_source, web_class, asc / "asc.jar")
+            web_body = zlib.decompress(web_class.read_bytes()[8:])
+            rich = (struct.pack("<H", 24) + rectangle(5400, 1600) + b"\xa8\x02\x00" +
+                    b"<p><b>Initial</b> &amp; HTML</p>\x00")
+            placed = struct.pack("<BHHB", 38, 1, 24, 0) + b"rich\x00"
+            caption = tag(26, struct.pack("<BHHB", 38, 1, 24, 0) + b"caption\x00")
+            symbol = tag(39, struct.pack("<HH", 78, 1) + caption + tag(1) + tag(0))
+            web_body = (web_body[:-4] + tag(37, rich) + symbol + tag(26, placed) +
+                        tag(76, b"\x02\x00\x00\x00demo.WebScene\x00\x4e\x00demo.WebBase\x00") + web_body[-4:])
+            web_workspace = folder / "web-workspace"
+            (web_workspace / "pages").mkdir(parents=True)
+            (web_workspace / "data").mkdir()
+            (web_workspace / "data" / "linked.swf").write_bytes(web_helper.read_bytes())
+            (folder / "outside.swf").write_bytes(animated_sprite())
+            web_movie = web_workspace / "pages" / "web-scene.swf"
+            web_movie.write_bytes(swf(b"FWS", web_body, web_body))
+            web_as3 = folder / "html5-as3"
+            result = subprocess.run([exe, "export-html5", web_movie, web_as3, web_workspace], capture_output=True, timeout=15)
+            assert result.returncode == 3, result.stderr
+            javascript = (web_as3 / "classes.js").read_text(encoding="utf-8")
+            assert 'clip.superInit(5);' in javascript and 'console.log("Converted AS3");' in javascript, javascript
+            scene = json.loads((web_as3 / "scene.json").read_text(encoding="utf-8"))
+            assert scene["clips"]["0"]["type"] == "demo.WebScene"
+            assert scene["clips"]["78"]["type"] == "demo.WebBase"
+            assert 'clip.eventName("CLICK")' in javascript and 'clip.create("demo.WebHelper"' in javascript, javascript
+            assert 'clip.native("Sprite")' in javascript and 'clip.native("Timer", 10, 1)' in javascript
+            assert 'clip.native("SimpleButton"' in javascript
+            assert '["loadBytes"](' in javascript and 'clip.cast(' in javascript
+            assert 'clip.asType(null, "TextEvent")' in javascript and 'clip.event("TextEvent", "onFatalAlert")' in javascript
+            assert 'clip.cast($arg1, "TextEvent")' in javascript and 'clip.eventName("LINK")' in javascript
+            assert all(f'clip.native("{api}"' in javascript for api in ["LocalConnection", "Loader", "Socket", "Sound", "URLLoader", "URLRequest"])
+            assert scene["assets"]["24"]["html"] and scene["assets"]["24"]["text"].startswith("<p><b>Initial")
+            dependency = scene["dependencies"]
+            assert list(dependency) == ["../data/linked.swf"]
+            assert (web_as3 / dependency["../data/linked.swf"]).is_file()
+            assert (web_as3 / dependency["../data/linked.swf"]).with_name("source.bin").read_bytes().startswith(b"FWS")
+            assert "Dépendance SWF non résolue : ../../outside.swf" in (web_as3 / "LISEZ-MOI.txt").read_text("utf-8")
         source = folder / "Panel.as"
         panel_source = """package demo {
     public class Panel {
@@ -364,6 +642,9 @@ def check(exe, folder, asc=None):
         assert declaration in class_source
     assert "Initialiseur statique" not in class_source
     assert "0\tActionScript\tdemo.Probe\t" in run("search", class_movie, "get read", "--source")
+    web_classes = folder / "classes-seules.js"
+    run("export-html5-classes", class_movie, web_classes)
+    assert '["demo.Probe"]:' in web_classes.read_text(encoding="utf-8")
 
     loop_pcode = folder / "boucle.pcode"
     loop_pcode.write_text(""".stack 2
@@ -450,6 +731,22 @@ returnvalue
     run("abc-edit", class_movie, "0", "2", closure_pcode, undefined_local)
     local_source = run("abc-class", undefined_local, "0", "0")
     assert "return 42;" in local_source and "return 99;" not in local_source
+
+    saved_stack_value = folder / "Valeur de pile après kill.swf"
+    closure_pcode.write_text(""".stack 1
+.locals 2
+.scope 0 1
+getlocal0
+pushscope
+pushbyte 29
+setlocal1
+getlocal1
+kill 1
+returnvalue
+""", encoding="utf-8")
+    run("abc-edit", class_movie, "0", "2", closure_pcode, saved_stack_value)
+    saved_source = run("abc-class", saved_stack_value, "0", "0")
+    assert "savedValue1:* = local1;" in saved_source and "return savedValue1;" in saved_source, saved_source
 
     dynamic_calls = class_abc.replace(b"\x07counter", b"\x07counter\x08toString", 1)
     dynamic_calls = dynamic_calls.replace(b"\x0b\x04demo", b"\x0c\x04demo", 1)
@@ -800,7 +1097,11 @@ returnvalue
     assert 'default xml namespace = "demo";' in xml_source and '..value' in xml_source, xml_source
     recompile(xml_source, "asc-e4x")
 
-    for opcode, statement in (("nextname", "for (local3 in local2)"), ("nextvalue", "for each (local3 in local2)")):
+    for label, opcode, coercion, statement in (
+        ("nextname", "nextname", "coerce_a", "for (local3 in local2)"),
+        ("nextvalue-uint", "nextvalue", "convert_u", "local3 = uint(item);"),
+        ("nextvalue", "nextvalue", "coerce_a", "for each (local3 in local2)"),
+    ):
         loop_pcode.write_text(f""".stack 2
 .locals 4
 .scope 0 0
@@ -814,7 +1115,7 @@ corps: label
 getlocal2
 getlocal1
 {opcode}
-coerce_a
+{coercion}
 setlocal3
 test: hasnext2 2 1
 iftrue corps
@@ -823,11 +1124,11 @@ kill 1
 pushbyte 42
 returnvalue
 """, encoding="utf-8")
-        enumeration = folder / f"{opcode}.swf"
+        enumeration = folder / f"{label}.swf"
         run("abc-edit", class_movie, "0", "2", loop_pcode, enumeration)
         source = run("abc-class", enumeration, "0", "0")
         assert statement in source and "Corps AVM2 non reconstruit" not in source
-        recompile(source, f"asc-{opcode}")
+        recompile(source, f"asc-{label}")
 
     typed_enumeration = loop_pcode.read_text(encoding="utf-8").replace(
         "coerce_a\nsetlocal3", "coerce 4\ndup\nsetlocal3\nconvert_i\nsetlocal3")
@@ -837,6 +1138,49 @@ returnvalue
     typed_source = run("abc-class", typed_movie, "0", "0")
     assert "for each (var item:* in local2)" in typed_source and "local3 = int(item);" in typed_source, typed_source
     recompile(typed_source, "asc-enumeration-typee")
+
+    loop_pcode.write_text(""".stack 2
+.locals 2
+.scope 0 0
+pushbyte 0
+convert_u
+setlocal1
+getlocal1
+convert_d
+dup
+increment
+convert_u
+setlocal1
+convert_i
+returnvalue
+""", encoding="utf-8")
+    post_increment = folder / "Indice postfixé.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, post_increment)
+    postfix_source = run("abc-class", post_increment, "0", "0")
+    assert "var savedValue1:* = Number(local1);" in postfix_source, postfix_source
+    assert "return int(savedValue1);" in postfix_source, postfix_source
+    recompile(postfix_source, "asc-increment-postfixe")
+
+    loop_pcode.write_text(""".stack 2
+.locals 2
+.scope 0 0
+.anchor interieur fin 1
+pushbyte 1
+setlocal1
+getlocal1
+pushbyte 0
+ifeq fin
+pushbyte 7
+returnvalue
+jump interieur
+fin: pushbyte 9
+returnvalue
+""", encoding="utf-8")
+    dead_jump = folder / "Saut inatteignable.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, dead_jump)
+    dead_jump_source = run("abc-class", dead_jump, "0", "0")
+    assert "return 7;" in dead_jump_source and "return 9;" in dead_jump_source, dead_jump_source
+    recompile(dead_jump_source, "asc-saut-inatteignable")
 
     loop_pcode.write_text(""".stack 3
 .locals 3
@@ -1176,7 +1520,7 @@ fin:
         malformed.write_bytes(content)
         run("info", malformed, ok=False)
     run("export", folder / "Démo.swf", "1000", output, ok=False)
-    print("OK — FWS, CWS, ZWS, XML, ABC, P-code, scènes, images, projet, textes et entrées invalides")
+    print("OK — FWS, CWS, ZWS, XML, ABC, P-code, scènes, images, projet, HTML5, textes et entrées invalides")
 
 
 if __name__ == "__main__":

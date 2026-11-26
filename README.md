@@ -27,6 +27,14 @@ Flash Studio is a Windows workbench for inspecting, editing and exporting SWF fi
 
 Play, pause and scrub sprite previews at the SWF's frame rate. Export shapes and frames as SVG, PNG, BMP, JPEG or TIFF. Export an animated sprite as GIF, APNG or animated SVG, with an optional output scale such as 400%. Export individual resources, visual batches or an extracted project containing ActionScript, P-code, raw tags and media.
 
+Choose **Export → Export as HTML5** to convert the stage, original frame rate, visual effects and supported audio streams into a static web project. The export generates JavaScript for supported ActionScript methods, frame scripts and events. Literal SWF references found in the workspace are converted into linked web projects. Start the included local server with `py -3 serve.py` or publish the folder on a static host. Check `LISEZ-MOI.txt` for effects, scripts and dependencies that need manual porting. Recovered ActionScript is available in `sources/`.
+
+To convert a whole site or library, use **Open folder** and then **Export folder as HTML5** in the Workspace pane. Flash Studio scans subfolders and includes edits from open workspace tabs. The output has an entry page and an animation catalogue. A shared runtime resolves paths assembled by ActionScript at run time and loads the converted movies into the same display list. Publish at the site root so that absolute resource URLs retain their original meaning. Games that use HTTP or WebSocket services still need their backend. Local connection settings are in `__flashstudio/network.json`.
+
+The offline AS3 compiler links classes across ABC blocks and writes JavaScript to `classes.js`. It supports inheritance, `super`, private fields, static initialization and helper objects. Browser adapters cover supported events, timers and vector drawing. Conversion diagnostics identify methods and Flash APIs that still need porting.
+
+The browser renders the supported Flash `htmlText` tags and handles timeline symbols, display-list ordering, local messages, linked projects, HTTP requests and audio. Use `network.json` to map original HTTP paths under `http` or original `host:port` values to WebSocket endpoints under `sockets`. For a raw TCP service, map the socket to `/__flashstudio_socket/chat` and set `tcp.chat` to an object with `host` and `port`. The bridge in `serve.py` listens on loopback. Remote HTTP services still need to allow the page's origin.
+
 ## Build on Windows
 
 Install Visual Studio 2022 17.14 or Visual Studio 2026 with **Desktop development with C++** and Windows SDK 10.0.26100. Open `FlashStudio.slnx`, select **FlashStudio** as the startup project, and use **x64** or **ARM64** with the matching MSVC tools.
@@ -64,9 +72,11 @@ $asc = "$app\tools\as3\asc.jar"
 & $flash class-edit movie.swf 8 demo.Probe Probe.as edited.swf $asc
 & $flash sprite-animation movie.swf 127 sprite.gif 4
 & $flash export-project movie.swf extracted
+& $flash export-html5 movie.swf html5-project
+& $flash export-html5 site\chat\chat.swf html5-chat site
 ```
 
-Tag indices start at zero. Run `FlashTool --help` for the full command list.
+Tag indices start at zero. HTML5 export returns code 3 when it generates a project with porting notes. Run `FlashTool --help` for the full command list.
 
 ## Checks
 

@@ -141,6 +141,7 @@ private:
     void open_folder_dialog();
     void build_folder_panel(const winrt::Microsoft::UI::Xaml::Controls::Grid& main);
     void toggle_folder_panel();
+    std::filesystem::path folder_root() const;
     void filter_folder();
     void sync_folder_selection(bool scroll = true);
     void follow_swf_reference(std::wstring_view reference);
@@ -205,7 +206,8 @@ private:
     winrt::Windows::Foundation::IAsyncAction deobfuscate_swf(bool whole_document);
     winrt::fire_and_forget show_selection();
     winrt::fire_and_forget export_tag(Export format);
-    winrt::fire_and_forget export_all(bool project = false, std::wstring visual_format = {});
+    winrt::fire_and_forget export_all(bool project = false, std::wstring visual_format = {}, bool html5 = false);
+    winrt::fire_and_forget export_folder_html5();
     winrt::fire_and_forget choose_visual_batch();
     winrt::fire_and_forget export_image();
     winrt::fire_and_forget export_animation(flash::AnimationFormat format);
@@ -267,6 +269,7 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::Button folder_button_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox folder_search_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ListView folder_list_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button folder_export_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock folder_title_{nullptr}, folder_count_{nullptr};
     struct FolderIndex;
     std::shared_ptr<const FolderIndex> folder_;

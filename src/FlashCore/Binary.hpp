@@ -20,6 +20,8 @@ struct EmbeddedBitmap
 };
 
 EmbeddedBitmap embedded_bitmap(const Movie& movie, std::size_t index);
+std::pair<unsigned, unsigned> bitmap_dimensions(const Asset& image);
+Asset pcm_audio(unsigned settings, ByteView samples);
 
 class Reader
 {

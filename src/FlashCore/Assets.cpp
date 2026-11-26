@@ -582,14 +582,23 @@ std::optional<Asset> sound(ByteView payload)
     }
     if (codec != 0 && codec != 3)
         return {};
+    const auto block = (settings & 1 ? 2u : 1u) * (settings & 2 ? 2u : 1u);
+    if (sample_count > input.remaining() / block)
+        throw std::runtime_error("Échantillons PCM tronqués.");
+    return pcm_audio(settings, input.take(sample_count * block));
+}
+}
+
+Asset pcm_audio(unsigned settings, ByteView samples)
+{
     constexpr unsigned rates[]{5512, 11025, 22050, 44100};
     const auto channels = settings & 1 ? 2u : 1u;
     const auto sample_size = settings & 2 ? 2u : 1u;
     const auto rate = rates[(settings >> 2) & 3];
     const auto block = sample_size * channels;
-    if (sample_count > input.remaining() / block)
-        throw std::runtime_error("Échantillons PCM tronqués.");
-    const auto data_size = sample_count * block;
+    if (samples.size() % block || samples.size() > max_file_size)
+        throw std::runtime_error("Données PCM invalides.");
+    const auto data_size = static_cast<unsigned>(samples.size());
     Bytes wave;
     ascii(wave, "RIFF"); put32(wave, 36 + data_size + (data_size & 1));
     ascii(wave, "WAVEfmt "); put32(wave, 16);
@@ -597,13 +606,11 @@ std::optional<Asset> sound(ByteView payload)
     put32(wave, rate); put32(wave, rate * block);
     put16(wave, static_cast<std::uint16_t>(block)); put16(wave, static_cast<std::uint16_t>(sample_size * 8));
     ascii(wave, "data"); put32(wave, data_size);
-    append(wave, input.take(data_size));
+    append(wave, samples);
     if (data_size & 1)
         wave.push_back(0);
     return Asset{L".wav", std::move(wave)};
 }
-}
-
 std::optional<Asset> extract(const Movie& movie, std::size_t index)
 {
     const auto code = movie.tags().at(index).code;
@@ -995,6 +1002,17 @@ Asset convert_image(const Asset& image, std::wstring_view extension, double scal
     check_image(encoder->Commit());
 
     return {std::move(format), read_image_stream(*stream.Get())};
+}
+
+std::pair<unsigned, unsigned> bitmap_dimensions(const Asset& image)
+{
+    const ImageApartment apartment;
+    const auto factory = image_factory();
+    const auto frame = image_frame(*factory.Get(), image.bytes);
+    UINT width{}, height{};
+    check_image(frame->GetSize(&width, &height));
+    pixel_count(width, height);
+    return {width, height};
 }
 
 EmbeddedBitmap embedded_bitmap(const Movie& movie, std::size_t index)
