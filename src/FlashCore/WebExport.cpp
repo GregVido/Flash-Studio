@@ -97,7 +97,11 @@ button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
 #stage [data-flash-mouse="on"][data-flash-pointer-listener] { pointer-events: bounding-box; }
 #stage [data-flash-mouse="self"] { pointer-events: bounding-box; }
 #stage [data-flash-mouse="off"] { pointer-events: none; }
+#stage foreignObject[data-flash-passive-text] { pointer-events: none; }
+#stage [data-flash-pointer-listener]:not([data-flash-mouse="off"]) > foreignObject[data-flash-passive-text],
+#stage [data-flash-mouse="on"] > foreignObject[data-flash-passive-text] a[href] { pointer-events: auto; }
 #stage [data-flash-static] { pointer-events: none; }
+#stage [data-flash-blend-hoisted] { mix-blend-mode: normal !important; }
 #stage [data-flash-composite] { opacity: 0 !important; }
 #stage [data-flash-composite], #stage [data-flash-composite] * { pointer-events: none !important; }
 #stage [data-flash-hit] :is(image, use, path, rect, ellipse, circle) { pointer-events: visiblePainted; }
@@ -114,7 +118,7 @@ html[data-embedded] :is(.controls, #linked) { display: none; }
 )CSS";
 
 constexpr std::string_view stage_script = R"JS(
-import { ConvertedClasses, convertedClassName } from "./as3.js";
+import { ConvertedClasses, convertedClassName, convertedMethodReceiver } from "./as3.js";
 import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
 import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
 
@@ -727,7 +731,7 @@ function updateScriptMasks() {
             else { maskSources.delete(source); source.style.removeProperty("visibility"); }
             continue;
         }
-        if (!target.isConnected || !entry.node.isConnected) continue;
+        if (!target.isConnected) continue;
         const destination = toStage(target), source = toStage(entry.node);
         const relative = destination.inverse().multiply(source);
         const values = [relative.a, relative.b, relative.c, relative.d, relative.e, relative.f];
@@ -762,35 +766,59 @@ function cloneMaskGraphic(node) {
 }
 
 function updateBlendMask(container) {
-    const tail = container.lastElementChild, mode = tail?.getAttribute("data-flash-composite");
+    const sources = [];
+    for (let node = container.lastElementChild; node?.hasAttribute("data-flash-composite"); node = node.previousElementSibling)
+        sources.unshift({ node, mode: node.getAttribute("data-flash-composite") });
     const previous = blendMasks.get(container);
-    if (previous?.source === tail && previous?.mode === mode) return;
+    if (previous?.sources.length === sources.length &&
+        sources.every(({ node, mode }, index) => previous.sources[index].node === node && previous.sources[index].mode === mode)) return;
     if (previous) {
-        previous.observer.disconnect();
-        maskElements.unregister(previous.mask);
-        previous.mask.remove();
+        for (const observer of previous.observers) observer.disconnect();
+        maskElements.unregister(previous.definitions);
+        previous.definitions.remove();
         container.removeAttribute("mask");
         blendMasks.delete(container);
     }
-    if (!mode || container.hasAttribute("mask")) return;
+    if (!sources.length || container.hasAttribute("mask")) return;
     // An alpha or erase layer contributes coverage, independently of its RGB channels.
-    const id = "blend-mask-" + (++masks);
     const extent = { x: -1000000, y: -1000000, width: 2000000, height: 2000000 };
-    const mask = element("mask", { id, "mask-type": mode === "alpha" ? "alpha" : "luminance", maskUnits: "userSpaceOnUse", ...extent });
-    const draw = () => {
-        const coverage = cloneMaskGraphic(tail);
-        if (mode === "erase") {
-            coverage.style.filter = "brightness(0)";
-            mask.replaceChildren(element("rect", { ...extent, fill: "white" }), coverage);
-        } else mask.replaceChildren(coverage);
+    const definitions = element("g"), observers = [];
+    const create = mode => {
+        const mask = element("mask", { id: "blend-mask-" + (++masks),
+            "mask-type": mode === "erase" ? "luminance" : "alpha", maskUnits: "userSpaceOnUse", ...extent });
+        definitions.append(mask);
+        return mask;
     };
-    const observer = new MutationObserver(draw);
-    observer.observe(tail, { attributes: true, childList: true, subtree: true });
-    blendMasks.set(container, { source: tail, mode, mask, observer });
-    maskElements.register(container, mask, mask);
-    symbols.append(mask);
-    container.setAttribute("mask", "url(#" + id + ")");
-    draw();
+    const coverage = element("rect", { ...extent, fill: "white" });
+    let combined = coverage, single;
+    for (const { node, mode } of sources) {
+        const mask = single = create(mode);
+        const draw = () => {
+            const graphic = cloneMaskGraphic(node);
+            if (mode === "erase") {
+                const erase = element("g", { style: "filter:brightness(0)" });
+                erase.append(graphic);
+                mask.replaceChildren(element("rect", { ...extent, fill: "white" }), erase);
+            } else mask.replaceChildren(graphic);
+        };
+        draw();
+        const observer = new MutationObserver(draw);
+        observer.observe(node, { attributes: true, childList: true, subtree: true });
+        observers.push(observer);
+        if (sources.length > 1) {
+            const layer = element("g", { mask: "url(#" + mask.id + ")" });
+            layer.append(combined);
+            combined = layer;
+        }
+    }
+    if (combined !== coverage) {
+        single = create("alpha");
+        single.append(combined);
+    }
+    blendMasks.set(container, { sources, definitions, observers });
+    maskElements.register(container, definitions, definitions);
+    symbols.append(definitions);
+    container.setAttribute("mask", "url(#" + single.id + ")");
 }
 
 function property(layer, name) {
@@ -821,7 +849,15 @@ function eventView(node) {
             let byCallback = listeners.get(key);
             if (!byCallback) { byCallback = new Map(); listeners.set(key, byCallback); }
             if (byCallback.has(callback)) return;
+            const transient = node === stage && (eventType === "mousemove" || eventType === "mouseup") ?
+                displayNodes.get(convertedMethodReceiver(callback)) : null;
+            const attached = transient?.isConnected ? transient : null;
             const handle = event => {
+                if (attached && !attached.isConnected) {
+                    node.removeEventListener(eventType, handle, Boolean(capture));
+                    byCallback.delete(callback);
+                    return;
+                }
                 if (eventType === "enterFrame" && event.target !== node) return;
                 try {
                     const custom = eventObjects.get(event);
@@ -1339,6 +1375,8 @@ function scriptTimer(initialDelay, initialRepeats = 0) {
     return "rgba(" + [value >>> 16 & 255, value >>> 8 & 255, value & 255, opaque ? 1 : (value >>> 24) / 255].join(",") + ")";
 }
 
+const tiledBitmaps = new WeakMap();
+
 class BitmapData {
     constructor(width, height, transparent = true, color = 0xffffffff) {
         this.canvas = document.createElement("canvas");
@@ -1529,7 +1567,7 @@ class BitmapData {
         this.context.putImageData(image, rect.x, rect.y);
         this.update();
     }
-    applyFilter(source, rect, target, filter) {
+)JS" R"JS(    applyFilter(source, rect, target, filter) {
         if (!source?.width || !source.height || rect.width < 1 || rect.height < 1) return;
         if (displayTypes.get(filter) === "DisplacementMapFilter" && filter.mapBitmap?.width && filter.mapBitmap.height) {
             this.context.putImageData(displacePixels(this.context, source, rect, filter), target.x, target.y);
@@ -1549,6 +1587,11 @@ class BitmapData {
     }
     copyPixels(source, rect, target, alpha = null, alphaPoint = null, mergeAlpha = false) {
         if (!source?.canvas || rect.width <= 0 || rect.height <= 0) return;
+        if (!alpha && mergeAlpha && rect.x === 0 && rect.y === 0 && rect.width === source.width && rect.height === source.height) {
+            this.context.drawImage(source.canvas, target.x, target.y);
+            this.update();
+            return;
+        }
         let pixels = source.canvas;
         let x = rect.x, y = rect.y;
         if (alpha?.canvas) {
@@ -1564,6 +1607,23 @@ class BitmapData {
         if (!mergeAlpha) this.context.clearRect(target.x, target.y, rect.width, rect.height);
         this.context.drawImage(pixels, x, y, rect.width, rect.height, target.x, target.y, rect.width, rect.height);
         this.update();
+    }
+    tilePixels(source, x, y) {
+        if (!source?.width || !source.height || !this.width || !this.height || source === this) return false;
+        let cached = tiledBitmaps.get(source);
+        if (cached?.revision !== source.revision) {
+            const pattern = this.context.createPattern(source.canvas, "repeat");
+            if (!pattern) return false;
+            cached = { revision: source.revision, pattern };
+            tiledBitmaps.set(source, cached);
+        }
+        this.context.save();
+        this.context.translate(x, y);
+        this.context.fillStyle = cached.pattern;
+        this.context.fillRect(-x, -y, this.width, this.height);
+        this.context.restore();
+        this.update();
+        return true;
     }
     copyChannel(source, rect, target, sourceChannel, targetChannel) {
         const channels = [1, 2, 4, 8];
@@ -1889,7 +1949,7 @@ class ColorTransform {
     concat(other) {
         for (const channel of ["red", "green", "blue", "alpha"]) {
             const multiplier = channel + "Multiplier", offset = channel + "Offset";
-            this[offset] = this[offset] * other[multiplier] + other[offset];
+            this[offset] += this[multiplier] * other[offset];
             this[multiplier] *= other[multiplier];
         }
     }
@@ -2758,6 +2818,8 @@ function displayView(owner, clip, layer, node) {
         this.id = id;
         this.node = node;
         this.ancestors = [...ancestors, id];
+        this.parent = parent;
+        this.parentLayer = layer;
         this.bundle = bundle;
         this.info = parent?.info;
         this.data = bundle.scene.clips[id];
@@ -2988,11 +3050,28 @@ function displayView(owner, clip, layer, node) {
         else authoredTints.delete(node);
         if (transform || effects?.length) put("filter", svgFilter(transform, effects ?? []));
         else if (node.hasAttribute("filter")) node.removeAttribute("filter");
-        put("opacity", transform ? 1 : overrides.alpha ?? row[3]);
-        const blend = overrides.blendMode ?? row[10];
-        if (blend || node.style.mixBlendMode || node.style.isolation) displayBlend(node, blendModes[blend] ?? blend);
+        layer.opacity = transform ? 1 : overrides.alpha ?? row[3];
+        put("opacity", layer.opacity);
+        this.updateLayerBlend(layer);
         if (overrides.buttonMode !== undefined) node.style.cursor = overrides.buttonMode ? "pointer" : "";
         put("display", (overrides.visible ?? row[6]) ? "inline" : "none");
+    }
+
+    updateLayerBlend(layer) {
+        const { row, node, overrides } = layer;
+        const authored = overrides.blendMode ?? row[10];
+        let blend = blendModes[authored] ?? authored;
+        // SVG opacity isolates a group. A single blended child must see the backdrop outside that group.
+        const child = (!blend || blend === "normal") && layer.opacity < 1 && layer.child?.layers.size === 1 &&
+            node.childElementCount === 1 ? node.firstElementChild : null;
+        const hoisted = child?.style.mixBlendMode ? child : null;
+        if (layer.hoistedBlend !== hoisted) {
+            layer.hoistedBlend?.removeAttribute("data-flash-blend-hoisted");
+            hoisted?.setAttribute("data-flash-blend-hoisted", "");
+            layer.hoistedBlend = hoisted;
+        }
+        if (hoisted) blend = hoisted.style.mixBlendMode;
+        if (blend || node.style.mixBlendMode || node.style.isolation) displayBlend(node, blend);
     }
 
 )JS" R"JS(    refreshMasks() {
@@ -3095,6 +3174,7 @@ function displayView(owner, clip, layer, node) {
         }
         this.frame = target;
         if (changed) this.refreshMasks();
+        if (this.parent && this.parentLayer.opacity < 1) this.parent.updateLayerBlend(this.parentLayer);
         if (addedClips) {
             for (const clip of addedClips) clip.initializeTree();
             for (const clip of addedClips) if (clip.node.isConnected) clip.start();

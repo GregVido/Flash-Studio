@@ -6,7 +6,9 @@ namespace flash::web
 {
 inline constexpr std::string_view class_runtime = R"JS(const owns = (object, key) => Object.hasOwn(object, key);
 const classNames = new WeakMap();
+const methodReceivers = new WeakMap();
 export const convertedClassName = value => classNames.get(value);
+export const convertedMethodReceiver = value => methodReceivers.get(value)?.deref();
 
 const nativeBases = new Set(["", "Object", "flash.events.Event", "flash.events.EventDispatcher", "flash.display.DisplayObject",
     "flash.display.InteractiveObject", "flash.display.DisplayObjectContainer", "flash.display.Sprite", "flash.display.MovieClip",
@@ -199,6 +201,7 @@ export class ConvertedClasses {
                     if (!method) {
                         method = (...args) => this.#invoke(record, entry.owner, entry.method, args);
                         record.members.set(entry.method, method);
+                        if (!record.staticAccess) methodReceivers.set(method, new WeakRef(record.view));
                     }
                     return method;
                 }

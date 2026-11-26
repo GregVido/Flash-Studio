@@ -1612,17 +1612,20 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 return entry.ns && at(namespace_kinds_, entry.ns) == 0x16 ? qualified_name(arg(0)) : id;
             };
             if ((op == 0x5D || op == 0x5E) && i + 10 < last && instructions[i + 1].op == 0x2A &&
-                instructions[i + 3].op == 0x66 && instructions[i + 3].args[0] == arg(0))
+                instructions[i + 3].op == 0x66 && instructions[i + 3].args[0] == arg(0) &&
+                (instructions[i + 4].op != 0x2A || i + 11 < last))
             {
-                const auto receiver = store_register(instructions[i + 2]), temporary = store_register(instructions[i + 5]);
-                const auto arithmetic = instructions[i + 4].op;
-                const auto& store = instructions[i + 8];
-                const auto& release_value = instructions[i + 9];
-                const auto& release_receiver = instructions[i + 10];
+                const bool postfix = instructions[i + 4].op == 0x2A;
+                const auto offset = i + static_cast<unsigned>(postfix);
+                const auto receiver = store_register(instructions[i + 2]), temporary = store_register(instructions[offset + 5]);
+                const auto arithmetic = instructions[offset + 4].op;
+                const auto& store = instructions[offset + 8];
+                const auto& release_value = instructions[offset + 9];
+                const auto& release_receiver = instructions[offset + 10];
                 const auto entry = control_entries.upper_bound(item.offset);
                 if (receiver && temporary && *receiver != *temporary &&
                     (arithmetic == 0x91 || arithmetic == 0x93 || arithmetic == 0xC0 || arithmetic == 0xC1) &&
-                    load_register(instructions[i + 6]) == receiver && load_register(instructions[i + 7]) == temporary &&
+                    load_register(instructions[offset + 6]) == receiver && load_register(instructions[offset + 7]) == temporary &&
                     (store.op == 0x61 || store.op == 0x68) && store.args[0] == arg(0) &&
                     release_value.op == 0x08 && release_value.args[0] == *temporary &&
                     release_receiver.op == 0x08 && release_receiver.args[0] == *receiver &&
@@ -1630,12 +1633,20 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 {
                     // AVM2 saves the lexical property receiver in a temporary register for compound updates.
                     const auto property = lexical();
+                    auto before = property;
+                    if (postfix)
+                    {
+                        before = snapshot_name();
+                        used_names.insert(before);
+                        emit("var " + before + ":* = " + property);
+                        stack.push(before);
+                    }
                     const auto operation = arithmetic == 0x91 || arithmetic == 0xC0 ? " + 1" : " - 1";
-                    auto value = "Number(" + property + ')' + operation;
+                    auto value = "Number(" + before + ')' + operation;
                     if (arithmetic >= 0xC0)
                         value = "int(" + value + ')';
                     emit(property + " = " + value);
-                    i += 10;
+                    i = offset + 10;
                     continue;
                 }
             }
@@ -1751,6 +1762,8 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 if (loop && (target == loop->next || target == loop->exit))
                 {
                     emit(target == loop->next ? "continue" : "break");
+                    while (i + 1 < last && !control_entries.contains(instructions[i + 1].offset))
+                        ++i;
                     continue;
                 }
                 if (target == i + 1)
@@ -1855,8 +1868,19 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                                     continue;
                                 }
                             const auto condition = visit(visit, target, test + 1, depth + 1, true, true);
-                            out.add(indent + "while (" + condition + ")\n" + indent + "{\n");
-                            visit(visit, i + 1, target, depth + 1, false, false, Loop{target, test + 1});
+                            auto body_end = target;
+                            const auto& tail = instructions[target - 1];
+                            if (target > i + 2 && (tail.op == 0xC2 || tail.op == 0xC3) && control_entries.contains(tail.offset))
+                            {
+                                const auto counter = local(static_cast<unsigned>(tail.args[0]));
+                                const auto delta = tail.op == 0xC2 ? " + 1" : " - 1";
+                                out.add(indent + "for (; " + condition + "; " + counter + " = int(" + counter + delta + "))\n");
+                                --body_end;
+                            }
+                            else
+                                out.add(indent + "while (" + condition + ")\n");
+                            out.add(indent + "{\n");
+                            visit(visit, i + 1, body_end, depth + 1, false, false, Loop{body_end, test + 1});
                             out.add(indent + "}\n");
                             i = test;
                             continue;
@@ -2205,7 +2229,12 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 for (unsigned field = 0; field < arg(0); ++field)
                 {
                     auto value = stack.pop();
-                    const auto key = stack.pop();
+                    auto key = stack.pop();
+                    if (key.starts_with("String(") && key.ends_with(')'))
+                        key = key.substr(7, key.size() - 8);
+                    const auto digits = std::string_view(key).substr(key.starts_with('-') ? 1 : 0);
+                    if (!digits.empty() && std::ranges::all_of(digits, [](char digit) { return digit >= '0' && digit <= '9'; }))
+                        key = quote(key == "-0" ? "0" : key);
                     if (!key.starts_with('"'))
                         throw std::runtime_error("Clé d’objet non littérale.");
                     fields.push_back(key + ": " + value);

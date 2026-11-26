@@ -358,7 +358,29 @@ WebClass compile_class(const AbcModule& abc, const AbcClass& type, WebScope scop
             // An interface declaration has no executable method body.
             if (!abc.methods().at(*member.method).code_size)
                 return method;
-            method.function = function_expression(compile_as3(source, scope));
+            auto javascript = compile_as3(source, scope);
+            if (type.qualified == "Scene" && display == "enterF" &&
+                javascript.body.find("clip.view[\"curZic\"]") != std::string::npos)
+            {
+                // The stage music persists across rooms, including the interval without collision geometry.
+                constexpr std::string_view collision = R"(clip.view["camera"]["currentMap"]["physic"]["surfaceMap"]["sceneColid"])";
+                if (const auto offset = javascript.body.find(collision); offset != std::string::npos)
+                    javascript.body.replace(offset, collision.size(),
+                        R"(clip.view["camera"]?.["currentMap"]?.["physic"]?.["surfaceMap"]?.["sceneColid"])");
+            }
+            if (type.qualified == "map.RainEffectItem" && display == "addPass" &&
+                javascript.body.find(R"(clip.view["contentBmd"]["copyPixels"]($arg1, $arg1["rect"],)") != std::string::npos)
+            {
+                // The SWF fills the surface with complete repeated tiles at integer offsets.
+                javascript.body.insert(0, R"JS(const target = clip.view["contentBmd"];
+if (target?.width && target.height && $arg1?.width && $arg1.height) {
+    const x = -(($arg1.width - (($arg2.x % $arg1.width) >>> 0)) % target.width) | 0;
+    const y = -(($arg1.height - (($arg2.y % $arg1.height) >>> 0)) % target.height) | 0;
+    if (x <= 0 && y <= 0 && target.tilePixels($arg1, x, y)) return;
+}
+)JS");
+            }
+            method.function = function_expression(std::move(javascript));
             translated.insert(*member.method);
         }
         catch (const std::exception& error)

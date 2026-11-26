@@ -11,7 +11,8 @@ const twips = value => Math.max(0, Number.isFinite(Number(value)) ? Number(value
 const color = value => {
     if (typeof value === "number") return "#" + (value & 0xffffff).toString(16).padStart(6, "0");
     const css = String(value ?? "").trim();
-    return /^(?:0x)?[\da-f]{6}$/i.test(css) ? "#" + css.replace(/^0x/i, "") : css;
+    const hex = css.match(/^(?:#|0x)([\da-f]{1,6})$/i)?.[1] ?? css.match(/^([\da-f]{6})$/i)?.[1];
+    return hex ? "#" + hex.padStart(6, "0") : css;
 };
 
 const embeddedFonts = new Map(), namedFonts = new Map();
@@ -251,6 +252,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     function render() {
         measured = undefined;
         content.replaceChildren();
+        node.toggleAttribute("data-flash-passive-text", !values.selectable && values.type !== "input");
         content.style.whiteSpace = values.multiline || values.wordWrap ? "pre-wrap" : "pre";
         content.style.overflowWrap = values.wordWrap ? "anywhere" : "normal";
         body.style.userSelect = values.selectable || values.type === "input" ? "text" : "none";
