@@ -618,7 +618,7 @@ std::optional<Asset> extract(const Movie& movie, std::size_t index)
     Reader input(payload);
     switch (code)
     {
-    case 2: case 22: case 32: case 83:
+    case 2: case 22: case 32: case 46: case 83: case 84:
         return export_shape(code, payload, &movie);
     case 6:
     {

@@ -42,9 +42,32 @@ export class TextFormat {
 
 export class StyleSheet {
     #styles = new Map();
-    setStyle(name, value) { this.#styles.set(name.toLowerCase(), { ...value }); }
-    getStyle(name) { return this.#styles.get(name.toLowerCase()) ?? null; }
-    clear() { this.#styles.clear(); }
+    #listeners = new Set();
+    #scheduled = false;
+    #changed() {
+        if (this.#scheduled || !this.#listeners.size) return;
+        this.#scheduled = true;
+        queueMicrotask(() => {
+            this.#scheduled = false;
+            for (const ref of this.#listeners) {
+                const changed = ref.deref();
+                if (changed) changed();
+                else this.#listeners.delete(ref);
+            }
+        });
+    }
+    observe(listener) {
+        const reference = new WeakRef(listener);
+        this.#listeners.add(reference);
+        return () => this.#listeners.delete(reference);
+    }
+    setStyle(name, value) {
+        if (value == null) this.#styles.delete(name.toLowerCase());
+        else this.#styles.set(name.toLowerCase(), { ...value });
+        this.#changed();
+    }
+    getStyle(name) { const style = this.#styles.get(name.toLowerCase()); return style && { ...style } || null; }
+    clear() { this.#styles.clear(); this.#changed(); }
     get styleNames() { return [...this.#styles.keys()]; }
     parseCSS(text) {
         for (const [, selectors, declarations] of String(text).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -80,11 +103,12 @@ const measureContext = document.createElement("canvas").getContext("2d");
 
 function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     const template = document.createElement("template");
-    template.innerHTML = html;
+    // Flash accepts nested text links, which the HTML parser otherwise moves outside their styled spans.
+    template.innerHTML = html.replace(/<(\/?)[aA](?=[\s>])/g, "<$1flash-link");
     const add = (parent, item) => {
         if (item.nodeType === Node.TEXT_NODE) { parent.append(document.createTextNode(item.data)); return; }
         if (item.nodeType !== Node.ELEMENT_NODE || discard.has(item.localName)) return;
-        const kind = item.localName;
+        const kind = item.localName === "flash-link" ? "a" : item.localName;
         if (kind === "tab" || kind === "br" || kind === "sbr") {
             if (kind === "tab") parent.append(document.createTextNode("\t"));
             else if (multiline) parent.append(document.createElement("br"));
@@ -97,6 +121,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             return;
         }
         const node = document.createElement(kind === "font" ? "span" : kind === "textformat" ? "div" : kind);
+        if (kind === "a") { node.style.color = "inherit"; node.style.textDecoration = "none"; }
         formatting(node, sheet?.getStyle(kind), resolveFont);
         for (const name of item.classList) formatting(node, sheet?.getStyle("." + name), resolveFont);
         if (kind === "p") {
@@ -120,7 +145,9 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             const href = item.getAttribute("href") ?? "";
             if (href.startsWith("event:")) {
                 node.href = "#";
-                node.addEventListener("click", event => { event.preventDefault(); emit("link", { text: href.slice(6) }); });
+                node.addEventListener("click", event => {
+                    event.preventDefault(); event.stopPropagation(); emit("link", { text: href.slice(6) });
+                });
             } else if (href) {
                 try {
                     const url = new URL(href, location.href);
@@ -162,7 +189,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         embedFonts: Boolean(definition.embedFonts || definition.fontClass),
     };
     let html = Boolean(definition.html), source = definition.text ?? "";
-    let fieldWidth = width, fieldHeight = height, horizontalShift = 0, measured;
+    let fieldWidth = width, fieldHeight = height, horizontalShift = 0, measured, unobserve;
     Object.assign(body.style, {
         width: "100%", height: "100%", boxSizing: "border-box", overflow: "hidden",
         opacity: definition.alpha ?? 1,
@@ -172,7 +199,8 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     node.append(body);
     const resolveFont = (family, style) => {
         const name = String(family).trim(), key = name.toLowerCase();
-        const device = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace" })[key] ?? name;
+        const device = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace",
+            "arial bold": "Arial", "arial italic": "Arial", "arial bold italic": "Arial" })[key] ?? name;
         if (!values.embedFonts) return device;
         const bold = style.bold || style.fontWeight === "bold";
         const italic = style.italic || style.fontStyle === "italic";
@@ -274,9 +302,13 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         const changes = Object.entries(format).filter(([key, value]) => value != null && values.defaultTextFormat?.[key] !== value);
         if (changes.length) { values.defaultTextFormat = { ...values.defaultTextFormat, ...Object.fromEntries(changes) }; render(); }
     } };
+    const refreshStyles = () => { if (html) render(); };
     for (const key of Object.keys(values))
         Object.defineProperty(field, key, { enumerable: true, get: () => values[key], set: value => {
-            if (values[key] !== value) { values[key] = value; render(); }
+            if (values[key] === value) return;
+            values[key] = value;
+            if (key === "styleSheet") { unobserve?.(); unobserve = value?.observe?.(refreshStyles); }
+            render();
         } });
     Object.defineProperties(field, {
         offsetX: { value: () => horizontalShift / 20 },
@@ -294,7 +326,10 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             source = value;
             render();
         } },
-        textColor: { enumerable: true, get: () => values.defaultTextFormat.color, set: value => {
+        textColor: { enumerable: true, get: () => {
+            const value = values.defaultTextFormat?.color;
+            return typeof value === "number" ? value & 0xffffff : Number.parseInt(color(value).slice(1), 16) || 0;
+        }, set: value => {
             field.setTextFormat({ color: value });
         } },
         width: { enumerable: true, get: () => Number(node.getAttribute("width")) / 20,

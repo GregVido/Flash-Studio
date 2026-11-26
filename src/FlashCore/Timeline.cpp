@@ -1,4 +1,5 @@
 #include "Binary.hpp"
+#include "ShapeEditing.hpp"
 #include "WebExport.hpp"
 
 #include <array>
@@ -70,7 +71,7 @@ struct ColorTransform
 
 struct Instance
 {
-    unsigned id{}, placed{}, clip_end{};
+    unsigned id{}, placed{}, clip_end{}, ratio{};
     Position transform;
     double opacity = 1.0;
     ColorTransform color;
@@ -246,11 +247,15 @@ void place_object(Display& display, unsigned code, ByteView payload, unsigned fr
     const auto previous = display.layers.find(depth);
     const auto move = (flags & 1) != 0;
     Instance item = move && previous != display.layers.end() ? previous->second : Instance{};
-    if ((extra & 8) || ((extra & 16) && (flags & 2)))
+    // A bitmap embedded by character ID starts with the ID, even when HasImage is set.
+    if (extra & 8)
         input.cstring();
     if (flags & 2)
     {
-        item.id = input.u16();
+        const auto id = input.u16();
+        if (id != item.id)
+            item.ratio = 0;
+        item.id = id;
         item.placed = frame;
     }
     if (flags & 4)
@@ -261,7 +266,7 @@ void place_object(Display& display, unsigned code, ByteView payload, unsigned fr
         item.opacity = item.color.opacity();
     }
     if (flags & 16)
-        input.skip(2);
+        item.ratio = input.u16();
     if (flags & 32)
         item.name = input.cstring();
     if (flags & 64)
@@ -643,10 +648,12 @@ void item_json(std::string& text, unsigned depth, const Instance& item)
         text += std::format(",[{},{},{},{},{},{},{},{}]",
             item.color.multiplier[0], item.color.multiplier[1], item.color.multiplier[2], item.color.multiplier[3],
             item.color.addition[0], item.color.addition[1], item.color.addition[2], item.color.addition[3]);
-    else if (!item.filters.empty() || item.blend > 1)
+    else if (!item.filters.empty() || item.blend > 1 || item.ratio)
         text += ",null";
-    if (!item.filters.empty() || item.blend > 1)
+    if (!item.filters.empty() || item.blend > 1 || item.ratio)
         text += ",[" + item.filters + "]," + json_string(blend_name(item.blend));
+    if (item.ratio)
+        text += ',' + std::to_string(item.ratio);
     text += ']';
 }
 
@@ -776,7 +783,8 @@ std::string buttons_json(const Movie& movie, std::size_t index, std::vector<std:
 }
 
 std::string timeline_json(const Movie& movie, std::optional<std::size_t> sprite, std::vector<std::string>& actions,
-    ExportReport& report, const std::set<unsigned>& visual, const ScriptAsset* script, const std::filesystem::path& destination)
+    ExportReport& report, const std::set<unsigned>& visual, const ScriptAsset* script, const std::filesystem::path& destination,
+    std::map<unsigned, std::set<unsigned>>& morph_ratios)
 {
     Display display, previous;
     std::string frames = "[";
@@ -823,6 +831,13 @@ std::string timeline_json(const Movie& movie, std::optional<std::size_t> sprite,
             if (std::exchange(comma, true))
                 frames += ',';
             item_json(frames, depth, item);
+            if (item.ratio)
+                if (const auto index = movie.character(item.id))
+                {
+                    const auto code = movie.tags()[*index].code;
+                    if (code == 46 || code == 84)
+                        morph_ratios[item.id].insert(item.ratio);
+                }
             if (!visual.contains(item.id))
                 unsupported.insert(item.id);
         }
@@ -999,6 +1014,7 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
             object += ',';
         object += json_string(std::to_string(id)) + ':' + value;
     };
+    std::map<unsigned, std::set<unsigned>> morph_ratios;
     for (std::size_t index = 0; index < movie.tags().size(); ++index)
     {
         const auto& tag = movie.tags()[index];
@@ -1082,7 +1098,11 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
                     view = std::format(",\"bounds\":[{},{},{},{}]", x1, y1,
                         std::max<std::int64_t>(20, std::int64_t{x2} - x1), std::max<std::int64_t>(20, std::int64_t{y2} - y1));
                 }
-                entry(assets, id, "{\"url\":" + json_string(path) + view + '}');
+                std::string type;
+                if (tag.category == Category::images)
+                    if (const auto found = scripts.find(id); found != scripts.end() && !found->second.type.empty())
+                        type = ",\"type\":" + json_string(found->second.type);
+                entry(assets, id, "{\"url\":" + json_string(path) + view + type + '}');
                 visual.insert(id);
             }
         }
@@ -1092,11 +1112,38 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
     {
         const auto script = scripts.find(id);
         entry(clips, id, timeline_json(movie, sprite, actions, report, visual,
-            script == scripts.end() ? nullptr : &script->second, destination));
+            script == scripts.end() ? nullptr : &script->second, destination, morph_ratios));
     };
     add_timeline(0, {});
     for (const auto& [id, index] : sprites)
         add_timeline(id, index);
+    for (const auto& [id, ratios] : morph_ratios)
+    {
+        const auto index = *movie.character(id);
+        for (const auto ratio : ratios)
+            try
+            {
+                const auto drawing = read_morph_drawing(movie.tags()[index].code, movie.data(index), ratio);
+                const auto asset = export_shape_drawing(drawing, &movie);
+                const auto key = std::format("{}@{}", id, ratio);
+                auto path = "assets/asset-" + key + ".svg";
+                if (share_visual)
+                    path = share_visual(asset);
+                else
+                {
+                    write_file(destination / path, asset.bytes);
+                    ++report.files;
+                }
+                const auto& [x1, x2, y1, y2] = drawing.bounds;
+                assets += ',' + json_string(key) + std::format(":{{\"url\":{},\"bounds\":[{},{},{},{}]}}",
+                    json_string(path), x1, y1, std::max<std::int64_t>(20, std::int64_t{x2} - x1),
+                    std::max<std::int64_t>(20, std::int64_t{y2} - y1));
+            }
+            catch (const std::exception& error)
+            {
+                omission(report, std::format("Forme interpolée #{} (ratio {}) : {}.", id, ratio, error.what()));
+            }
+    }
     const auto& h = movie.header();
     return std::format("{{\"fps\":{:g},\"viewBox\":[{},{},{},{}],\"assets\":{},\"audio\":{},\"audioTiming\":{},\"buttons\":{},\"clips\":{}}}",
         playback_fps(movie), h.left, h.top, std::max<std::int64_t>(20, std::int64_t{h.right} - h.left),

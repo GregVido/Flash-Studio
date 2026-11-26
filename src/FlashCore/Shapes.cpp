@@ -206,7 +206,12 @@ std::string stroke_path(const Stroke& line)
 
 Asset export_shape(unsigned code, ByteView payload, const Movie* movie)
 {
-    const auto drawing = read_shape_drawing(code, payload);
+    return export_shape_drawing(code == 46 || code == 84 ? read_morph_drawing(code, payload, 0) :
+        read_shape_drawing(code, payload), movie);
+}
+
+Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
+{
     const auto character = drawing.character;
     const auto& bounds = drawing.bounds;
     const bool winding = (drawing.flags & 4) != 0;

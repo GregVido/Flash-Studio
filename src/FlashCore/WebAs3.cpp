@@ -21,7 +21,7 @@ bool in(std::string_view value, std::initializer_list<std::string_view> options)
 bool browser_type(std::string_view name)
 {
     return in(name, {"Sprite", "MovieClip", "Shape", "SimpleButton", "Bitmap", "BitmapData", "GlowFilter", "BlurFilter",
-        "DropShadowFilter", "Timer", "Point", "Rectangle", "Matrix", "ColorTransform", "EventDispatcher",
+        "DropShadowFilter", "BevelFilter", "DisplacementMapFilter", "Timer", "Point", "Rectangle", "Matrix", "ColorTransform", "EventDispatcher",
         "TextField", "TextFormat", "StyleSheet", "Font", "ByteArray", "LocalConnection", "URLRequest", "URLRequestHeader",
         "URLVariables", "URLLoader", "Socket", "XMLSocket", "Sound", "SoundTransform", "SoundLoaderContext",
         "Loader", "LoaderContext", "ApplicationDomain", "XML", "XMLList"});
@@ -414,6 +414,7 @@ class Compiler
             return {"clip.eventName(" + json_string(name()) + ')'};
         if (in(id, {"URLRequestMethod", "URLLoaderDataFormat", "Endian", "SoundMixer", "Security", "SecurityDomain",
             "StageScaleMode", "StageAlign", "TextFieldType", "TextFieldAutoSize", "BlendMode", "Mouse", "Keyboard", "navigateToURL", "getTimer",
+            "BitmapFilterType", "DisplacementMapFilterMode",
             "ApplicationDomain", "getDefinitionByName", "getQualifiedClassName", "Capabilities", "ExternalInterface", "SharedObject", "BitmapDataChannel"}))
             return {"clip.nativeSymbol(" + json_string(id) + ')'};
         if (in(id, {"XML", "XMLList"}) && peek() == "(")

@@ -423,19 +423,10 @@ bool is_editable_shape(unsigned code) noexcept
     return code == 2 || code == 22 || code == 32 || code == 83;
 }
 
-ShapeDrawing read_shape_drawing(unsigned code, ByteView payload)
+namespace
 {
-    ShapeDrawing drawing;
-    drawing.version = shape_version(code);
-    Reader input(payload);
-    drawing.character = input.u16();
-    drawing.bounds = read_bounds(input);
-    if (drawing.version == 4)
-    {
-        read_bounds(input);
-        drawing.flags = input.u8();
-    }
-    read_styles(input, drawing);
+void read_edges(Reader& input, ShapeDrawing& drawing, bool morph = false)
+{
     BitReader bits(input);
     auto fill_bits = bits.unsigned_bits(4), line_bits = bits.unsigned_bits(4);
     unsigned fill0 = 0, fill1 = 0, line = 0, base_fill = 0, base_line = 0, layer = 0;
@@ -492,6 +483,8 @@ ShapeDrawing read_shape_drawing(unsigned code, ByteView payload)
         if (flags & 8) line = index(line_bits, base_line, drawing.strokes.size());
         if (flags & 16)
         {
+            if (morph)
+                throw std::runtime_error("Nouveaux styles dans les arêtes d’une forme interpolée.");
             ++layer;
             bits.align();
             base_fill = static_cast<unsigned>(drawing.fills.size() - 1);
@@ -500,6 +493,154 @@ ShapeDrawing read_shape_drawing(unsigned code, ByteView payload)
             fill_bits = bits.unsigned_bits(4);
             line_bits = bits.unsigned_bits(4);
         }
+    }
+}
+
+struct MorphInterpolation
+{
+    double ratio;
+
+    double number(double start, double end) const { return std::lerp(start, end, ratio); }
+    template<class T> T integer(T start, T end) const { return static_cast<T>(std::lround(number(start, end))); }
+    ShapePoint point(ShapePoint a, ShapePoint b) const { return {integer(a.x, b.x), integer(a.y, b.y)}; }
+    ShapeColor color(Reader& input) const
+    {
+        auto start = read_color(input, true);
+        const auto end = read_color(input, true);
+        for (std::size_t i = 0; i < start.size(); ++i)
+            start[i] = integer(start[i], end[i]);
+        return start;
+    }
+    Matrix matrix(Reader& input) const
+    {
+        const auto start = read_matrix(input), end = read_matrix(input);
+        return {number(start.scale_x, end.scale_x), number(start.scale_y, end.scale_y),
+            number(start.skew_x, end.skew_x), number(start.skew_y, end.skew_y),
+            integer(start.x, end.x), integer(start.y, end.y)};
+    }
+    ShapePaint paint(Reader& input) const
+    {
+        ShapePaint paint;
+        paint.type = input.u8();
+        if (!paint.type)
+            paint.color = color(input);
+        else if (is_texture(paint.type))
+        {
+            paint.bitmap = input.u16();
+            paint.matrix = matrix(input);
+        }
+        else if (is_gradient(paint.type))
+        {
+            paint.matrix = matrix(input);
+            const auto count = input.u8();
+            if (count == 0 || count > 15)
+                throw std::runtime_error("Nombre de points du dégradé interpolé invalide.");
+            for (unsigned i = 0; i < count; ++i)
+            {
+                const auto start_ratio = input.u8();
+                const auto start_color = read_color(input, true);
+                const auto end_ratio = input.u8();
+                const auto end_color = read_color(input, true);
+                ShapeColor mixed{};
+                for (std::size_t channel = 0; channel < mixed.size(); ++channel)
+                    mixed[channel] = integer(start_color[channel], end_color[channel]);
+                paint.stops.push_back({integer(start_ratio, end_ratio), mixed});
+            }
+            if (paint.type == 0x13)
+            {
+                const auto start = std::bit_cast<std::int16_t>(input.u16());
+                paint.focal = integer(start, std::bit_cast<std::int16_t>(input.u16()));
+            }
+        }
+        else
+            throw std::runtime_error("Type de remplissage interpolé non pris en charge.");
+        return paint;
+    }
+};
+}
+
+ShapeDrawing read_shape_drawing(unsigned code, ByteView payload)
+{
+    ShapeDrawing drawing;
+    drawing.version = shape_version(code);
+    Reader input(payload);
+    drawing.character = input.u16();
+    drawing.bounds = read_bounds(input);
+    if (drawing.version == 4)
+    {
+        read_bounds(input);
+        drawing.flags = input.u8();
+    }
+    read_styles(input, drawing);
+    read_edges(input, drawing);
+    return drawing;
+}
+
+ShapeDrawing read_morph_drawing(unsigned code, ByteView payload, unsigned ratio)
+{
+    const MorphInterpolation mix{std::min(ratio, 65535u) / 65535.0};
+    Reader input(payload);
+    ShapeDrawing drawing;
+    drawing.version = code == 84 ? 4 : 3;
+    drawing.character = input.u16();
+    drawing.bounds = read_bounds(input);
+    const auto end_bounds = read_bounds(input);
+    for (std::size_t i = 0; i < drawing.bounds.size(); ++i)
+        drawing.bounds[i] = mix.integer(drawing.bounds[i], end_bounds[i]);
+    if (drawing.version == 4)
+    {
+        read_bounds(input);
+        read_bounds(input);
+        drawing.flags = input.u8() & 3;
+    }
+    const auto offset = input.u32();
+    Reader start(input.take(offset));
+    const auto count = [&]()
+    {
+        const auto value = start.u8();
+        return value == 255 ? static_cast<unsigned>(start.u16()) : value;
+    };
+    const auto fills = count();
+    for (unsigned i = 0; i < fills; ++i)
+        drawing.fills.push_back(mix.paint(start));
+    const auto strokes = count();
+    for (unsigned i = 0; i < strokes; ++i)
+    {
+        const auto start_width = start.u16();
+        ShapeStroke stroke;
+        stroke.width = mix.integer(start_width, start.u16());
+        if (drawing.version == 4)
+        {
+            BitReader bits(start);
+            stroke.flags = static_cast<std::uint16_t>(bits.unsigned_bits(16));
+            if (((stroke.flags >> 12) & 3) == 2)
+                stroke.miter = start.u16();
+        }
+        if (stroke.flags & 0x0800)
+            stroke.paint = mix.paint(start);
+        else
+            stroke.paint.color = mix.color(start);
+        drawing.strokes.push_back(std::move(stroke));
+    }
+    read_edges(start, drawing, true);
+    if (!ratio)
+        return drawing;
+    ShapeDrawing end;
+    read_edges(input, end, true);
+    if (end.edges.size() != drawing.edges.size())
+        throw std::runtime_error("Nombre d’arêtes différent entre les états de la forme interpolée.");
+    const auto control = [](const ShapeEdge& edge)
+    {
+        return edge.control.value_or(ShapePoint{std::midpoint(edge.from.x, edge.to.x), std::midpoint(edge.from.y, edge.to.y)});
+    };
+    for (std::size_t index = 0; index < drawing.edges.size(); ++index)
+    {
+        auto& a = drawing.edges[index];
+        const auto& b = end.edges[index];
+        if (a.control || b.control)
+            a.control = mix.point(control(a), control(b));
+        a.from = mix.point(a.from, b.from);
+        a.to = mix.point(a.to, b.to);
     }
     return drawing;
 }

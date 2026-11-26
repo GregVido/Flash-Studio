@@ -10,7 +10,7 @@ export const convertedClassName = value => classNames.get(value);
 
 const nativeBases = new Set(["", "Object", "flash.events.Event", "flash.events.EventDispatcher", "flash.display.DisplayObject",
     "flash.display.InteractiveObject", "flash.display.DisplayObjectContainer", "flash.display.Sprite", "flash.display.MovieClip",
-    "flash.display.SimpleButton", "flash.display.Shape", "flash.display.Loader", "flash.display.Bitmap",
+    "flash.display.SimpleButton", "flash.display.Shape", "flash.display.Loader", "flash.display.Bitmap", "flash.display.BitmapData",
     "flash.text.TextField", "flash.text.Font", "flash.net.Socket", "flash.net.XMLSocket",
     "flash.net.URLLoader", "flash.net.LocalConnection", "flash.media.Sound", "flash.utils.ByteArray", "flash.utils.Timer"]);
 

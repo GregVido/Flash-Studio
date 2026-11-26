@@ -472,7 +472,7 @@ std::string inspect(const Movie& movie, std::size_t index)
         {
             const auto flags = input.u8(), extra = tag.code == 26 ? std::uint8_t{0} : input.u8();
             detail += std::format("Profondeur : {} · déplacement : {}\n", input.u16(), flags & 1 ? "oui" : "non");
-            if ((extra & 8) || ((extra & 16) && (flags & 2)))
+            if (extra & 8)
                 detail += std::format("Classe : {:.200s}\n", input.cstring());
             if (flags & 2)
                 detail += std::format("Caractère : {}\n", input.u16());

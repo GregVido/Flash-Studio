@@ -98,6 +98,8 @@ button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
 #stage [data-flash-mouse="self"] { pointer-events: bounding-box; }
 #stage [data-flash-mouse="off"] { pointer-events: none; }
 #stage [data-flash-static] { pointer-events: none; }
+#stage [data-flash-composite] { opacity: 0 !important; }
+#stage [data-flash-composite], #stage [data-flash-composite] * { pointer-events: none !important; }
 #stage [data-flash-hit] :is(image, use, path, rect, ellipse, circle) { pointer-events: visiblePainted; }
 #stage[data-flash-quality="low"] { shape-rendering: crispEdges; }
 #stage[data-flash-quality="low"] :is(image, canvas) { image-rendering: pixelated !important; }
@@ -144,6 +146,7 @@ let cachedMovieBytes = 0;
 const movieBytes = new WeakMap();
 let bundleSequence = 0;
 const rasterImages = new Map();
+const linkedPixels = new WeakMap();
 const pixelMapImages = new Map();
 const defined = new Map();
 const assetsById = new Map();
@@ -164,6 +167,7 @@ const unnamedLayers = new Map();
 const bitmapTints = new WeakMap();
 const authoredTints = new WeakMap();
 const bitmapSurfaces = new WeakMap();
+const bitmapPatterns = new WeakMap();
 const playbackEpoch = performance.now();
 const background = element("rect");
 art.before(background);
@@ -187,6 +191,11 @@ function asset(id, bundle) {
     ++entry.users;
     assetUsers.register(use, entry);
     return use;
+}
+
+function timelineAsset(row, scene) {
+    const variant = row[11] && row[1] + "@" + row[11];
+    return variant && scene.assets[variant] ? variant : row[1];
 }
 
 function cloneDisplay(node) {
@@ -268,8 +277,8 @@ function loadPixelMapImages(scene, page) {
     return Promise.all(pending);
 }
 
-function svgFilter(transform, effects) {
-    const key = JSON.stringify([transform, effects]);
+)JS" R"JS(function svgFilter(transform, effects, units = 20) {
+    const key = JSON.stringify([transform, effects, units]);
     if (filters.has(key)) return filters.get(key);
     const id = "effect-" + filters.size;
     const filter = element("filter", { id, "color-interpolation-filters": "sRGB",
@@ -288,7 +297,9 @@ function svgFilter(transform, effects) {
     for (const [index, effect] of effects.entries()) {
         const result = "effect" + index;
         const [kind, x, y, a, b, color, alpha, flags, passes] = effect;
-        if (kind === 6) {
+        if (kind === 3) {
+            bevelPrimitives(filter, input, result, effect, units);
+        } else if (kind === 6) {
             filter.append(element("feColorMatrix", { in: input, type: "matrix", values: effect.slice(1).join(" "), result }));
         } else if (kind === 5) {
             const [, columns, rows, divisor, bias, options, kernel] = effect;
@@ -297,12 +308,12 @@ function svgFilter(transform, effects) {
                 preserveAlpha: options & 1 ? "true" : "false", result }));
         } else {
             // Match the variance of the Flash box-blur passes in the SVG coordinate system.
-            const deviation = 20 * Math.sqrt(Math.max(1, kind === 1 ? a : passes) / 12);
+            const deviation = units * Math.sqrt(Math.max(1, kind === 1 ? a : passes) / 12);
             const stdDeviation = [x * deviation, y * deviation].join(" ");
             if (kind === 1) {
                 filter.append(element("feGaussianBlur", { in: input, stdDeviation, edgeMode: "none", result }));
             } else if (alpha <= 1 && !(flags & (128 | 64)) && (flags & 32)) {
-                filter.append(element("feDropShadow", { in: input, stdDeviation, dx: a * 20, dy: b * 20,
+                filter.append(element("feDropShadow", { in: input, stdDeviation, dx: a * units, dy: b * units,
                     "flood-color": color, "flood-opacity": Math.min(alpha, 1), result }));
             } else {
                 const inner = Boolean(flags & 128);
@@ -321,7 +332,7 @@ function svgFilter(transform, effects) {
                     strength.append(element("feFuncA", { type: "linear", slope: alpha }));
                     filter.append(strength);
                 }
-                filter.append(element("feOffset", { in: coverage, dx: a * 20, dy: b * 20, result: result + "-offset" }));
+                filter.append(element("feOffset", { in: coverage, dx: a * units, dy: b * units, result: result + "-offset" }));
                 filter.append(element("feFlood", { "flood-color": color, "flood-opacity": Math.min(alpha, 1), result: result + "-fill" }));
                 filter.append(element("feComposite", { in: result + "-fill", in2: result + "-offset", operator: "in",
                     result: result + "-tint" }));
@@ -351,6 +362,28 @@ function preserveCoverage(filter, input) {
     coverage.append(element("feFuncA", { type: "linear", slope: 255 }));
     filter.append(coverage, element("feComposite", { in: input, in2: "coverage", operator: "in", result: "covered" }));
     return "covered";
+}
+
+function bevelPrimitives(filter, input, result, effect, units) {
+    const [, x, y, dx, dy, highlight, shadow, highAlpha, lowAlpha, quality, type, knockout] = effect;
+    const blur = result + "-blur", toward = result + "-toward", away = result + "-away";
+    const deviation = units * Math.sqrt(quality / 12);
+    filter.append(element("feGaussianBlur", { in: input, stdDeviation: [x * deviation, y * deviation].join(" "), result: blur }),
+        element("feOffset", { in: blur, dx: dx * units, dy: dy * units, result: toward }),
+        element("feOffset", { in: blur, dx: -dx * units, dy: -dy * units, result: away }));
+    const merge = element("feMerge", { result });
+    if (!knockout) merge.append(element("feMergeNode", { in: input }));
+    for (const [name, from, subtract, color, alpha] of [
+        [result + "-highlight", toward, away, highlight, highAlpha], [result + "-shadow", away, toward, shadow, lowAlpha],
+    ]) {
+        filter.append(element("feComposite", { in: from, in2: subtract, operator: "arithmetic", k2: alpha, k3: -alpha, result: name + "-edge" }),
+            element("feFlood", { "flood-color": color, result: name + "-color" }),
+            element("feComposite", { in: name + "-color", in2: name + "-edge", operator: "in", result: name }));
+        if (type !== "full") filter.append(element("feComposite", { in: name, in2: input,
+            operator: type === "outer" ? "out" : "in", result: name }));
+        merge.append(element("feMergeNode", { in: name }));
+    }
+    filter.append(merge);
 }
 
 function playSound([id, from, to, loops, unique, stop], bundle) {
@@ -462,8 +495,15 @@ const coordinates = new Set(["x", "y", "alpha", "scaleX", "scaleY", "rotation"])
 const visualProperties = new Set([...coordinates, "visible", "text", "buttonMode", "name", "blendMode"]);
 const blendModes = { add: "plus-lighter", layer: "isolate", hardlight: "hard-light" };
 function displayBlend(node, mode) {
-    node.style.isolation = mode === "isolate" ? "isolate" : "";
-    node.style.mixBlendMode = mode && mode !== "normal" && mode !== "isolate" ? mode : "";
+    const composite = mode === "alpha" || mode === "erase";
+    const previous = node.getAttribute("data-flash-composite");
+    if (composite && previous !== mode) node.setAttribute("data-flash-composite", mode);
+    else if (!composite && previous) node.removeAttribute("data-flash-composite");
+    const isolation = mode === "isolate" ? "isolate" : "";
+    if (node.style.isolation !== isolation) node.style.isolation = isolation;
+    const blend = !composite && mode && mode !== "normal" && mode !== "isolate" ? mode : "";
+    if (node.style.mixBlendMode !== blend) node.style.mixBlendMode = blend;
+    if (node.parentElement && (composite || previous)) updateBlendMask(node.parentElement);
 }
 const displayViews = new WeakMap();
 const displayTypes = new WeakMap();
@@ -477,11 +517,14 @@ const frameReferences = new WeakMap();
 const authoredClips = new WeakMap();
 const scriptMasks = new WeakMap();
 const activeScriptMasks = new Set();
+const blendMasks = new WeakMap();
+const maskElements = new FinalizationRegistry(mask => mask.remove());
 const maskSources = new WeakMap();
 const reportedErrors = new Set();
 const eventKinds = new WeakMap();
 const eventObjects = new WeakMap();
 const objectEvents = new WeakMap();
+const activeEvents = new WeakMap();
 const generatedEventKinds = new Map(Object.entries({
     link: "TextEvent", textInput: "TextEvent", timer: "TimerEvent", timerComplete: "TimerEvent",
     progress: "ProgressEvent", socketData: "ProgressEvent", data: "DataEvent", status: "StatusEvent",
@@ -611,6 +654,7 @@ function isEvent(value, type) {
 
 function inheritedEvent() {
     let view, event;
+    const active = () => activeEvents.get(view) ?? event;
     return {
         bindView(instance) { view = instance; },
         initialize(type, bubbles, cancelable) {
@@ -622,8 +666,12 @@ function inheritedEvent() {
         get type() { return event?.type; },
         get bubbles() { return event?.bubbles ?? false; },
         get cancelable() { return event?.cancelable ?? false; },
-        get target() { return displayViews.get(event?.target) ?? null; },
-        get currentTarget() { return displayViews.get(event?.currentTarget) ?? null; },
+        get target() { return displayObjectFor(active()?.target); },
+        get currentTarget() { return displayViews.get(active()?.currentTarget) ?? null; },
+        preventDefault() { active()?.preventDefault(); },
+        isDefaultPrevented() { return active()?.defaultPrevented ?? false; },
+        stopPropagation() { active()?.stopPropagation(); },
+        stopImmediatePropagation() { active()?.stopImmediatePropagation(); },
     };
 }
 
@@ -685,7 +733,7 @@ function updateScriptMasks() {
         const values = [relative.a, relative.b, relative.c, relative.d, relative.e, relative.f];
         if (!values.every(Number.isFinite)) continue;
         if (entry.dirty) {
-            entry.graphic = cloneDisplay(entry.node);
+            entry.graphic = cloneMaskGraphic(entry.node);
             entry.graphic.style.removeProperty("visibility");
             entry.definition.replaceChildren(entry.graphic);
         }
@@ -695,6 +743,54 @@ function updateScriptMasks() {
         }
         entry.dirty = false;
     }
+}
+
+function cloneMaskGraphic(node) {
+    const copy = cloneDisplay(node);
+    const originals = node.querySelectorAll("foreignObject");
+    const surfaces = copy.querySelectorAll("foreignObject");
+    for (let index = 0; index < originals.length; ++index) {
+        const bitmap = bitmapSurfaces.get(originals[index])?.();
+        if (!bitmap?.width || !bitmap.height) continue;
+        const image = element("image", { href: bitmap.imageUrl() });
+        for (const attr of ["x", "y", "width", "height"]) if (originals[index].hasAttribute(attr))
+            image.setAttribute(attr, originals[index].getAttribute(attr));
+        surfaces[index].replaceWith(image);
+    }
+    copy.removeAttribute("data-flash-composite");
+    return copy;
+}
+
+function updateBlendMask(container) {
+    const tail = container.lastElementChild, mode = tail?.getAttribute("data-flash-composite");
+    const previous = blendMasks.get(container);
+    if (previous?.source === tail && previous?.mode === mode) return;
+    if (previous) {
+        previous.observer.disconnect();
+        maskElements.unregister(previous.mask);
+        previous.mask.remove();
+        container.removeAttribute("mask");
+        blendMasks.delete(container);
+    }
+    if (!mode || container.hasAttribute("mask")) return;
+    // An alpha or erase layer contributes coverage, independently of its RGB channels.
+    const id = "blend-mask-" + (++masks);
+    const extent = { x: -1000000, y: -1000000, width: 2000000, height: 2000000 };
+    const mask = element("mask", { id, "mask-type": mode === "alpha" ? "alpha" : "luminance", maskUnits: "userSpaceOnUse", ...extent });
+    const draw = () => {
+        const coverage = cloneMaskGraphic(tail);
+        if (mode === "erase") {
+            coverage.style.filter = "brightness(0)";
+            mask.replaceChildren(element("rect", { ...extent, fill: "white" }), coverage);
+        } else mask.replaceChildren(coverage);
+    };
+    const observer = new MutationObserver(draw);
+    observer.observe(tail, { attributes: true, childList: true, subtree: true });
+    blendMasks.set(container, { source: tail, mode, mask, observer });
+    maskElements.register(container, mask, mask);
+    symbols.append(mask);
+    container.setAttribute("mask", "url(#" + id + ")");
+    draw();
 }
 
 function property(layer, name) {
@@ -729,7 +825,13 @@ function eventView(node) {
                 if (eventType === "enterFrame" && event.target !== node) return;
                 try {
                     const custom = eventObjects.get(event);
-                    if (custom) { callback(custom); return; }
+                    if (custom) {
+                        const previous = activeEvents.get(custom);
+                        activeEvents.set(custom, event);
+                        try { callback(custom); }
+                        finally { if (previous) activeEvents.set(custom, previous); else activeEvents.delete(custom); }
+                        return;
+                    }
                     const kind = eventKind(event);
                     const view = {
                         type, bubbles: event.bubbles, cancelable: event.cancelable,
@@ -744,6 +846,8 @@ function eventView(node) {
                         ctrlKey: Boolean(event.ctrlKey ?? event.detail?.ctrlKey), shiftKey: Boolean(event.shiftKey ?? event.detail?.shiftKey),
                         altKey: Boolean(event.altKey ?? event.detail?.altKey),
                         preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation(),
+                        stopImmediatePropagation: () => event.stopImmediatePropagation(),
+                        isDefaultPrevented: () => event.defaultPrevented,
                     };
                     if (kind === "MouseEvent" || kind === "KeyboardEvent" || kind === "TimerEvent")
                         view.updateAfterEvent = updateAfterEvent;
@@ -826,6 +930,7 @@ function eventView(node) {
         if (node === next) next = next.nextSibling;
         else container.insertBefore(node, next);
     }
+    if (blendMasks.has(container) || container.lastElementChild?.hasAttribute("data-flash-composite")) updateBlendMask(container);
 }
 
 function displayChildren(container, owner, repaint) {
@@ -964,6 +1069,18 @@ function graphics(container) {
             stroke = width == null ? "none" : color(value); strokeAlpha = alpha;
         },
         beginFill(value, alpha = 1) { path = null; fill = color(value); fillAlpha = alpha; },
+        beginBitmapFill(bitmap, matrix = null, repeat = true, smooth = false) {
+            if (!bitmap?.width || !bitmap.height || !bitmap.canvas) throw new TypeError("BitmapData du remplissage invalide.");
+            const id = "bitmap-pattern-" + (++masks), w = bitmap.width * 20, h = bitmap.height * 20;
+            const pattern = element("pattern", { id, patternUnits: "userSpaceOnUse", width: repeat ? w : 2000000, height: repeat ? h : 2000000 });
+            if (matrix) pattern.setAttribute("patternTransform", `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.tx * 20} ${matrix.ty * 20})`);
+            const image = element("image", { href: bitmap.imageUrl(), width: w, height: h });
+            if (!smooth) image.style.imageRendering = "pixelated";
+            pattern.append(image);
+            container.append(pattern);
+            bitmapPatterns.set(pattern, { bitmap, matrix, repeat });
+            path = null; fill = "url(#" + id + ")"; fillAlpha = 1;
+        },
         endFill() { path = null; fill = "none"; },
         moveTo(nextX, nextY) { if (path) draw("M " + point(nextX, nextY)); x = nextX; y = nextY; },
         lineTo(nextX, nextY) { draw("L " + point(nextX, nextY)); x = nextX; y = nextY; },
@@ -992,17 +1109,31 @@ function dropShadowFilter(distance = 4, angle = 45, color = 0, alpha = 1, blurX 
     return { distance, angle, color, alpha, blurX, blurY, strength, quality, inner, knockout, hideObject };
 }
 
+function bevelFilter(distance = 4, angle = 45, highlightColor = 0xffffff, highlightAlpha = 1, shadowColor = 0,
+    shadowAlpha = 1, blurX = 4, blurY = 4, strength = 1, quality = 1, type = "inner", knockout = false) {
+    return { distance, angle, highlightColor, highlightAlpha, shadowColor, shadowAlpha, blurX, blurY, strength, quality, type, knockout };
+}
+
+function displacementFilter(mapBitmap = null, mapPoint = null, componentX = 0, componentY = 0, scaleX = 0, scaleY = 0,
+    mode = "wrap", color = 0, alpha = 0) {
+    return { mapBitmap, mapPoint, componentX, componentY, scaleX, scaleY, mode, color, alpha };
+}
+
 function filterEffect(effect) {
     const type = displayTypes.get(effect);
     const x = Math.max(0, Number(effect?.blurX) || 0), y = Math.max(0, Number(effect?.blurY) || 0);
     const quality = Math.max(1, Math.min(15, effect?.quality | 0));
     if (type === "BlurFilter") return [1, x, y, quality];
-    if (type !== "GlowFilter" && type !== "DropShadowFilter") return null;
+    if (type !== "GlowFilter" && type !== "DropShadowFilter" && type !== "BevelFilter") return null;
     const radius = (Number(effect.angle) || 0) * Math.PI / 180;
     const distance = Number(effect.distance) || 0;
+    const dx = distance * Math.cos(radius), dy = distance * Math.sin(radius);
+    const hex = color => "#" + (color & 0xffffff).toString(16).padStart(6, "0");
+    if (type === "BevelFilter") return [3, x, y, dx, dy, hex(effect.highlightColor), hex(effect.shadowColor),
+        Math.max(0, Number(effect.highlightAlpha * effect.strength) || 0), Math.max(0, Number(effect.shadowAlpha * effect.strength) || 0),
+        quality, effect.type, effect.knockout];
     const flags = (effect.hideObject ? 0 : 32) | (effect.inner ? 128 : 0) | (effect.knockout ? 64 : 0);
-    return [2, x, y, distance * Math.cos(radius), distance * Math.sin(radius),
-        "#" + (effect.color & 0xffffff).toString(16).padStart(6, "0"),
+    return [2, x, y, dx, dy, hex(effect.color),
         Math.max(0, Number(effect.alpha * effect.strength) || 0), flags, quality];
 }
 
@@ -1077,7 +1208,7 @@ function displayTransform(node, effects = () => [], staticChild = false) {
     };
 }
 
-function scriptSprite(kind, offsetX = () => 0) {
+function scriptSprite(kind, offsetX = () => 0, effectChanged) {
     const node = element("g"), drawing = element("g"), children = element("g");
     let visibleView;
     node.append(drawing, children);
@@ -1134,6 +1265,7 @@ function scriptSprite(kind, offsetX = () => 0) {
             set: value => {
                 effects = Array.isArray(value) ? value.slice() : [];
                 appearance.update();
+                effectChanged?.();
             },
         },
         blendMode: { get: () => blend, set: value => {
@@ -1209,31 +1341,45 @@ function scriptTimer(initialDelay, initialRepeats = 0) {
 
 class BitmapData {
     constructor(width, height, transparent = true, color = 0xffffffff) {
-        width = Math.trunc(Number(width));
-        height = Math.trunc(Number(height));
-        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
-            width > 8192 || height > 8192 || width * height > 0x1000000)
-            throw new RangeError("Dimensions BitmapData invalides.");
         this.canvas = document.createElement("canvas");
-        this.canvas.width = width;
-        this.canvas.height = height;
-        this.context = this.canvas.getContext("2d", { alpha: Boolean(transparent), willReadFrequently: true });
-        this.transparent = Boolean(transparent);
         this.listeners = new Set();
         this.locked = false;
         this.revision = 0;
-        this.fillRect(this.rect, color);
-        this.pristine = this.transparent && color >>> 24 === 0;
+        this.initialize(width, height, transparent, color);
+    }
+    initialize(width, height, transparent = true, color = 0xffffffff, image) {
+        width = Math.trunc(Number(width));
+        height = Math.trunc(Number(height));
+        transparent = Boolean(transparent);
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
+            width > 8192 || height > 8192 || width * height > 0x1000000)
+            throw new RangeError("Dimensions BitmapData invalides.");
+        if (this.context && transparent !== this.transparent) this.canvas = document.createElement("canvas");
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.context = this.canvas.getContext("2d", { alpha: transparent, willReadFrequently: true });
+        this.transparent = transparent;
+        if (image) {
+            this.context.drawImage(image, 0, 0);
+            this.update();
+            this.linkedUrl = image.src;
+        } else {
+            this.fillRect(this.rect, color);
+            this.pristine = this.transparent && color >>> 24 === 0;
+        }
     }
     get width() { return this.canvas.width; }
     get height() { return this.canvas.height; }
     get rect() { return new Rectangle(0, 0, this.width, this.height); }
+    imageUrl() { return this.linkedUrl || (this.maskImage ??= this.canvas.toDataURL()); }
     lock() { this.locked = true; }
     unlock() { this.locked = false; this.update(); }
     update() {
         ++this.revision;
         this.pristine = false;
         this.sample = null;
+        this.maskImage = null;
+        this.linkedUrl = "";
         if (!this.locked) for (const redraw of this.listeners) redraw();
     }
     getPixel32(x, y) {
@@ -1248,14 +1394,19 @@ class BitmapData {
     setPixel(x, y, rgb) {
         x = Math.trunc(x); y = Math.trunc(y);
         if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
-        const alpha = this.transparent ? this.context.getImageData(x, y, 1, 1).data[3] : 255;
+        const alpha = !this.transparent ? 255 : this.sample ?
+            this.sample[(y * this.width + x) * 4 + 3] : this.context.getImageData(x, y, 1, 1).data[3];
         this.setPixel32(x, y, (alpha << 24) | (rgb & 0xffffff));
     }
     setPixel32(x, y, color) {
         x = Math.trunc(x); y = Math.trunc(y);
         if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
         this.pixel ??= this.context.createImageData(1, 1);
-        this.pixel.data.set([color >>> 16 & 255, color >>> 8 & 255, color & 255, this.transparent ? color >>> 24 : 255]);
+        const bytes = this.pixel.data;
+        bytes[0] = color >>> 16 & 255;
+        bytes[1] = color >>> 8 & 255;
+        bytes[2] = color & 255;
+        bytes[3] = this.transparent ? color >>> 24 : 255;
         this.context.putImageData(this.pixel, x, y);
         this.update();
     }
@@ -1350,6 +1501,23 @@ class BitmapData {
     }
     colorTransform(rect, transform) {
         if (rect.width <= 0 || rect.height <= 0) return;
+        if (transform.redMultiplier === 1 && transform.greenMultiplier === 1 && transform.blueMultiplier === 1 &&
+            !transform.redOffset && !transform.greenOffset && !transform.blueOffset && !transform.alphaOffset &&
+            transform.alphaMultiplier >= 0 && transform.alphaMultiplier <= 1) {
+            if (!this.transparent || transform.alphaMultiplier === 1) return;
+            const context = this.context;
+            context.save();
+            const area = new Path2D();
+            area.rect(rect.x, rect.y, rect.width, rect.height);
+            context.clip(area);
+            context.globalCompositeOperation = "destination-in";
+            context.globalAlpha = transform.alphaMultiplier;
+            context.fillStyle = "white";
+            context.fillRect(rect.x, rect.y, rect.width, rect.height);
+            context.restore();
+            this.update();
+            return;
+        }
         const image = this.context.getImageData(rect.x, rect.y, rect.width, rect.height);
         const channels = ["red", "green", "blue", "alpha"];
         const multipliers = channels.map(channel => transform[channel + "Multiplier"]);
@@ -1362,18 +1530,18 @@ class BitmapData {
         this.update();
     }
     applyFilter(source, rect, target, filter) {
-        if (!source?.canvas || rect.width <= 0 || rect.height <= 0) return;
+        if (!source?.width || !source.height || rect.width < 1 || rect.height < 1) return;
+        if (displayTypes.get(filter) === "DisplacementMapFilter" && filter.mapBitmap?.width && filter.mapBitmap.height) {
+            this.context.putImageData(displacePixels(this.context, source, rect, filter), target.x, target.y);
+            this.update();
+            return;
+        }
         const pixels = document.createElement("canvas");
         pixels.width = Math.ceil(rect.width);
         pixels.height = Math.ceil(rect.height);
         const context = pixels.getContext("2d");
         const effect = filterEffect(filter);
-        if (effect) {
-            const [kind, x, y, a, b, color] = effect;
-            const blur = Math.max(x, y) * 0.5;
-            context.filter = kind === 1 ? "blur(" + blur + "px)" :
-                "drop-shadow(" + a + "px " + b + "px " + blur + "px " + color + ")";
-        }
+        if (effect) context.filter = svgFilter(null, [effect], 1);
         context.drawImage(source.canvas, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
         this.context.clearRect(target.x, target.y, rect.width, rect.height);
         this.context.drawImage(pixels, target.x, target.y);
@@ -1434,6 +1602,15 @@ class BitmapData {
     }
     paint(pixels, node, matrix, blend, clip, smoothing, resources) {
         const context = this.context;
+        if (pixels && !clip && (!blend || blend === "normal") &&
+            (!matrix || (!matrix.b && !matrix.c && matrix.a > 0 && matrix.d > 0))) {
+            const previous = context.imageSmoothingEnabled;
+            context.imageSmoothingEnabled = Boolean(smoothing);
+            if (matrix) context.drawImage(pixels, matrix.tx, matrix.ty, pixels.width * matrix.a, pixels.height * matrix.d);
+            else context.drawImage(pixels, 0, 0);
+            context.imageSmoothingEnabled = previous;
+            return;
+        }
         context.save();
         try {
             if (clip) {
@@ -1454,7 +1631,52 @@ class BitmapData {
     }
 }
 
-)JS" R"JS(const tintSurfaces = [];
+)JS" R"JS(const displacementBuffers = new WeakMap();
+
+function displacePixels(context, source, rect, effect) {
+    const width = Math.trunc(rect.width), height = Math.trunc(rect.height);
+    const { mapBitmap, mapPoint, mode, color, alpha } = effect;
+    const sourceData = source.sample ??= source.context.getImageData(0, 0, source.width, source.height).data;
+    const mapData = mapBitmap.sample ??= mapBitmap.context.getImageData(0, 0, mapBitmap.width, mapBitmap.height).data;
+    const [sourceWidth, sourceHeight, mapWidth, mapHeight] = [source.width, source.height, mapBitmap.width, mapBitmap.height];
+    const left = Math.trunc(rect.x), top = Math.trunc(rect.y);
+    const mapLeft = Math.trunc(mapPoint?.x ?? 0), mapTop = Math.trunc(mapPoint?.y ?? 0);
+    const lanes = { 1: 0, 2: 1, 4: 2, 8: 3 }, cx = lanes[effect.componentX], cy = lanes[effect.componentY];
+    const dx = (Number(effect.scaleX) || 0) / 256, dy = (Number(effect.scaleY) || 0) / 256;
+    const edgeColor = [color >>> 16 & 255, color >>> 8 & 255, color & 255, Math.round(255 * alpha)];
+    let image = displacementBuffers.get(context);
+    if (image?.width !== width || image.height !== height) {
+        image = context.createImageData(width, height);
+        displacementBuffers.set(context, image);
+    }
+    const output = image.data;
+    for (let row = 0, offset = 0; row < height; ++row) {
+        const y = top + row, my = y - mapTop;
+        for (let col = 0; col < width; ++col, offset += 4) {
+            const x = left + col, mx = x - mapLeft;
+            let sx = x, sy = y;
+            if (mx >= 0 && mx < mapWidth && my >= 0 && my < mapHeight) {
+                const mapIndex = (my * mapWidth + mx) * 4;
+                if (cx !== undefined) sx += Math.round((mapData[mapIndex + cx] - 128) * dx);
+                if (cy !== undefined) sy += Math.round((mapData[mapIndex + cy] - 128) * dy);
+            }
+            if (sx < 0 || sx >= sourceWidth || sy < 0 || sy >= sourceHeight) {
+                if (mode === "color") { output.set(edgeColor, offset); continue; }
+                if (mode === "ignore") { sx = x; sy = y; }
+                else if (mode === "clamp") {
+                    sx = Math.min(sourceWidth - 1, Math.max(0, sx)); sy = Math.min(sourceHeight - 1, Math.max(0, sy));
+                } else {
+                    sx = (sx % sourceWidth + sourceWidth) % sourceWidth; sy = (sy % sourceHeight + sourceHeight) % sourceHeight;
+                }
+            }
+            const index = (sy * sourceWidth + sx) * 4;
+            for (let component = 0; component < 4; ++component) output[offset + component] = sourceData[index + component];
+        }
+    }
+    return image;
+}
+
+const tintSurfaces = [];
 
 function paintTinted(node, context, tint, resources) {
     const box = localDisplayBounds(node), matrix = context.getTransform();
@@ -1553,7 +1775,15 @@ function paintDisplayContents(node, context, resources) {
             const fill = node.getAttribute("fill") ?? "black", stroke = node.getAttribute("stroke");
             const alpha = context.globalAlpha;
             if (fill !== "none") {
-                context.fillStyle = fill;
+                const id = fill.match(/^url\(#(.+)\)$/)?.[1];
+                const pattern = id && bitmapPatterns.get(document.getElementById(id));
+                let brush = fill;
+                if (pattern) {
+                    brush = context.createPattern(pattern.bitmap.canvas, pattern.repeat ? "repeat" : "no-repeat");
+                    const {a, b, c, d, tx, ty} = pattern.matrix ?? new Matrix();
+                    brush?.setTransform(new DOMMatrix([a * 20, b * 20, c * 20, d * 20, tx * 20, ty * 20]));
+                }
+                context.fillStyle = brush ?? "transparent";
                 context.globalAlpha = alpha * Math.min(1, Number(node.getAttribute("fill-opacity") ?? 1));
                 context.fill(shape, node.getAttribute("fill-rule") === "evenodd" ? "evenodd" : "nonzero");
             }
@@ -1572,7 +1802,7 @@ function paintDisplayContents(node, context, resources) {
 }
 
 function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
-    const view = scriptSprite("Bitmap");
+    const view = scriptSprite("Bitmap", undefined, () => redraw());
     const node = displayNodes.get(view);
     const surface = element("foreignObject");
     const canvas = document.createElement("canvas");
@@ -1586,7 +1816,10 @@ function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
         if (!canvas.width || !canvas.height) return;
         const context = canvas.getContext("2d");
         context.clearRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(bitmap.canvas, 0, 0);
+        const displacement = view.filters.find(filter => displayTypes.get(filter) === "DisplacementMapFilter" && filter.mapBitmap?.width && filter.mapBitmap.height);
+        if (displacement) context.putImageData(displacePixels(context, bitmap, bitmap.rect, displacement), 0, 0);
+        else context.drawImage(bitmap.canvas, 0, 0);
+        if (node.closest("[data-flash-composite]")) surface.setAttribute("data-flash-pixels", bitmap.revision);
     };
     const redraw = () => {
         const width = bitmap?.width ?? 0, height = bitmap?.height ?? 0;
@@ -1911,8 +2144,8 @@ function timelineAssetUrls(scene, page, roots, visited = new Set()) {
         visited.add(id);
         const url = scene.assets[id]?.url;
         if (url) urls.push(new URL(url, page).href);
-        for (const frame of scene.clips[id]?.frames ?? []) for (const row of frame[0]) visit(row[1]);
-        for (const state of scene.buttons[id]?.states ?? []) for (const row of state) visit(row[1]);
+        for (const frame of scene.clips[id]?.frames ?? []) for (const row of frame[0]) visit(timelineAsset(row, scene));
+        for (const state of scene.buttons[id]?.states ?? []) for (const row of state) visit(timelineAsset(row, scene));
     };
     for (const id of roots) visit(id);
     return urls;
@@ -1931,6 +2164,16 @@ function preloadBitmapSources(scene, definitions, page) {
     const roots = Object.entries(scene.clips).filter(([, clip]) => clip.type && renders(clip.type)).map(([id]) => Number(id));
     const urls = timelineAssetUrls(scene, page, roots);
     return Promise.all(urls.map(url => rasterImage(url).decode().catch(() => {})));
+}
+
+async function preloadLinkedPixels(scene, page) {
+    const loaded = new Map();
+    await Promise.all(Object.entries(scene.assets).filter(([, asset]) => asset.type && asset.url).map(async ([id, asset]) => {
+        const image = rasterImage(new URL(asset.url, page).href);
+        try { await image.decode(); loaded.set(Number(id), image); }
+        catch { /* The usual blank BitmapData is available if the asset is missing. */ }
+    }));
+    if (loaded.size) linkedPixels.set(scene, loaded);
 }
 
 )JS" R"JS(function trimMovieRequests() {
@@ -1958,7 +2201,7 @@ async function loadMovie(page, address, original, domain) {
             original ? original() : fetch(new URL("source.bin", page)).then(response => response.ok ? response.arrayBuffer() : null),
         ]).then(async ([scene, classes, script, bytes]) => {
             const lazy = lazyAssetPaths.some(prefix => address.pathname.startsWith(prefix));
-            const pixels = Promise.all([loadPixelMapImages(scene, page), loadFonts(scene, page)]);
+            const pixels = Promise.all([loadPixelMapImages(scene, page), preloadLinkedPixels(scene, page), loadFonts(scene, page)]);
             if (script.actions.length || Object.values(scene.clips).some(clip => clip.legacyInitialize))
                 await Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
                     rasterImage(new URL(asset.url, page).href).decode().catch(() => {}))]);
@@ -2127,6 +2370,8 @@ function makeNativeObject(name, ...args) {
         return { blurX, blurY, quality };
     }
     case "DropShadowFilter": return dropShadowFilter(...args);
+    case "BevelFilter": return bevelFilter(...args);
+    case "DisplacementMapFilter": return displacementFilter(...args);
     case "ColorTransform": return new ColorTransform(...args);
     case "Matrix": return new Matrix(...args);
     case "Font": return Object.assign({ fontName: "sans-serif", fontStyle: "regular", fontType: "device" }, args[0]);
@@ -2189,6 +2434,8 @@ for (const type of ["keydown", "keyup", "pointerdown"]) stage.addEventListener(t
 
 const nativeSymbols = {
     BitmapDataChannel: { RED: 1, GREEN: 2, BLUE: 4, ALPHA: 8 },
+    BitmapFilterType: { INNER: "inner", OUTER: "outer", FULL: "full" },
+    DisplacementMapFilterMode: { WRAP: "wrap", CLAMP: "clamp", IGNORE: "ignore", COLOR: "color" },
     URLRequestMethod: { GET: "GET", POST: "POST", PUT: "PUT", DELETE: "DELETE", HEAD: "HEAD", OPTIONS: "OPTIONS" },
     URLLoaderDataFormat: { TEXT: "text", BINARY: "binary", VARIABLES: "variables" },
     Endian: { BIG_ENDIAN: "bigEndian", LITTLE_ENDIAN: "littleEndian" },
@@ -2291,7 +2538,7 @@ const classHooks = {
         if (type === "DisplayObjectContainer") return displayed === "MovieClip" || displayed === "Sprite" || displayed === "Loader";
         if (type === "InteractiveObject")
             return ["MovieClip", "Sprite", "Loader", "SimpleButton", "TextField"].includes(displayed);
-        if (type === "BitmapFilter") return ["GlowFilter", "BlurFilter", "DropShadowFilter"].includes(displayed);
+        if (type === "BitmapFilter") return ["GlowFilter", "BlurFilter", "DropShadowFilter", "BevelFilter", "DisplacementMapFilter"].includes(displayed);
         if (type === "Point") return value instanceof Point;
         if (type === "Rectangle") return value instanceof Rectangle;
         if (type === "Matrix") return value instanceof Matrix;
@@ -2306,6 +2553,12 @@ const classHooks = {
     },
     host: (chain, defs, bundle) => {
         const symbol = bundle?.symbols.get(chain[0]);
+        const base = defs[chain.at(-1)]?.base;
+        if (base === "flash.display.BitmapData") {
+            const pixels = nativeObject("BitmapData", 1, 1, true, 0);
+            pixels.linkedImage = linkedPixels.get(bundle.scene)?.get(symbol);
+            return pixels;
+        }
         if (symbol !== undefined) {
             if (bundle.scene.clips[symbol]) return makeLinkedClip(symbol, bundle);
             if (bundle.scene.buttons[symbol]) return makeLinkedButton(symbol, bundle);
@@ -2316,7 +2569,6 @@ const classHooks = {
                 return view;
             }
         }
-        const base = defs[chain.at(-1)]?.base;
         if (base === "flash.events.Event") return inheritedEvent();
         if (base === "flash.events.EventDispatcher") return scriptDispatcher();
         if (base === "flash.display.Sprite" || base === "flash.display.MovieClip") return scriptSprite(base.split(".").pop());
@@ -2331,6 +2583,12 @@ const classHooks = {
     },
     initializeBase: (base, host, args) => {
         if (base === "flash.events.Event") host?.initialize(...args);
+        if (base === "flash.display.BitmapData" && host) {
+            const image = host.linkedImage;
+            if (image) host.initialize(image.naturalWidth, image.naturalHeight, true, 0, image);
+            else host.initialize(...args);
+            delete host.linkedImage;
+        }
         if (base === "flash.display.Bitmap" && host) {
             host.bitmapData = args[0] ?? null;
             host.pixelSnapping = args[1] ?? "auto";
@@ -2354,6 +2612,8 @@ function makeBundle(scene, actions, definitions, page, address = page) {
         if (id !== "0" && clip.type && !bundle.symbols.has(clip.type)) bundle.symbols.set(clip.type, Number(id));
     for (const [id, button] of Object.entries(scene.buttons ?? {}))
         if (button.type && !bundle.symbols.has(button.type)) bundle.symbols.set(button.type, Number(id));
+    for (const [id, asset] of Object.entries(scene.assets))
+        if (asset.type && !bundle.symbols.has(asset.type)) bundle.symbols.set(asset.type, Number(id));
     for (const [name, id] of Object.entries(scene.soundClasses ?? {})) bundle.symbols.set(name, id);
     bundle.classes = new ConvertedClasses(definitions, {
         ...classHooks,
@@ -2671,7 +2931,8 @@ function displayView(owner, clip, layer, node) {
             } else {
                 const definition = data.assets[id];
                 if (definition?.text === undefined) {
-                    layer.asset = asset(id, this.bundle);
+                    layer.assetId = timelineAsset(row, data);
+                    layer.asset = asset(layer.assetId, this.bundle);
                     node.setAttribute("data-flash-static", "");
                     node.append(layer.asset);
                 }
@@ -2709,6 +2970,16 @@ function displayView(owner, clip, layer, node) {
         if ([a, b, c, d, x, y].every(Number.isFinite))
             put("transform", "matrix(" + [a,b,c,d,x,y].join(" ") + ")");
         if (geometryOnly) return;
+        if (layer.asset && row[11] !== layer.ratio) {
+            layer.ratio = row[11];
+            const id = timelineAsset(row, this.bundle.scene);
+            if (id !== layer.assetId) {
+                const replacement = asset(id, this.bundle);
+                layer.asset.replaceWith(replacement);
+                layer.asset = replacement;
+                layer.assetId = id;
+            }
+        }
         const color = row[8], effects = row[9];
         const needsColor = color && (color.slice(0, 3).some(value => value !== 256) || color.slice(4).some(Boolean));
         const transform = !needsColor ? null : overrides.alpha === undefined ? color :
@@ -2724,7 +2995,7 @@ function displayView(owner, clip, layer, node) {
         put("display", (overrides.visible ?? row[6]) ? "inline" : "none");
     }
 
-    refreshMasks() {
+)JS" R"JS(    refreshMasks() {
         const items = new Map(), masksByLayer = new Map();
         const layers = [...this.layers].sort((a, b) => a[0] - b[0]);
         this.childList.synchronize(layers.map(([, layer]) => layer.view));
@@ -2878,17 +3149,22 @@ function makeLinkedButton(id, bundle) {
     return layer.view;
 }
 
+const frameEvent = scriptEvent("enterFrame");
+const frameDispatch = [];
+
 function animate(time) {
     requestAnimationFrame(animate);
     if (running) {
         accumulated += Math.min(time - previous, 100);
         const interval = 1000 / data.fps;
         while (accumulated >= interval) {
-            for (const reference of [...frameListeners]) {
+            for (const reference of frameListeners) frameDispatch.push(reference);
+            for (const reference of frameDispatch) {
                 const node = reference.deref();
-                if (node) node.dispatchEvent(scriptEvent("enterFrame"));
+                if (node) node.dispatchEvent(frameEvent);
                 else frameListeners.delete(reference);
             }
+            frameDispatch.length = 0;
             root.tick();
             for (const node of scriptedNodes) {
                 if (!node.isConnected) { scriptedNodes.delete(node); continue; }
@@ -2927,7 +3203,7 @@ try {
         }
     }
     mainBundle = makeBundle(data, actions, definitions, documentUrl);
-    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), loadFonts(data, documentUrl)]);
+    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), preloadLinkedPixels(data, documentUrl), loadFonts(data, documentUrl)]);
     mainDomain.install(mainBundle.classes);
     loaderInfo.url = mainBundle.source.href;
     loaderInfo.loaderURL = loaderInfo.url;

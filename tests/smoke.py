@@ -85,6 +85,22 @@ def animated_sprite(rate=2 * 256):
     return swf(b"FWS", body, body)
 
 
+def morph_shape(character, version2):
+    def edges(size, styled):
+        records = [(int(styled), 4), (0, 4)]
+        if styled:
+            records.extend([(2, 6), (1, 1)])
+        for vertical, move in [(0, size), (1, size), (0, -size), (1, -size)]:
+            records.extend([(1, 1), (1, 1), (9, 4), (0, 1), (vertical, 1), (move, 11)])
+        return bits(*records, (0, 6))
+
+    bounds = rectangle(440, 440) + rectangle(880, 880)
+    start = bytes([1, 0, 255, 0, 0, 255, 0, 0, 255, 255, 0]) + edges(440, True)
+    extended = bounds + b"\0" if version2 else b""
+    return tag(84 if version2 else 46, struct.pack("<H", character) + bounds + extended
+               + struct.pack("<I", len(start)) + start + edges(880, False))
+
+
 def check(exe, folder, asc=None):
     folder.mkdir(parents=True, exist_ok=True)
 
@@ -156,6 +172,26 @@ def check(exe, folder, asc=None):
     original = (web / "scene.json").read_bytes()
     run("export-html5", animation, web, ok=False)
     assert (web / "scene.json").read_bytes() == original
+
+    morph = folder / "Morph.swf"
+    body = rectangle(4400, 2200) + struct.pack("<HH", 24 * 256, 2)
+    body += morph_shape(10, False) + morph_shape(11, True)
+    body += tag(36, struct.pack("<HBHH", 182, 5, 1, 1) + zlib.compress(bytes([255, 255, 0, 0])))
+    body += tag(26, struct.pack("<BHH", 2, 1, 10)) + tag(26, struct.pack("<BHH", 2, 2, 11))
+    body += tag(70, struct.pack("<BBHHB", 6, 16, 3, 182, 0)) + tag(1)
+    body += tag(26, struct.pack("<BHH", 17, 1, 32768)) + tag(26, struct.pack("<BHH", 17, 2, 65535)) + tag(1) + tag(0)
+    morph.write_bytes(swf(b"FWS", body, body))
+    web_morph = folder / "html5-morph"
+    run("export-html5", morph, web_morph)
+    scene = json.loads((web_morph / "scene.json").read_text("utf-8"))
+    assert [row[1] for row in scene["clips"]["0"]["frames"][0][0]] == [10, 11, 182]
+    updated = scene["clips"]["0"]["frames"][1][0]
+    assert [row[11] for row in updated] == [32768, 65535]
+    for key, side, color in [("10@32768", 660, "#7F0080"), ("11@65535", 880, "#0000FF")]:
+        asset = scene["assets"][key]
+        root = etree.parse(web_morph / asset["url"]).getroot()
+        assert asset["bounds"] == [0, 0, side, side]
+        assert root.find("{*}path").get("fill") == color
 
     web_folder = folder / "site-source"
     web_root = web_folder / "htdocs"

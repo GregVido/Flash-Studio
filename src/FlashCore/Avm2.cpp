@@ -3698,8 +3698,9 @@ Bytes rename_linked_classes(unsigned code, ByteView payload, const script::NameR
     }
     else
     {
-        const auto flags = input.u8(), extra = input.u8();
-        if (!(extra & 8) && !((extra & 16) && (flags & 2)))
+        input.skip(1);
+        const auto extra = input.u8();
+        if (!(extra & 8))
             return {};
         input.skip(2);
         append(result, payload.first(input.position()));
