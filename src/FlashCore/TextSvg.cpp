@@ -1,6 +1,10 @@
 #include "Binary.hpp"
+#include "WebExport.hpp"
 
 #include <array>
+#include <bit>
+#include <charconv>
+#include <cmath>
 #include <format>
 
 namespace flash
@@ -195,5 +199,235 @@ Asset font_svg(const Movie& movie, std::size_t index)
     }
     svg += "</svg>";
     return {L".svg", Bytes(svg.begin(), svg.end())};
+}
+
+namespace
+{
+void big16(Bytes& data, int value)
+{
+    data.push_back(static_cast<std::uint8_t>(static_cast<unsigned>(value) >> 8));
+    data.push_back(static_cast<std::uint8_t>(value));
+}
+
+void big32(Bytes& data, std::uint32_t value)
+{
+    big16(data, static_cast<int>(value >> 16));
+    big16(data, static_cast<int>(value & 0xffff));
+}
+
+void metric_at(Bytes& data, std::size_t offset, int value)
+{
+    data[offset] = static_cast<std::uint8_t>(static_cast<unsigned>(value) >> 8);
+    data[offset + 1] = static_cast<std::uint8_t>(value);
+}
+
+std::uint32_t checksum(ByteView data)
+{
+    std::uint32_t result = 0, word = 0;
+    for (std::size_t i = 0; i < data.size(); ++i)
+    {
+        word = (word << 8) | data[i];
+        if (i % 4 == 3) { result += word; word = 0; }
+    }
+    return result + (word << ((4 - data.size() % 4) % 4 * 8));
+}
+
+struct FontBox
+{
+    int left{}, bottom{}, right{}, top{};
+    void extend(int x, int y)
+    {
+        left = std::min(left, x); right = std::max(right, x);
+        bottom = std::min(bottom, y); top = std::max(top, y);
+    }
+    void write(Bytes& bytes) const
+    {
+        for (const auto value : {left, bottom, right, top}) big16(bytes, value);
+    }
+};
+
+struct FontPoint { int x, y; bool on_curve; };
+
+FontBox true_type_glyph(Bytes& glyf, std::string_view path, unsigned divisor, int& max_points, int& max_contours)
+{
+    std::vector<FontPoint> points;
+    std::vector<int> endpoints;
+    const auto number = [&]
+    {
+        while (path.starts_with(' ') || path.starts_with(',')) path.remove_prefix(1);
+        int value{};
+        const auto end = path.data() + path.size();
+        const auto parsed = std::from_chars(path.data(), end, value);
+        if (parsed.ec != std::errc{}) throw std::runtime_error("Coordonnée de glyphe non valide.");
+        path.remove_prefix(static_cast<std::size_t>(parsed.ptr - path.data()));
+        return std::clamp(static_cast<int>(std::lround(static_cast<double>(value) / divisor)), -16383, 16383);
+    };
+    const auto point = [&](bool curve)
+    {
+        const int x = number(), y = -number();
+        points.push_back({x, y, curve});
+    };
+    std::size_t start = 0;
+    while (!path.empty())
+    {
+        const auto command = path.front();
+        path.remove_prefix(1);
+        switch (command)
+        {
+        case 'M': start = points.size(); point(true); break;
+        case 'L': point(true); break;
+        case 'Q': point(false); point(true); break;
+        case 'Z':
+            if (points.size() > start + 1 && points.back().x == points[start].x && points.back().y == points[start].y)
+                points.pop_back();
+            if (points.size() > start) endpoints.push_back(static_cast<int>(points.size() - 1));
+            break;
+        default: throw std::runtime_error("Contour de glyphe non pris en charge.");
+        }
+        if (points.size() > 32767 || endpoints.size() > 32767) throw std::runtime_error("Glyphe trop complexe.");
+    }
+    if (endpoints.empty()) return {};
+    FontBox box{points.front().x, points.front().y, points.front().x, points.front().y};
+    for (const auto& value : points) box.extend(value.x, value.y);
+    max_points = std::max(max_points, static_cast<int>(points.size()));
+    max_contours = std::max(max_contours, static_cast<int>(endpoints.size()));
+    big16(glyf, static_cast<int>(endpoints.size()));
+    box.write(glyf);
+    for (const int value : endpoints) big16(glyf, value);
+    big16(glyf, 0);
+    for (const auto& value : points) glyf.push_back(value.on_curve ? 1 : 0);
+    for (int previous = 0; const auto& value : points) { big16(glyf, value.x - previous); previous = value.x; }
+    for (int previous = 0; const auto& value : points) { big16(glyf, value.y - previous); previous = value.y; }
+    if (glyf.size() % 2) glyf.push_back(0);
+    return box;
+}
+
+Bytes font_names()
+{
+    constexpr std::array<std::pair<int, std::string_view>, 5> names{{{1, "Flash Studio Embedded"}, {2, "Regular"},
+        {3, "FlashStudio:Embedded"}, {4, "Flash Studio Embedded"}, {6, "FlashStudioEmbedded"}}};
+    Bytes table, strings;
+    big16(table, 0); big16(table, static_cast<int>(names.size())); big16(table, 6 + 12 * static_cast<int>(names.size()));
+    for (const auto& [key, name] : names)
+    {
+        for (const auto value : {3, 1, 0x0409, key, static_cast<int>(name.size() * 2), static_cast<int>(strings.size())}) big16(table, value);
+        for (char letter : name) big16(strings, letter);
+    }
+    append(table, strings);
+    return table;
+}
+
+Bytes open_type(const std::map<std::string, Bytes>& tables)
+{
+    Bytes font;
+    const auto count = static_cast<unsigned>(tables.size());
+    const auto power = std::bit_floor(count);
+    big32(font, 0x00010000);
+    for (const auto value : {count, power * 16, static_cast<unsigned>(std::bit_width(power) - 1), (count - power) * 16}) big16(font, value);
+    auto offset = 12u + 16u * count;
+    unsigned adjustment{};
+    for (const auto& [name, data] : tables)
+    {
+        font.insert(font.end(), name.begin(), name.end());
+        big32(font, checksum(data));
+        big32(font, offset);
+        big32(font, static_cast<std::uint32_t>(data.size()));
+        if (name == "head") adjustment = offset + 8;
+        offset += (static_cast<unsigned>(data.size()) + 3) & ~3u;
+    }
+    for (const auto& [name, data] : tables)
+    {
+        append(font, data);
+        while (font.size() % 4) font.push_back(0);
+    }
+    const auto correction = 0xb1b0afbau - checksum(font);
+    metric_at(font, adjustment, correction >> 16);
+    metric_at(font, adjustment + 2, correction & 0xffff);
+    return font;
+}
+}
+
+std::optional<web::FontAsset> web::web_font(const Movie& movie, std::size_t index)
+{
+    const auto& tag = movie.tags().at(index);
+    if (!tag.character_id || (tag.code != 48 && tag.code != 75)) return std::nullopt;
+    Reader descriptor(movie.data(index));
+    descriptor.skip(2);
+    const auto flags = descriptor.u8();
+    descriptor.skip(1);
+    const auto raw = descriptor.take(descriptor.u8());
+    const std::string_view name(reinterpret_cast<const char*>(raw.data()), raw.size());
+    const auto outlines = font_glyphs(movie, *tag.character_id);
+    const auto metrics = font_metrics(movie, *tag.character_id);
+    if (metrics.codes.empty() || metrics.codes.size() >= 65535 || outlines.offsets.size() != metrics.codes.size() + 1)
+        return std::nullopt;
+    const auto divisor = outlines.units / 1024;
+    const auto scale = [divisor](int value) { return static_cast<int>(std::lround(static_cast<double>(value) / divisor)); };
+    std::map<std::string, Bytes> tables;
+    auto& glyf = tables["glyf"];
+    auto& loca = tables["loca"];
+    auto& hmtx = tables["hmtx"];
+    big32(loca, 0); big16(hmtx, 512); big16(hmtx, 0);
+    int max_points = 0, max_contours = 0, max_advance = 512, min_bearing = 0, min_right_bearing = 0;
+    FontBox bounds;
+    std::map<unsigned, unsigned> characters;
+    for (unsigned i = 0; i < metrics.codes.size(); ++i)
+    {
+        big32(loca, static_cast<std::uint32_t>(glyf.size()));
+        const auto glyph = true_type_glyph(glyf, glyph_path(outlines, i), divisor, max_points, max_contours);
+        if (glyf.size() > 16 * 1024 * 1024) throw std::runtime_error("Police incorporée trop grande.");
+        const auto advance = i < metrics.advances.size() ? std::clamp(scale(metrics.advances[i]), 0, 32767) :
+            metrics.codes[i] == L' ' ? 256 : std::max(128, glyph.right - glyph.left + 60);
+        big16(hmtx, advance);
+        big16(hmtx, glyph.left);
+        max_advance = std::max(max_advance, advance);
+        min_bearing = std::min(min_bearing, glyph.left);
+        min_right_bearing = std::min(min_right_bearing, advance - glyph.right);
+        bounds.extend(glyph.left, glyph.bottom); bounds.extend(glyph.right, glyph.top);
+        if (metrics.codes[i] != L'\uFFFD') characters.try_emplace(metrics.codes[i], i + 1);
+    }
+    if (characters.empty() || glyf.empty()) return std::nullopt;
+    big32(loca, static_cast<std::uint32_t>(glyf.size()));
+    const auto count = static_cast<int>(metrics.codes.size() + 1);
+    const auto ascent = metrics.ascent ? std::abs(scale(metrics.ascent)) : std::max(bounds.top, 800);
+    const auto descent = metrics.descent ? std::abs(scale(metrics.descent)) : std::max(-bounds.bottom, 224);
+    const auto leading = scale(metrics.leading);
+    auto& head = tables["head"];
+    for (const auto value : {0x10000u, 0x10000u, 0u, 0x5f0f3cf5u}) big32(head, value);
+    big16(head, 3); big16(head, 1024);
+    head.resize(36);
+    bounds.write(head);
+    for (const auto value : {flags & 3, 8, 2, 1, 0}) big16(head, value);
+    auto& hhea = tables["hhea"];
+    big32(hhea, 0x00010000);
+    for (const auto value : {ascent, -descent, leading, max_advance, min_bearing, min_right_bearing, bounds.right, 1, 0, 0}) big16(hhea, value);
+    hhea.resize(34); big16(hhea, count);
+    auto& maxp = tables["maxp"];
+    big32(maxp, 0x00010000);
+    for (const auto value : {count, max_points, max_contours, 0, 0, 1}) big16(maxp, value);
+    maxp.resize(32);
+    auto& os = tables["OS/2"];
+    os.resize(78);
+    metric_at(os, 2, max_advance / 2); metric_at(os, 4, flags & 1 ? 700 : 400); metric_at(os, 6, 5);
+    os[58] = 'F'; os[59] = 'S'; os[60] = 'T'; os[61] = 'U';
+    metric_at(os, 62, (flags & 2 ? 1 : 0) | (flags & 1 ? 32 : 0) | (flags & 3 ? 0 : 64));
+    metric_at(os, 64, characters.begin()->first); metric_at(os, 66, characters.rbegin()->first);
+    metric_at(os, 68, ascent); metric_at(os, 70, -descent); metric_at(os, 72, leading);
+    metric_at(os, 74, std::max(ascent, bounds.top)); metric_at(os, 76, std::max(descent, -bounds.bottom));
+    big32(tables["post"], 0x00030000); tables["post"].resize(32);
+    auto& cmap = tables["cmap"];
+    for (const auto value : {0, 2, 0, 4}) big16(cmap, value);
+    big32(cmap, 20);
+    big16(cmap, 3); big16(cmap, 10); big32(cmap, 20);
+    big16(cmap, 12); big16(cmap, 0);
+    big32(cmap, static_cast<std::uint32_t>(16 + 12 * characters.size()));
+    big32(cmap, 0); big32(cmap, static_cast<std::uint32_t>(characters.size()));
+    for (const auto& [character, glyph] : characters)
+    {
+        big32(cmap, character); big32(cmap, character); big32(cmap, glyph);
+    }
+    tables["name"] = font_names();
+    return FontAsset{{L".ttf", open_type(tables)}, std::string(name.substr(0, name.find('\0'))),
+        flags & 1 ? (flags & 2 ? "boldItalic" : "bold") : (flags & 2 ? "italic" : "regular")};
 }
 }

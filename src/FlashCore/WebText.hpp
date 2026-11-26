@@ -8,7 +8,31 @@ inline constexpr std::string_view text_runtime = R"JS(const NS = "http://www.w3.
 const elements = new Set(["a", "b", "br", "em", "font", "i", "li", "p", "s", "span", "strong", "textformat", "u"]);
 const discard = new Set(["script", "style", "iframe", "object", "embed", "svg", "math", "template"]);
 const twips = value => Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0) * 20;
-const color = value => typeof value === "number" ? "#" + (value & 0xffffff).toString(16).padStart(6, "0") : String(value ?? "");
+const color = value => {
+    if (typeof value === "number") return "#" + (value & 0xffffff).toString(16).padStart(6, "0");
+    const css = String(value ?? "").trim();
+    return /^(?:0x)?[\da-f]{6}$/i.test(css) ? "#" + css.replace(/^0x/i, "") : css;
+};
+
+const embeddedFonts = new Map(), namedFonts = new Map();
+export function loadFonts(scene, page) {
+    const faces = [...Object.values(scene.fonts ?? {}), ...Object.values(scene.fontClasses ?? {})];
+    return Promise.all(faces.filter(face => face.url).map(face => {
+        const url = new URL(face.url, page).href;
+        let entry = embeddedFonts.get(url);
+        if (!entry) {
+            const family = "flash-embedded-" + embeddedFonts.size;
+            const weight = face.fontStyle.toLowerCase().includes("bold") ? "bold" : "normal";
+            const style = face.fontStyle.toLowerCase().includes("italic") ? "italic" : "normal";
+            const font = new FontFace(family, "url(" + JSON.stringify(url) + ")", { weight, style });
+            entry = { family, ready: font.load().then(() => document.fonts.add(font)).catch(() => {}) };
+            embeddedFonts.set(url, entry);
+        }
+        if (face.fontName) namedFonts.set(face.fontName.toLowerCase() + ":" + face.fontStyle, entry.family);
+        face.family = entry.family;
+        return entry.ready;
+    }));
+}
 
 export class TextFormat {
     constructor(font, size, color, bold, italic, underline, url, target, align, leftMargin, rightMargin, indent, leading) {
@@ -37,14 +61,14 @@ export class StyleSheet {
     }
 }
 
-function formatting(node, style) {
+function formatting(node, style, resolveFont) {
     if (!style) return;
     const size = parseFloat(style.fontSize ?? style.size);
     if (Number.isFinite(size) && size > 0) node.style.fontSize = twips(size) + "px";
     const fill = color(style.color);
     if (fill && CSS.supports("color", fill)) node.style.color = fill;
     const family = style.fontFamily ?? style.font;
-    if (family) node.style.fontFamily = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace" })[family] ?? family;
+    if (family) node.style.fontFamily = resolveFont(family, style);
     if (style.bold || style.fontWeight === "bold") node.style.fontWeight = "bold";
     if (style.italic || style.fontStyle === "italic") node.style.fontStyle = "italic";
     if (style.underline || style.textDecoration === "underline") node.style.textDecoration = "underline";
@@ -54,7 +78,7 @@ function formatting(node, style) {
 
 const measureContext = document.createElement("canvas").getContext("2d");
 
-function appendHtml(target, html, sheet, emit, multiline) {
+function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     const template = document.createElement("template");
     template.innerHTML = html;
     const add = (parent, item) => {
@@ -73,8 +97,8 @@ function appendHtml(target, html, sheet, emit, multiline) {
             return;
         }
         const node = document.createElement(kind === "font" ? "span" : kind === "textformat" ? "div" : kind);
-        formatting(node, sheet?.getStyle(kind));
-        for (const name of item.classList) formatting(node, sheet?.getStyle("." + name));
+        formatting(node, sheet?.getStyle(kind), resolveFont);
+        for (const name of item.classList) formatting(node, sheet?.getStyle("." + name), resolveFont);
         if (kind === "p") {
             node.style.margin = "0";
             const align = item.getAttribute("align")?.toLowerCase();
@@ -83,7 +107,7 @@ function appendHtml(target, html, sheet, emit, multiline) {
         if (kind === "font") {
             const size = item.getAttribute("size");
             formatting(node, { color: item.getAttribute("color"), font: item.getAttribute("face"),
-                size: size && !/^[+-]/.test(size) ? size : null });
+                size: size && !/^[+-]/.test(size) ? size : null }, resolveFont);
             if (size && /^[+-]\d+(\.\d+)?$/.test(size))
                 node.style.fontSize = "calc(1em " + size[0] + " " + twips(size.slice(1)) + "px)";
         }
@@ -116,7 +140,7 @@ function appendHtml(target, html, sheet, emit, multiline) {
     for (const item of template.content.childNodes) add(target, item);
 }
 
-export function createTextField(definition = {}, emit = () => {}) {
+)JS" R"JS(export function createTextField(definition = {}, emit = () => {}, face) {
     const [x, y, width, height] = definition.bounds ?? [0, 0, 2000, 2000];
     const node = document.createElementNS(NS, "foreignObject");
     for (const [key, value] of Object.entries({ x, y, width, height })) node.setAttribute(key, value);
@@ -127,12 +151,15 @@ export function createTextField(definition = {}, emit = () => {}) {
     const initialFormat = {
         size: size / 20, color: definition.fill ?? "#000000",
         align: ["left", "right", "center", "justify"][definition.alignment] ?? "left",
+        font: face?.fontName,
+        bold: face?.fontStyle.toLowerCase().includes("bold"), italic: face?.fontStyle.toLowerCase().includes("italic"),
     };
     const values = {
         type: definition.editable ? "input" : "dynamic", displayAsPassword: Boolean(definition.password),
         selectable: definition.selectable !== false, wordWrap: Boolean(definition.wrap), multiline: Boolean(definition.multiline),
         border: Boolean(definition.border), background: false, borderColor: 0, backgroundColor: 0xffffff,
         maxChars: definition.maximum ?? 0, defaultTextFormat: initialFormat, styleSheet: null, autoSize: definition.autoSize ?? "none",
+        embedFonts: Boolean(definition.embedFonts || definition.fontClass),
     };
     let html = Boolean(definition.html), source = definition.text ?? "";
     let fieldWidth = width, fieldHeight = height, horizontalShift = 0, measured;
@@ -143,6 +170,17 @@ export function createTextField(definition = {}, emit = () => {}) {
     Object.assign(content.style, { lineHeight: "1.12", fontFamily: "sans-serif", outline: "none" });
     body.append(content);
     node.append(body);
+    const resolveFont = (family, style) => {
+        const name = String(family).trim(), key = name.toLowerCase();
+        const device = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace" })[key] ?? name;
+        if (!values.embedFonts) return device;
+        const bold = style.bold || style.fontWeight === "bold";
+        const italic = style.italic || style.fontStyle === "italic";
+        const variant = bold && italic ? "boldItalic" : bold ? "bold" : italic ? "italic" : "regular";
+        const embedded = key === face?.fontName?.toLowerCase() && face.family ? face.family :
+            namedFonts.get(key + ":" + variant) ?? namedFonts.get(key + ":regular");
+        return embedded ? embedded + ", " + device : device;
+    };
 
     function measure() {
         if (measured) return measured;
@@ -192,9 +230,9 @@ export function createTextField(definition = {}, emit = () => {}) {
         body.style.backgroundColor = values.background ? color(values.backgroundColor) : "transparent";
         body.style.padding = `${gutter}px ${paddingRight()}px ${gutter}px ${paddingLeft()}px`;
         content.style.fontSize = size + "px";
-        Object.assign(content.style, { color: initialFormat.color, fontFamily: "sans-serif", fontWeight: "",
+        Object.assign(content.style, { color: color(initialFormat.color), fontFamily: "sans-serif", fontWeight: "",
             fontStyle: "", textDecoration: "", textAlign: initialFormat.align });
-        formatting(content, values.defaultTextFormat);
+        formatting(content, values.defaultTextFormat, resolveFont);
         const leading = values.defaultTextFormat?.leading;
         content.style.lineHeight = Math.max(1, parseFloat(content.style.fontSize) * 1.12 +
             (leading == null ? definition.leading ?? 0 : twips(leading))) + "px";
@@ -209,7 +247,7 @@ export function createTextField(definition = {}, emit = () => {}) {
             content.append(input);
         } else {
             content.contentEditable = values.type === "input" ? "plaintext-only" : "false";
-            if (html) appendHtml(content, source, values.styleSheet, emit, values.multiline || values.wordWrap);
+            if (html) appendHtml(content, source, values.styleSheet, emit, values.multiline || values.wordWrap, resolveFont);
             else content.textContent = values.displayAsPassword ? "\u2022".repeat(source.length) : source;
         }
         updateBounds();
@@ -228,7 +266,10 @@ export function createTextField(definition = {}, emit = () => {}) {
     });
 
     const field = { node, focus() {
-        if (values.type === "input") (content.querySelector("input") ?? content).focus({ preventScroll: true });
+        if (values.type !== "input") return false;
+        const editor = content.firstElementChild?.matches("input") ? content.firstElementChild : content;
+        editor.focus({ preventScroll: true });
+        return document.activeElement === editor;
     }, setTextFormat(format) {
         const changes = Object.entries(format).filter(([key, value]) => value != null && values.defaultTextFormat?.[key] !== value);
         if (changes.length) { values.defaultTextFormat = { ...values.defaultTextFormat, ...Object.fromEntries(changes) }; render(); }

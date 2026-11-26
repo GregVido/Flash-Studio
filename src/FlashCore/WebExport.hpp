@@ -33,6 +33,7 @@ struct WebMethod
 struct WebClass
 {
     std::string base;
+    bool sealed{};
     std::vector<std::string> interfaces;
     WebMethod constructor, initialize;
     std::map<std::string, WebMethod> methods, statics;
@@ -59,6 +60,19 @@ struct WebScope
 };
 
 WebFunction compile_as3(std::string_view source, const WebScope& scope);
+struct FontAsset
+{
+    Asset file;
+    std::string name, style;
+};
+std::optional<FontAsset> web_font(const Movie& movie, std::size_t index);
+struct FontMetrics
+{
+    std::vector<wchar_t> codes;
+    std::vector<int> advances;
+    int ascent{}, descent{}, leading{};
+};
+FontMetrics font_metrics(const Movie& movie, unsigned id);
 std::string text_field_json(const Movie& movie, std::size_t index);
 WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& sources,
     ExportReport& report, std::set<std::string>* references);

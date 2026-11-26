@@ -92,13 +92,15 @@ main { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
 button { font: inherit; padding: 5px 18px; border: 1px solid #56637b; border-radius: 5px; background: #242c3a; color: #fff; }
 button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
 #stage [role=button] { cursor: pointer; outline-offset: 2px; }
+#stage[data-flash-hide-cursor], #stage[data-flash-hide-cursor] * { cursor: none !important; }
 #stage [data-flash-mouse="on"] { pointer-events: visiblePainted; }
 #stage [data-flash-mouse="on"][data-flash-pointer-listener] { pointer-events: bounding-box; }
 #stage [data-flash-mouse="self"] { pointer-events: bounding-box; }
 #stage [data-flash-mouse="off"] { pointer-events: none; }
 #stage [data-flash-static] { pointer-events: none; }
 #stage [data-flash-hit] :is(image, use, path, rect, ellipse, circle) { pointer-events: visiblePainted; }
-#stage[data-flash-quality="low"] { shape-rendering: crispEdges; image-rendering: pixelated; }
+#stage[data-flash-quality="low"] { shape-rendering: crispEdges; }
+#stage[data-flash-quality="low"] :is(image, canvas) { image-rendering: pixelated !important; }
 #stage :is([data-flash-no-children], [data-flash-decoration]) * { pointer-events: none !important; }
 #linked { color: #d6ddea; max-width: min(90vw, 720px); }
 .controls a, #linked a, .catalogue a { color: #9cc9ff; overflow-wrap: anywhere; }
@@ -111,7 +113,7 @@ html[data-embedded] :is(.controls, #linked) { display: none; }
 
 constexpr std::string_view stage_script = R"JS(
 import { ConvertedClasses, convertedClassName } from "./as3.js";
-import { createTextField, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
+import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
 import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
 
 const documentUrl = new URL(location.href);
@@ -136,6 +138,9 @@ let sockets = Object.create(null), httpRoutes = Object.create(null);
 let movieRoutes = Object.create(null);
 let lazyAssetPaths = [];
 const movieRequests = new Map();
+const cachedMovieSizes = new WeakMap();
+const movieByteBudget = 24 * 1024 * 1024;
+let cachedMovieBytes = 0;
 const movieBytes = new WeakMap();
 let bundleSequence = 0;
 const rasterImages = new Map();
@@ -157,6 +162,8 @@ const activeStreams = new Set();
 const pendingBitmapDraws = new Set();
 const unnamedLayers = new Map();
 const bitmapTints = new WeakMap();
+const authoredTints = new WeakMap();
+const bitmapSurfaces = new WeakMap();
 const playbackEpoch = performance.now();
 const background = element("rect");
 art.before(background);
@@ -652,6 +659,12 @@ function inheritedEvent() {
 }
 
 function updateScriptMasks() {
+    const transforms = new WeakMap();
+    const toStage = node => {
+        if (!node || node === stage) return new DOMMatrix();
+        if (!transforms.has(node)) transforms.set(node, toStage(node.parentElement).multiply(localDisplayMatrix(node)));
+        return transforms.get(node);
+    };
     for (const handle of activeScriptMasks) {
         const entry = handle.ref.deref();
         const target = entry?.target.deref();
@@ -667,8 +680,7 @@ function updateScriptMasks() {
             continue;
         }
         if (!target.isConnected || !entry.node.isConnected) continue;
-        const destination = target.getCTM(), source = entry.node.getCTM();
-        if (!destination || !source) continue;
+        const destination = toStage(target), source = toStage(entry.node);
         const relative = destination.inverse().multiply(source);
         const values = [relative.a, relative.b, relative.c, relative.d, relative.e, relative.f];
         if (!values.every(Number.isFinite)) continue;
@@ -844,7 +856,7 @@ function displayChildren(container, owner, repaint) {
                 authoredClips.get(node)?.initializeTree();
                 node.dispatchEvent(scriptEvent("added", true));
                 if (container.isConnected) {
-                    scriptedNodes.add(node);
+                    if (authoredClips.has(node)) scriptedNodes.add(node);
                     node.dispatchEvent(scriptEvent("addedToStage"));
                 }
             }
@@ -1209,7 +1221,9 @@ class BitmapData {
         this.transparent = Boolean(transparent);
         this.listeners = new Set();
         this.locked = false;
+        this.revision = 0;
         this.fillRect(this.rect, color);
+        this.pristine = this.transparent && color >>> 24 === 0;
     }
     get width() { return this.canvas.width; }
     get height() { return this.canvas.height; }
@@ -1217,6 +1231,8 @@ class BitmapData {
     lock() { this.locked = true; }
     unlock() { this.locked = false; this.update(); }
     update() {
+        ++this.revision;
+        this.pristine = false;
         this.sample = null;
         if (!this.locked) for (const redraw of this.listeners) redraw();
     }
@@ -1400,6 +1416,23 @@ class BitmapData {
         const pixels = source?.canvas ?? source?.bitmapData?.canvas;
         const node = displayNodes.get(source);
         if (!pixels && !node) throw new TypeError("Surface BitmapData ou DisplayObject attendue.");
+        const resources = !pixels && this.pristine && !color && !blend ? {} : null;
+        this.paint(pixels, node, matrix, blend, clip, smoothing, resources);
+        if (color) this.colorTransform(clip ?? this.rect, color);
+        else this.update();
+        if (resources?.waiting?.size) {
+            const snapshot = cloneBitmapDisplay(node), target = new WeakRef(this), revision = this.revision;
+            const transform = matrix && { ...matrix }, bounds = clip && { ...clip };
+            Promise.allSettled([...resources.waiting].map(image => image.decode())).then(() => {
+                const bitmap = target.deref();
+                if (!bitmap || bitmap.revision !== revision) return;
+                bitmap.context.clearRect(0, 0, bitmap.width, bitmap.height);
+                bitmap.paint(null, snapshot, transform, null, bounds, smoothing);
+                bitmap.update();
+            }).catch(scriptProblem);
+        }
+    }
+    paint(pixels, node, matrix, blend, clip, smoothing, resources) {
         const context = this.context;
         context.save();
         try {
@@ -1415,18 +1448,16 @@ class BitmapData {
             if (pixels) context.drawImage(pixels, 0, 0);
             else {
                 context.scale(1 / 20, 1 / 20);
-                paintDisplay(node, context, true);
+                paintDisplay(node, context, true, resources);
             }
         } finally { context.restore(); }
-        if (color) this.colorTransform(clip ?? this.rect, color);
-        else this.update();
     }
 }
 
 )JS" R"JS(const tintSurfaces = [];
 
-function paintTinted(node, context, tint) {
-    const box = node.getBBox(), matrix = context.getTransform();
+function paintTinted(node, context, tint, resources) {
+    const box = localDisplayBounds(node), matrix = context.getTransform();
     const corners = [matrix.transformPoint({x: box.x, y: box.y}), matrix.transformPoint({x: box.x + box.width, y: box.y}),
         matrix.transformPoint({x: box.x, y: box.y + box.height}), matrix.transformPoint({x: box.x + box.width, y: box.y + box.height})];
     const measured = box.width > 0 && box.height > 0;
@@ -1444,7 +1475,7 @@ function paintTinted(node, context, tint) {
         paint.clearRect(0, 0, width, height);
         paint.imageSmoothingEnabled = context.imageSmoothingEnabled;
         paint.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - left, matrix.f - top);
-        paintDisplayContents(node, paint);
+        paintDisplayContents(node, paint, resources);
         const image = paint.getImageData(0, 0, width, height), data = image.data;
         for (let offset = 0; offset < data.length; offset += 4) {
             if (!data[offset + 3]) continue;
@@ -1459,7 +1490,20 @@ function paintTinted(node, context, tint) {
     }
 }
 
-function paintDisplay(node, context, root = false) {
+function cloneBitmapDisplay(node) {
+    const copy = cloneDisplay(node);
+    const transfer = (source, destination) => {
+        const tint = bitmapTints.get(source) ?? authoredTints.get(source);
+        if (tint) bitmapTints.set(destination, tint);
+        const bitmap = bitmapSurfaces.get(source);
+        if (bitmap) bitmapSurfaces.set(destination, bitmap);
+        for (let i = 0; i < source.children.length; ++i) transfer(source.children[i], destination.children[i]);
+    };
+    transfer(node, copy);
+    return copy;
+}
+
+function paintDisplay(node, context, root = false, resources) {
     if (!root && (node.getAttribute("display") === "none" || node.getAttribute("visibility") === "hidden")) return;
     context.save();
     try {
@@ -1469,19 +1513,19 @@ function paintDisplay(node, context, root = false) {
             context.transform(a, b, c, d, e, f);
         }
         if (!root) context.globalAlpha *= Number(node.getAttribute("opacity") ?? 1);
-        const tint = bitmapTints.get(node);
-        if (tint) paintTinted(node, context, tint);
-        else paintDisplayContents(node, context);
+        const tint = bitmapTints.get(node) ?? authoredTints.get(node);
+        if (tint) paintTinted(node, context, tint, resources);
+        else paintDisplayContents(node, context, resources);
     } finally { context.restore(); }
 }
 
-function paintDisplayContents(node, context) {
+function paintDisplayContents(node, context, resources) {
         const value = name => Number(node.getAttribute(name) ?? 0);
         switch (node.localName) {
         case "use": {
             const href = node.getAttribute("href");
             const item = href?.startsWith("#") && document.getElementById(href.slice(1));
-            if (item) paintDisplay(item, context);
+            if (item) paintDisplay(item, context, false, resources);
             break;
         }
         case "image": {
@@ -1489,6 +1533,13 @@ function paintDisplayContents(node, context) {
             const crisp = stageView.quality === "low" ? pixelMapImages.get(url)?.image : null;
             const image = crisp?.naturalWidth ? crisp : rasterImage(url);
             if (image.complete && image.naturalWidth) context.drawImage(image, value("x"), value("y"), value("width"), value("height"));
+            else if (!image.complete && resources) (resources.waiting ??= new Set()).add(image);
+            break;
+        }
+        case "foreignObject": {
+            const surface = bitmapSurfaces.get(node)?.()?.canvas;
+            if (surface?.width && surface?.height)
+                context.drawImage(surface, value("x"), value("y"), value("width"), value("height"));
             break;
         }
         case "path":
@@ -1500,12 +1551,15 @@ function paintDisplayContents(node, context) {
             if (node.localName === "circle") shape.arc(value("cx"), value("cy"), value("r"), 0, 2 * Math.PI);
             if (node.localName === "ellipse") shape.ellipse(value("cx"), value("cy"), value("rx"), value("ry"), 0, 0, 2 * Math.PI);
             const fill = node.getAttribute("fill") ?? "black", stroke = node.getAttribute("stroke");
+            const alpha = context.globalAlpha;
             if (fill !== "none") {
                 context.fillStyle = fill;
+                context.globalAlpha = alpha * Math.min(1, Number(node.getAttribute("fill-opacity") ?? 1));
                 context.fill(shape, node.getAttribute("fill-rule") === "evenodd" ? "evenodd" : "nonzero");
             }
             if (stroke && stroke !== "none") {
                 context.strokeStyle = stroke;
+                context.globalAlpha = alpha * Math.min(1, Number(node.getAttribute("stroke-opacity") ?? 1));
                 context.lineWidth = Number(node.getAttribute("stroke-width") ?? 1);
                 context.stroke(shape);
             }
@@ -1513,7 +1567,7 @@ function paintDisplayContents(node, context) {
         }
         default:
             for (const child of node.children)
-                if (child instanceof SVGElement) paintDisplay(child, context);
+                if (child instanceof SVGElement) paintDisplay(child, context, false, resources);
         }
 }
 
@@ -1527,6 +1581,7 @@ function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
     surface.append(canvas);
     node.firstChild.append(surface);
     let bitmap = null;
+    bitmapSurfaces.set(surface, () => bitmap);
     const drawPixels = () => {
         if (!canvas.width || !canvas.height) return;
         const context = canvas.getContext("2d");
@@ -1575,6 +1630,10 @@ class Point {
     constructor(x = 0, y = 0) { this.x = x; this.y = y; }
     clone() { return new Point(this.x, this.y); }
     get length() { return Math.hypot(this.x, this.y); }
+    normalize(length) {
+        const previous = this.length;
+        if (previous) { this.x *= length / previous; this.y *= length / previous; }
+    }
     offset(dx, dy) { this.x += dx; this.y += dy; }
     equals(p) { return this.x === p?.x && this.y === p?.y; }
     add(p) { return new Point(this.x + p.x, this.y + p.y); }
@@ -1630,8 +1689,9 @@ class Rectangle {
     offset(x, y) { this.x += x; this.y += y; }
 }
 
-function displayBounds(node, target) {
-    const { x, y, width, height } = node.getBBox();
+)JS" R"JS(function displayBounds(node, target) {
+    const bounds = localDisplayBounds(node);
+    const { x, y, width, height } = bounds;
     const targetNode = displayNodes.get(target);
     if (!targetNode || targetNode === node) return new Rectangle(x / 20, y / 20, width / 20, height / 20);
     const to = targetNode.getScreenCTM();
@@ -1640,19 +1700,74 @@ function displayBounds(node, target) {
     const matrix = to.inverse().multiply(from);
     if (![matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(Number.isFinite))
         return new Rectangle(x / 20, y / 20, width / 20, height / 20);
-    const points = [[x, y], [x + width, y], [x, y + height], [x + width, y + height]]
-        .map(([left, top]) => ({x: matrix.a * left + matrix.c * top + matrix.e,
-            y: matrix.b * left + matrix.d * top + matrix.f}));
-    const horizontal = points.map(point => point.x), vertical = points.map(point => point.y);
-    const left = Math.min(...horizontal), top = Math.min(...vertical);
-    return new Rectangle(left / 20, top / 20, (Math.max(...horizontal) - left) / 20, (Math.max(...vertical) - top) / 20);
+    const box = transformedBounds(bounds, matrix);
+    return new Rectangle(box.x / 20, box.y / 20, box.width / 20, box.height / 20);
+}
+
+function localDisplayMatrix(node) {
+    const list = node.transform?.baseVal;
+    if (list?.numberOfItems === 1) return list.getItem(0).matrix;
+    let matrix = new DOMMatrix();
+    for (let i = 0; i < (list?.numberOfItems ?? 0); ++i) matrix = matrix.multiply(list.getItem(i).matrix);
+    return matrix;
+}
+
+function transformedBounds({x, y, width, height}, {a, b, c, d, e, f}) {
+    return new Rectangle(a * x + c * y + e + Math.min(0, a * width) + Math.min(0, c * height),
+        b * x + d * y + f + Math.min(0, b * width) + Math.min(0, d * height),
+        Math.abs(a * width) + Math.abs(c * height), Math.abs(b * width) + Math.abs(d * height));
+}
+
+function detachedDisplayBounds(node) {
+    const value = key => Number(node.getAttribute(key) ?? 0);
+    switch (node.localName) {
+    case "use": {
+        const href = node.getAttribute("href");
+        const source = href?.startsWith("#") && document.getElementById(href.slice(1));
+        return source ? detachedDisplayBounds(source) : null;
+    }
+    case "rect": case "image": case "foreignObject":
+        return new Rectangle(value("x"), value("y"), value("width"), value("height"));
+    case "circle": case "ellipse": {
+        const x = value("r") || value("rx"), y = value("r") || value("ry");
+        return new Rectangle(value("cx") - x, value("cy") - y, x * 2, y * 2);
+    }
+    case "path": {
+        const coordinates = node.getAttribute("d")?.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi)?.map(Number) ?? [];
+        if (!coordinates.length) return null;
+        let left = coordinates[0], right = left, top = coordinates[1], bottom = top;
+        for (let i = 2; i + 1 < coordinates.length; i += 2) {
+            left = Math.min(left, coordinates[i]); right = Math.max(right, coordinates[i]);
+            top = Math.min(top, coordinates[i + 1]); bottom = Math.max(bottom, coordinates[i + 1]);
+        }
+        return new Rectangle(left, top, right - left, bottom - top);
+    }
+    default: {
+        let result;
+        for (const child of node.children) {
+            if (!(child instanceof SVGElement) || child.getAttribute("display") === "none") continue;
+            const bounds = detachedDisplayBounds(child);
+            if (!bounds) continue;
+            const box = transformedBounds(bounds, localDisplayMatrix(child));
+            if (!result) result = box;
+            else result = new Rectangle(Math.min(result.left, box.left), Math.min(result.top, box.top),
+                Math.max(result.right, box.right) - Math.min(result.left, box.left),
+                Math.max(result.bottom, box.bottom) - Math.min(result.top, box.top));
+        }
+        return result;
+    }
+    }
+}
+
+function localDisplayBounds(node) {
+    const bounds = node.getBBox();
+    if (bounds.width || bounds.height) return bounds;
+    return detachedDisplayBounds(node) ?? bounds;
 }
 
 function displayDimension(node, dimension) {
-    const { width, height } = node.getBBox();
-    const list = node.transform.baseVal;
-    let matrix = new DOMMatrix();
-    for (let i = 0; i < list.numberOfItems; ++i) matrix = matrix.multiply(list.getItem(i).matrix);
+    const { width, height } = localDisplayBounds(node);
+    const matrix = localDisplayMatrix(node);
     return (dimension === "width" ? Math.abs(matrix.a) * width + Math.abs(matrix.c) * height :
         Math.abs(matrix.b) * width + Math.abs(matrix.d) * height) / 20;
 }
@@ -1818,7 +1933,15 @@ function preloadBitmapSources(scene, definitions, page) {
     return Promise.all(urls.map(url => rasterImage(url).decode().catch(() => {})));
 }
 
-)JS" R"JS(async function loadMovie(page, address, original, domain) {
+)JS" R"JS(function trimMovieRequests() {
+    while (cachedMovieBytes > movieByteBudget || movieRequests.size > 32) {
+        const [url, request] = movieRequests.entries().next().value;
+        cachedMovieBytes -= cachedMovieSizes.get(request) ?? 0;
+        movieRequests.delete(url);
+    }
+}
+
+async function loadMovie(page, address, original, domain) {
     if (page.origin !== documentUrl.origin) throw new Error("Le projet lié doit être sur la même origine.");
     let pending = movieRequests.get(page.href);
     if (pending) {
@@ -1832,10 +1955,10 @@ function preloadBitmapSources(scene, definitions, page) {
             }),
             import(new URL("classes.js", page).href),
             import(new URL("actions.js", page).href),
-            original ?? fetch(new URL("source.bin", page)).then(response => response.ok ? response.arrayBuffer() : null),
+            original ? original() : fetch(new URL("source.bin", page)).then(response => response.ok ? response.arrayBuffer() : null),
         ]).then(async ([scene, classes, script, bytes]) => {
             const lazy = lazyAssetPaths.some(prefix => address.pathname.startsWith(prefix));
-            const pixels = loadPixelMapImages(scene, page);
+            const pixels = Promise.all([loadPixelMapImages(scene, page), loadFonts(scene, page)]);
             if (script.actions.length || Object.values(scene.clips).some(clip => clip.legacyInitialize))
                 await Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
                     rasterImage(new URL(asset.url, page).href).decode().catch(() => {}))]);
@@ -1843,8 +1966,14 @@ function preloadBitmapSources(scene, definitions, page) {
             return { scene, definitions: classes.definitions, actions: script.actions, bytes, domains: new WeakMap(), lazy };
         });
         movieRequests.set(page.href, pending);
-        pending.catch(() => { if (movieRequests.get(page.href) === pending) movieRequests.delete(page.href); });
-        if (movieRequests.size > 32) movieRequests.delete(movieRequests.keys().next().value);
+        pending.then(assets => {
+            if (movieRequests.get(page.href) !== pending) return;
+            const size = assets.bytes?.byteLength ?? 0;
+            cachedMovieSizes.set(pending, size);
+            cachedMovieBytes += size;
+            trimMovieRequests();
+        }, () => { if (movieRequests.get(page.href) === pending) movieRequests.delete(page.href); });
+        trimMovieRequests();
     }
     const assets = await pending;
     let bundle = assets.domains.get(domain);
@@ -1911,7 +2040,7 @@ function scriptLoader(owner = mainBundle) {
             event("open");
             if (page) {
                 const domain = context?.applicationDomain ?? applicationDomain(mainDomain);
-                const { bundle, bytes } = await loadMovie(page, url, binary?.bytes().buffer, domain);
+                const { bundle, bytes } = await loadMovie(page, url, binary ? () => binary.bytes().buffer : null, domain);
                 if (pending !== current) return;
                 info.applicationDomain = domain;
                 info.bytes = bytes && new ByteArray(new Uint8Array(bytes));
@@ -2051,6 +2180,13 @@ const sharedObject = {
     },
 };
 
+)JS" R"JS(let numLock = false, capsLock = false;
+function trackLockKeys(event) {
+    numLock = event.getModifierState("NumLock");
+    capsLock = event.getModifierState("CapsLock");
+}
+for (const type of ["keydown", "keyup", "pointerdown"]) stage.addEventListener(type, trackLockKeys, true);
+
 const nativeSymbols = {
     BitmapDataChannel: { RED: 1, GREEN: 2, BLUE: 4, ALPHA: 8 },
     URLRequestMethod: { GET: "GET", POST: "POST", PUT: "PUT", DELETE: "DELETE", HEAD: "HEAD", OPTIONS: "OPTIONS" },
@@ -2058,6 +2194,11 @@ const nativeSymbols = {
     Endian: { BIG_ENDIAN: "bigEndian", LITTLE_ENDIAN: "littleEndian" },
     StageScaleMode: { NO_SCALE: "noScale", EXACT_FIT: "exactFit", SHOW_ALL: "showAll", NO_BORDER: "noBorder" },
     StageAlign: { TOP: "T", BOTTOM: "B", LEFT: "L", RIGHT: "R", TOP_LEFT: "TL", TOP_RIGHT: "TR", BOTTOM_LEFT: "BL", BOTTOM_RIGHT: "BR" },
+    BlendMode: { NORMAL: "normal", LAYER: "layer", MULTIPLY: "multiply", SCREEN: "screen", LIGHTEN: "lighten", DARKEN: "darken",
+        DIFFERENCE: "difference", ADD: "add", SUBTRACT: "subtract", INVERT: "invert", ALPHA: "alpha", ERASE: "erase", OVERLAY: "overlay", HARDLIGHT: "hardlight" },
+    Mouse: { show: () => stage.removeAttribute("data-flash-hide-cursor"), hide: () => stage.setAttribute("data-flash-hide-cursor", "") },
+    Keyboard: { get numLock() { return numLock; }, get capsLock() { return capsLock; },
+        ENTER: 13, SPACE: 32, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, SHIFT: 16, CONTROL: 17, ESCAPE: 27, TAB: 9 },
     TextFieldType: { INPUT: "input", DYNAMIC: "dynamic" },
     TextFieldAutoSize: { NONE: "none", LEFT: "left", RIGHT: "right", CENTER: "center" },
     Security: { loadPolicyFile() {}, allowDomain() {}, allowInsecureDomain() {} },
@@ -2167,6 +2308,7 @@ const classHooks = {
         const symbol = bundle?.symbols.get(chain[0]);
         if (symbol !== undefined) {
             if (bundle.scene.clips[symbol]) return makeLinkedClip(symbol, bundle);
+            if (bundle.scene.buttons[symbol]) return makeLinkedButton(symbol, bundle);
             const sound = bundle.scene.audio[symbol];
             if (sound) {
                 const view = browserMedia.embeddedSound(new URL(sound, bundle.page).href, bundle.scene.audioTiming?.[symbol]);
@@ -2210,6 +2352,8 @@ function makeBundle(scene, actions, definitions, page, address = page) {
         source: new URL(scene.workspace?.source ?? address, page) };
     for (const [id, clip] of Object.entries(scene.clips))
         if (id !== "0" && clip.type && !bundle.symbols.has(clip.type)) bundle.symbols.set(clip.type, Number(id));
+    for (const [id, button] of Object.entries(scene.buttons ?? {}))
+        if (button.type && !bundle.symbols.has(button.type)) bundle.symbols.set(button.type, Number(id));
     for (const [name, id] of Object.entries(scene.soundClasses ?? {})) bundle.symbols.set(name, id);
     bundle.classes = new ConvertedClasses(definitions, {
         ...classHooks,
@@ -2251,18 +2395,25 @@ const loaderInfo = Object.assign(eventView(loaderNode), {
 displayViews.set(loaderNode, loaderInfo);
 const stageView = Object.assign(Object.create(null), eventView(stage));
 stageView.loaderInfo = loaderInfo;
-let stageQuality = "high";
+let stageQuality = "high", focusRequest;
 stageView.contains = view => {
     const node = displayNodes.get(view);
     return Boolean(node && stage.contains(node));
 };
 Object.defineProperties(stageView, {
     quality: { get: () => stageQuality, set: value => {
-        stageQuality = String(value).toLowerCase();
-        stage.setAttribute("data-flash-quality", stageQuality);
+        const mode = String(value).toLowerCase();
+        if (stageQuality !== mode) { stageQuality = mode; stage.dataset.flashQuality = mode; }
     } },
     focus: { get: () => document.activeElement === stage ? null : displayObjectFor(document.activeElement),
-        set: view => view ? view.focus?.() : stage.focus({ preventScroll: true }) },
+        set: view => {
+            const request = {};
+            focusRequest = request;
+            if (!view) stage.focus({ preventScroll: true });
+            else if (view.focus?.() === false) requestAnimationFrame(() => {
+                if (focusRequest === request) view.focus?.();
+            });
+        } },
     mouseX: { get: () => positionIn(stage).x },
     mouseY: { get: () => positionIn(stage).y },
     stageWidth: { get: () => data.viewBox[2] / 20 },
@@ -2288,7 +2439,7 @@ function displayView(owner, clip, layer, node) {
             if (Object.hasOwn(handlers, name)) return handlers[name];
             if (name === "stage") return stageView;
             if (name === "loaderInfo") return clip?.info ?? owner?.info ?? loaderInfo;
-            if (name === "parent") return displayParents.get(node)?.() ?? owner?.view ?? null;
+            if (name === "parent") return displayParents.get(node)?.() ?? (layer?.standalone ? null : owner?.view ?? null);
             if (name === "root") return root?.view ?? null;
             if (name === "name") return layer?.overrides.name ?? layer?.row[4] ?? "";
             if (name === "mask") return scriptMasks.get(node)?.view ?? null;
@@ -2525,7 +2676,8 @@ function displayView(owner, clip, layer, node) {
                     node.append(layer.asset);
                 }
                 else {
-                    layer.field = createTextField(definition, (type, detail) => node.dispatchEvent(scriptEvent(type, true, false, detail)));
+                    layer.field = createTextField(definition, (type, detail) => node.dispatchEvent(scriptEvent(type, true, false, detail)),
+                        data.fonts?.[definition.fontId] ?? data.fontClasses?.[definition.fontClass]);
                     node.append(layer.field.node);
                 }
             }
@@ -2561,6 +2713,8 @@ function displayView(owner, clip, layer, node) {
         const needsColor = color && (color.slice(0, 3).some(value => value !== 256) || color.slice(4).some(Boolean));
         const transform = !needsColor ? null : overrides.alpha === undefined ? color :
             [...color.slice(0, 3), Math.round(overrides.alpha * 256), ...color.slice(4, 7), 0];
+        if (transform) authoredTints.set(node, transform);
+        else authoredTints.delete(node);
         if (transform || effects?.length) put("filter", svgFilter(transform, effects ?? []));
         else if (node.hasAttribute("filter")) node.removeAttribute("filter");
         put("opacity", transform ? 1 : overrides.alpha ?? row[3]);
@@ -2711,6 +2865,19 @@ function displayView(owner, clip, layer, node) {
     return clip.view;
 }
 
+function makeLinkedButton(id, bundle) {
+    const owner = bundle.buttonOwner ??= new Clip(0, element("g"), [], null, null, false, bundle);
+    const layer = owner.makeLayer([0, id, [1, 0, 0, 1, 0, 0], 1, "", 0, true], []);
+    layer.standalone = true;
+    layer.view.bindView = view => {
+        layer.view = view;
+        displayViews.set(layer.node, view);
+        displayNodes.set(view, layer.node);
+        displayTypes.set(view, "SimpleButton");
+    };
+    return layer.view;
+}
+
 function animate(time) {
     requestAnimationFrame(animate);
     if (running) {
@@ -2760,7 +2927,7 @@ try {
         }
     }
     mainBundle = makeBundle(data, actions, definitions, documentUrl);
-    const bitmapSources = preloadBitmapSources(data, definitions, documentUrl);
+    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), loadFonts(data, documentUrl)]);
     mainDomain.install(mainBundle.classes);
     loaderInfo.url = mainBundle.source.href;
     loaderInfo.loaderURL = loaderInfo.url;
@@ -2895,8 +3062,8 @@ std::string class_modules(const web::WebProgram& program)
                 interfaces += ", ";
             interfaces += web::json_string(name);
         }
-        return std::format("{{\n    base: {},\n    interfaces: {}],\n    construct: {},\n    initialize: {},\n"
-            "    slots: {},\n    staticSlots: {},\n    methods: {},\n    statics: {}\n}}", web::json_string(type.base), interfaces,
+        return std::format("{{\n    base: {},\n    sealed: {},\n    interfaces: {}],\n    construct: {},\n    initialize: {},\n"
+            "    slots: {},\n    staticSlots: {},\n    methods: {},\n    statics: {}\n}}", web::json_string(type.base), type.sealed, interfaces,
             method_value(type.constructor), method_value(type.initialize),
             class_entries(type.slots, slot_value), class_entries(type.static_slots, slot_value),
             class_entries(type.methods, method_value), class_entries(type.statics, method_value));
@@ -3042,7 +3209,36 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
     scene.pop_back();
     scene += ",\"hasSource\":true";
     scene += ",\"dependencies\":" + links + "}";
-    std::string audio_classes = "{", font_classes = "{";
+    std::string audio_classes = "{", font_classes = "{", fonts = "{";
+    std::map<unsigned, std::string> font_assets;
+    for (std::size_t index = 0; index < movie.tags().size(); ++index)
+    {
+        const auto& tag = movie.tags()[index];
+        if (!tag.character_id || (tag.code != 48 && tag.code != 75)) continue;
+        const auto id = *tag.character_id;
+        try
+        {
+            const auto face = web::web_font(movie, index);
+            if (!face) continue;
+            std::string path;
+            if (share_visual) path = share_visual(face->file);
+            else
+            {
+                path = std::format("assets/font-{}.ttf", id);
+                write_file(destination / path, face->file.bytes);
+                ++report.files;
+            }
+            const auto metadata = std::format("{{\"fontName\":{},\"fontStyle\":{},\"fontType\":\"embedded\",\"url\":{}}}",
+                web::json_string(face->name), web::json_string(face->style), web::json_string(path));
+            font_assets.emplace(id, metadata);
+            if (fonts.size() > 1) fonts += ',';
+            fonts += web::json_string(std::to_string(id)) + ':' + metadata;
+        }
+        catch (const std::runtime_error& error)
+        {
+            web::omission(report, std::format("Police {} : {}", id, error.what()));
+        }
+    }
     for (const auto& [id, script] : scripts.clips)
     {
         const auto index = movie.character(id);
@@ -3058,6 +3254,12 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
         else if (kind == 48 || kind == 75 || kind == 91)
             try
             {
+                if (const auto face = font_assets.find(id); face != font_assets.end())
+                {
+                    if (font_classes.size() > 1) font_classes += ',';
+                    font_classes += web::json_string(script.type) + ':' + face->second;
+                    continue;
+                }
                 Reader font(movie.data(*index));
                 font.skip(2);
                 const auto flags = font.u8();
@@ -3088,6 +3290,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
     }
     scene += ",\"soundClasses\":" + audio_classes + '}';
     scene += ",\"fontClasses\":" + font_classes + '}';
+    scene += ",\"fonts\":" + fonts + '}';
     if (!workspace_url.empty())
         scene += ",\"workspace\":{\"catalog\":\"../../catalog.json\",\"network\":\"../../network.json\",\"source\":" +
             web::json_string(workspace_url) + "}";

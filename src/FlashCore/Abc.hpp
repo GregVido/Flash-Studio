@@ -26,6 +26,7 @@ struct AbcClass
     std::string base;
     std::vector<std::string> interfaces;
     bool interface_type = false;
+    bool sealed = false;
     std::vector<AbcMember> members;
 };
 

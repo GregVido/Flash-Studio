@@ -405,7 +405,7 @@ class Compiler
         {
             expect(".");
             const auto package = name();
-            if (!in(package, {"events", "external", "net", "utils", "display", "filters", "system", "media", "text", "geom"}))
+            if (!in(package, {"events", "external", "net", "utils", "display", "filters", "system", "media", "text", "geom", "ui"}))
                 fail("Paquet Flash à porter");
             expect(".");
             id = name();
@@ -413,7 +413,7 @@ class Compiler
         if (flash_event(id) && eat("."))
             return {"clip.eventName(" + json_string(name()) + ')'};
         if (in(id, {"URLRequestMethod", "URLLoaderDataFormat", "Endian", "SoundMixer", "Security", "SecurityDomain",
-            "StageScaleMode", "StageAlign", "TextFieldType", "TextFieldAutoSize", "navigateToURL", "getTimer",
+            "StageScaleMode", "StageAlign", "TextFieldType", "TextFieldAutoSize", "BlendMode", "Mouse", "Keyboard", "navigateToURL", "getTimer",
             "ApplicationDomain", "getDefinitionByName", "getQualifiedClassName", "Capabilities", "ExternalInterface", "SharedObject", "BitmapDataChannel"}))
             return {"clip.nativeSymbol(" + json_string(id) + ')'};
         if (in(id, {"XML", "XMLList"}) && peek() == "(")
@@ -441,7 +441,7 @@ class Compiler
                 "setChildIndex", "swapChildren", "swapChildrenAt", "contains", "graphics", "mouseX", "mouseY",
                 "getBounds", "getRect", "localToGlobal", "globalToLocal",
                 "cacheAsBitmap", "mouseEnabled", "mouseChildren", "buttonMode", "x", "y", "alpha", "visible",
-                "width", "height", "scaleX", "scaleY", "rotation", "filters", "blendMode",
+                "width", "height", "scaleX", "scaleY", "rotation", "filters", "blendMode", "transform",
                 "connect", "close", "connected", "flush", "bytesAvailable", "bytesPending", "endian", "send"})))
             return {"clip.view[" + json_string(id) + ']', {}, true};
         if (scope_.statics.contains(id))

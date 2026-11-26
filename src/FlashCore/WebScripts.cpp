@@ -344,6 +344,7 @@ WebClass compile_class(const AbcModule& abc, const AbcClass& type, WebScope scop
 {
     WebClass output;
     output.base = type.base;
+    output.sealed = type.sealed;
     output.interfaces = type.interfaces;
     const auto build_method = [&](const AbcMember& member, std::string_view display, bool constructor, bool static_method)
     {
@@ -505,7 +506,7 @@ WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& source
     if (movie.document_class())
         result.clips[0].type = *movie.document_class();
     for (const auto& tag : movie.tags())
-        if ((tag.code == 39 || tag.code == 14 || tag.category == Category::fonts) &&
+        if ((tag.code == 39 || tag.code == 14 || tag.code == 7 || tag.code == 34 || tag.category == Category::fonts) &&
             tag.character_id && result.classes.contains(tag.name))
             result.clips[*tag.character_id].type = tag.name;
     return result;

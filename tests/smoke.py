@@ -1427,6 +1427,25 @@ fin:
     sheet = folder / "Glyphes.svg"
     run("font-preview", editable, "1", sheet)
     assert "U+0041" in sheet.read_text(encoding="utf-8")
+
+    glyph = [(1, 4), (0, 4), (2, 6), (1, 1)]
+    for vertical, move in [(0, 480), (1, -720), (0, -480), (1, 720)]:
+        glyph.extend([(1, 1), (1, 1), (9, 4), (0, 1), (vertical, 1), (move, 11)])
+    glyph = bits(*glyph, (0, 6))
+    embedded_font = tag(48, struct.pack("<HBBBcHHH", 2, 4, 0, 1, b"X", 1, 4, 4 + len(glyph)) + glyph + b"A\x00")
+    font_field = tag(37, struct.pack("<H", 1) + rectangle(1900, 720) + b"\x81\x01" + struct.pack("<HH", 2, 320) + b"field\x00AA\x00")
+    font_movie = folder / "Police incorporée.swf"
+    font_body = rectangle(2400, 1200) + struct.pack("<HH", 6144, 1) + embedded_font + font_field
+    font_body += tag(26, struct.pack("<BHHB", 6, 1, 1, 0)) + tag(1) + tag(0)
+    font_movie.write_bytes(swf(b"FWS", font_body, font_body))
+    font_web = folder / "html5-police"
+    run("export-html5", font_movie, font_web)
+    font_scene = json.loads((font_web / "scene.json").read_bytes())
+    assert font_scene["assets"]["1"]["fontId"] == 2 and font_scene["assets"]["1"]["embedFonts"]
+    font_bytes = (font_web / font_scene["fonts"]["2"]["url"]).read_bytes()
+    assert font_bytes[:4] == b"\x00\x01\x00\x00"
+    assert sum(item[0] for item in struct.iter_unpack(">I", font_bytes)) & 0xffffffff == 0xb1b0afba
+
     static_edit = folder / "Texte statique modifié.swf"
     new_text.write_text("AA\nA", encoding="utf-8")
     run("replace-text", edited, "2", new_text, static_edit)

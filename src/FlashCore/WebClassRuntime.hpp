@@ -94,8 +94,8 @@ export class ConvertedClasses {
     }
 
     #record(name, host, staticAccess) {
-        this.#definition(name);
-        return { name, host, staticAccess, fields: new Map(), members: new Map(), contexts: new Map(),
+        const { sealed } = this.#definition(name);
+        return { name, host, staticAccess, sealed, fields: new Map(), members: new Map(), contexts: new Map(),
             constructors: new Set(), dynamic: Object.create(null), phase: "declared", view: null };
     }
 
@@ -202,7 +202,12 @@ export class ConvertedClasses {
                     }
                     return method;
                 }
-                return owns(record.dynamic, key) ? record.dynamic[key] : record.host?.[key];
+                if (owns(record.dynamic, key)) return record.dynamic[key];
+                const value = record.host?.[key];
+                if (record.sealed && !record.staticAccess && value === undefined &&
+                    !(record.host && key in record.host) && key !== "then")
+                    throw new ReferenceError("Propriété ActionScript introuvable : " + record.name + "." + key);
+                return value;
             },
             set: (_, key, value) => {
                 const entry = find(key);

@@ -50,6 +50,8 @@ struct Field
     std::string initial;
     std::array<int, 4> bounds{};
     unsigned font_height = 240;
+    unsigned font_id{};
+    std::string font_class;
     std::array<unsigned, 4> color{0, 0, 0, 255};
     unsigned alignment{}, left_margin{}, right_margin{}, maximum{}, flags{}, layout{};
     int leading{};
@@ -65,11 +67,11 @@ Field edit_field(ByteView bytes)
     const auto position = input.position();
     const auto flags = input.u8();
     const auto layout = input.u8();
-    if (flags & 1)
-        input.skip(2);
-    if (layout & 128)
-        input.cstring();
     Field field{};
+    if (flags & 1)
+        field.font_id = input.u16();
+    if (layout & 128)
+        field.font_class = input.cstring();
     field.bounds = bounds;
     field.flags = flags;
     field.layout = layout;
@@ -104,6 +106,7 @@ struct CodeTable
     unsigned page{};
     ByteView advances;
     unsigned units = 1024;
+    int ascent{}, descent{}, leading{};
 
     wchar_t glyph(unsigned index) const
     {
@@ -152,13 +155,15 @@ CodeTable font_codes(const Movie& movie, unsigned id)
         const auto wide_codes = (flags & 4) != 0;
         const auto page = movie.header().version >= 6 ? 0 : flags & 64 ? shift_jis : windows_latin;
         const auto codes = input.take(count * (wide_codes ? 2u : 1u));
-        ByteView advances;
+        CodeTable table{codes, wide_codes, page, {}, code == 75 ? 20480u : 1024u};
         if ((flags & 128) && input.remaining() >= 6 + count * 2u)
         {
-            input.skip(6);
-            advances = input.take(count * 2u);
+            table.ascent = std::bit_cast<std::int16_t>(input.u16());
+            table.descent = std::bit_cast<std::int16_t>(input.u16());
+            table.leading = std::bit_cast<std::int16_t>(input.u16());
+            table.advances = input.take(count * 2u);
         }
-        return {codes, wide_codes, page, advances, code == 75 ? 20480u : 1024u};
+        return table;
     }
     if (code != 10)
         return {};
@@ -418,6 +423,16 @@ std::vector<wchar_t> font_glyph_labels(const Movie& movie, unsigned id)
     return labels;
 }
 
+web::FontMetrics web::font_metrics(const Movie& movie, unsigned id)
+{
+    const auto table = font_codes(movie, id);
+    FontMetrics result{font_glyph_labels(movie, id), {}, table.ascent, table.descent, table.leading};
+    Reader advances(table.advances);
+    while (advances.remaining())
+        result.advances.push_back(std::bit_cast<std::int16_t>(advances.u16()));
+    return result;
+}
+
 std::string extract_text(const Movie& movie, std::size_t index)
 {
     const auto code = movie.tags().at(index).code;
@@ -440,13 +455,14 @@ std::string web::text_field_json(const Movie& movie, std::size_t index)
     const auto [left, right, top, bottom] = field.bounds;
     return std::format("{{\"text\":{},\"bounds\":[{},{},{},{}],\"height\":{},\"fill\":\"#{:02x}{:02x}{:02x}\","
         "\"alpha\":{:g},\"alignment\":{},\"margins\":[{},{}],\"leading\":{},\"html\":{},"
-        "\"wrap\":{},\"multiline\":{},\"editable\":{},\"password\":{},\"selectable\":{},\"border\":{},\"maximum\":{},\"autoSize\":{}}}",
+        "\"wrap\":{},\"multiline\":{},\"editable\":{},\"password\":{},\"selectable\":{},\"border\":{},\"maximum\":{},\"autoSize\":{},"
+        "\"fontId\":{},\"fontClass\":{},\"embedFonts\":{}}}",
         json_string(text), left, top, std::max(1, right - left), std::max(1, bottom - top),
         field.font_height, field.color[0], field.color[1], field.color[2], field.color[3] / 255.0,
         field.alignment, field.left_margin, field.right_margin, field.leading, bool(field.layout & 2),
         bool(field.flags & 64), bool(field.flags & 32), !(field.flags & 8), bool(field.flags & 16),
         !(field.layout & 16), bool(field.layout & 8), field.maximum,
-        json_string(field.layout & 64 ? "left" : "none"));
+        json_string(field.layout & 64 ? "left" : "none"), field.font_id, json_string(field.font_class), bool(field.layout & 1));
 }
 
 Movie Movie::replace_text(std::size_t index, std::string_view utf8) const

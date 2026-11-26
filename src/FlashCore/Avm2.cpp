@@ -588,6 +588,7 @@ Abc::Abc(ByteView bytes) : bytes_(bytes)
             type.base = name(base);
         const auto flags = input.u8();
         type.interface_type = (flags & 4) != 0;
+        type.sealed = (flags & 1) != 0;
         type.declaration = access(class_name);
         if (type.interface_type)
             type.declaration += "interface ";

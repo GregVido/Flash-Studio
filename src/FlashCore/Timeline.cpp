@@ -1015,7 +1015,13 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
             }
             if (tag.code == 7 || tag.code == 34)
             {
-                entry(buttons, id, buttons_json(movie, index, actions, report));
+                auto button = buttons_json(movie, index, actions, report);
+                if (const auto script = scripts.find(id); script != scripts.end() && !script->second.type.empty())
+                {
+                    button.pop_back();
+                    button += ",\"type\":" + json_string(script->second.type) + '}';
+                }
+                entry(buttons, id, std::move(button));
                 visual.insert(id);
                 continue;
             }
