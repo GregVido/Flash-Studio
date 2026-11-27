@@ -1919,15 +1919,14 @@ void Abc::source(const Body& body, Output& output, SourceNames* names, std::stri
                 if ((op == 0x11 || op == 0x12) && !stack.empty() && end_then > i + 2 &&
                     instructions[i + 1].op == 0x29)
                 {
-                    auto retained = stack.pop_as3_value();
+                    const auto retained = stack.as3_top_value();
                     const auto coerces_duplicate = i >= 2 && instructions[i - 2].op == 0x2A &&
                         (instructions[i - 1].op == 0x76 || instructions[i - 1].op == 0x81) &&
-                        value == "Boolean(" + retained + ')';
+                        value == std::format("Boolean({})", retained);
                     if (retained != value && !coerces_duplicate)
                         throw std::runtime_error(std::format("Valeurs différentes sur les branches du court-circuit à 0x{:04X}.",
                             item.offset));
                     const auto right = visit(visit, i + 2, end_then, depth + 1, true);
-                    stack.push(std::move(retained));
                     stack.push(right);
                     stack.as3_binary(op == 0x11 ? "||" : "&&");
                     i = end_then - 1;

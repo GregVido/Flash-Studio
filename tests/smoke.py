@@ -30,14 +30,15 @@ def tag(code, payload=b""):
     return header + payload
 
 
-def shape(character=10, gradient=False, texture=None):
+def shape(character=10, gradient=False, texture=None, repeat=False):
     records = [(1, 4), (0, 4), (2, 6), (1, 1)]
     for vertical, move in [(0, 880), (1, 880), (0, -880), (1, -880)]:
         records.extend([(1, 1), (1, 1), (9, 4), (0, 1), (vertical, 1), (move, 11)])
     records.append((0, 6))
     payload = struct.pack("<H", character) + rectangle(880, 880)
     if texture is not None:
-        payload += b"\x01\x41" + struct.pack("<H", texture) + b"\x00\x00"
+        matrix = bits((1, 1), (24, 5), (20 * 65536, 24), (20 * 65536, 24), (0, 1), (0, 5)) if repeat else b"\0"
+        payload += bytes([1, 0x40 if repeat else 0x41]) + struct.pack("<H", texture) + matrix + b"\0"
     elif gradient:
         payload += bytes([1, 0x10, 0, 2, 0, 255, 186, 114, 255, 64, 128, 255, 0])
     else:
@@ -259,6 +260,24 @@ def check(exe, folder, asc=None):
         assert audio.readframes(3) == struct.pack("<hhhhhh", 100, -100, 111, -111, 113, -113)
     with wave.open(str(web_audio / scene["audio"]["2"]), "rb") as audio:
         assert audio.readframes(4097) == b"\0" * (4096 * 2) + struct.pack("<h", 4321)
+
+    bitmap = struct.pack("<HBHH", 9, 5, 2, 1) + zlib.compress(bytes([255, 240, 100, 60] * 2))
+    family = b"Tahoma"
+    device_font = struct.pack("<HBBB", 15, 0, 0, len(family)) + family + b"\0\0"
+    field = struct.pack("<H", 16) + rectangle(880, 880) + b"\x89\x28" + struct.pack("<HH", 15, 180)
+    field += struct.pack("<BHHhh", 0, 0, 0, 20, -10) + b"\0Origine\0"
+    visual_body = (rectangle(880, 880) + struct.pack("<HH", 24 * 256, 1) +
+                   tag(36, bitmap) + tag(75, device_font) + tag(37, field) +
+                   shape(texture=9, repeat=True) + tag(1) + tag(0))
+    visual_movie = folder / "Motif et police.swf"
+    visual_movie.write_bytes(swf(b"FWS", visual_body, visual_body))
+    web_visual = folder / "html5-motif"
+    run("export-html5", visual_movie, web_visual)
+    visual_scene = json.loads((web_visual / "scene.json").read_text("utf-8"))
+    assert visual_scene["fonts"]["15"] == {"fontName": "Tahoma", "fontStyle": "regular", "fontType": "device"}
+    assert visual_scene["assets"]["16"]["indent"] == 20 and visual_scene["assets"]["16"]["leading"] == -10
+    tiled_svg = (web_visual / visual_scene["assets"]["10"]["url"]).read_text("utf-8")
+    assert 'patternUnits="userSpaceOnUse"' in tiled_svg and tiled_svg.count("<use ") == 1
 
     web_effects = folder / "html5-effects"
     effects_movie = folder / "Web effects.swf"
@@ -981,6 +1000,26 @@ returnvalue
     assert "var local1:int = int(Number(1 + 2 * 3));" in precedence_source, precedence_source
     assert "return 12 - (7 - local1) - 2;" in precedence_source, precedence_source
     recompile(precedence_source, "asc-priorite-operateurs")
+
+    loop_pcode.write_text(""".stack 2
+.locals 1
+.scope 0 0
+pushtrue
+dup
+iftrue and_test
+pop
+pushfalse
+and_test: dup
+iffalse end
+pop
+pushfalse
+end: convert_i
+returnvalue
+""", encoding="utf-8")
+    logical_movie = folder / "Priorité logique.swf"
+    run("abc-edit", class_movie, "0", "2", loop_pcode, logical_movie)
+    logical_source = run("abc-class", logical_movie, "0", "0")
+    assert "return int((true || false) && false);" in logical_source, logical_source
 
     loop_pcode.write_text(""".stack 2
 .locals 2

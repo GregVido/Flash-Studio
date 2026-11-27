@@ -54,7 +54,7 @@ struct Field
     std::string font_class;
     std::array<unsigned, 4> color{0, 0, 0, 255};
     unsigned alignment{}, left_margin{}, right_margin{}, maximum{}, flags{}, layout{};
-    int leading{};
+    int indent{}, leading{};
 };
 
 Field edit_field(ByteView bytes)
@@ -75,7 +75,7 @@ Field edit_field(ByteView bytes)
     field.bounds = bounds;
     field.flags = flags;
     field.layout = layout;
-    if (flags & 1)
+    if ((flags & 1) || (layout & 128))
         field.font_height = input.u16();
     if (flags & 4)
         for (auto& channel : field.color)
@@ -87,7 +87,7 @@ Field edit_field(ByteView bytes)
         field.alignment = input.u8();
         field.left_margin = input.u16();
         field.right_margin = input.u16();
-        input.skip(2);
+        field.indent = std::bit_cast<std::int16_t>(input.u16());
         field.leading = std::bit_cast<std::int16_t>(input.u16());
     }
     input.cstring();
@@ -454,12 +454,12 @@ std::string web::text_field_json(const Movie& movie, std::size_t index)
     const auto text = movie.header().version >= 6 ? field.initial : encode_string(decode_string(field.initial, windows_latin), CP_UTF8);
     const auto [left, right, top, bottom] = field.bounds;
     return std::format("{{\"text\":{},\"bounds\":[{},{},{},{}],\"height\":{},\"fill\":\"#{:02x}{:02x}{:02x}\","
-        "\"alpha\":{:g},\"alignment\":{},\"margins\":[{},{}],\"leading\":{},\"html\":{},"
+        "\"alpha\":{:g},\"alignment\":{},\"margins\":[{},{}],\"indent\":{},\"leading\":{},\"html\":{},"
         "\"wrap\":{},\"multiline\":{},\"editable\":{},\"password\":{},\"selectable\":{},\"border\":{},\"maximum\":{},\"autoSize\":{},"
         "\"fontId\":{},\"fontClass\":{},\"embedFonts\":{}}}",
         json_string(text), left, top, std::max(1, right - left), std::max(1, bottom - top),
         field.font_height, field.color[0], field.color[1], field.color[2], field.color[3] / 255.0,
-        field.alignment, field.left_margin, field.right_margin, field.leading, bool(field.layout & 2),
+        field.alignment, field.left_margin, field.right_margin, field.indent, field.leading, bool(field.layout & 2),
         bool(field.flags & 64), bool(field.flags & 32), !(field.flags & 8), bool(field.flags & 16),
         !(field.layout & 16), bool(field.layout & 8), field.maximum,
         json_string(field.layout & 64 ? "left" : "none"), field.font_id, json_string(field.font_class), bool(field.layout & 1));

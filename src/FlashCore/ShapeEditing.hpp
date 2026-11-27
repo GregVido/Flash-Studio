@@ -61,5 +61,9 @@ bool is_editable_shape(unsigned code) noexcept;
 ShapeDrawing read_shape_drawing(unsigned code, ByteView payload);
 ShapeDrawing read_morph_drawing(unsigned code, ByteView payload, unsigned ratio);
 Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie);
+namespace web
+{
+Asset shape_svg(const ShapeDrawing& drawing, const Movie* movie);
+}
 Movie replace_shape_drawing(const Movie& movie, std::size_t tag, const ShapeDrawing& drawing);
 }

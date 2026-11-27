@@ -1047,9 +1047,21 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
                 visual.insert(id);
                 continue;
             }
-            auto asset = tag.code == 11 || tag.code == 33 ? std::optional{text_svg(movie, index)} : extract(movie, index);
+            auto asset = tag.code == 11 || tag.code == 33 ? std::optional{text_svg(movie, index)} :
+                is_editable_shape(tag.code) ? std::optional{shape_svg(read_shape_drawing(tag.code, movie.data(index)), &movie)} :
+                extract(movie, index);
             if (!asset && (tag.code == 10 || tag.code == 48 || tag.code == 75))
+            {
+                if (tag.code != 10)
+                {
+                    Reader font(movie.data(index));
+                    font.skip(4);
+                    font.skip(font.u8());
+                    if (!font.u16())
+                        continue;
+                }
                 asset = font_svg(movie, index);
+            }
             if (!asset)
             {
                 if (tag.category == Category::sounds || tag.category == Category::shapes || tag.code == 60)
@@ -1124,7 +1136,7 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
             try
             {
                 const auto drawing = read_morph_drawing(movie.tags()[index].code, movie.data(index), ratio);
-                const auto asset = export_shape_drawing(drawing, &movie);
+                const auto asset = shape_svg(drawing, &movie);
                 const auto key = std::format("{}@{}", id, ratio);
                 auto path = "assets/asset-" + key + ".svg";
                 if (share_visual)

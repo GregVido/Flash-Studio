@@ -2031,6 +2031,22 @@ function transformedBounds({x, y, width, height}, {a, b, c, d, e, f}) {
         Math.abs(a * width) + Math.abs(c * height), Math.abs(b * width) + Math.abs(d * height));
 }
 
+function childDisplayBounds(node, measure) {
+    let result;
+    for (const child of node.children) {
+        if (!(child instanceof SVGGraphicsElement) || child.getAttribute("display") === "none" ||
+            child.hasAttribute("data-flash-hit")) continue;
+        const bounds = measure(child);
+        if (!bounds || (!bounds.width && !bounds.height)) continue;
+        const box = transformedBounds(bounds, localDisplayMatrix(child));
+        if (!result) result = box;
+        else result = new Rectangle(Math.min(result.left, box.left), Math.min(result.top, box.top),
+            Math.max(result.right, box.right) - Math.min(result.left, box.left),
+            Math.max(result.bottom, box.bottom) - Math.min(result.top, box.top));
+    }
+    return result;
+}
+
 function detachedDisplayBounds(node) {
     const value = key => Number(node.getAttribute(key) ?? 0);
     switch (node.localName) {
@@ -2055,24 +2071,13 @@ function detachedDisplayBounds(node) {
         }
         return new Rectangle(left, top, right - left, bottom - top);
     }
-    default: {
-        let result;
-        for (const child of node.children) {
-            if (!(child instanceof SVGElement) || child.getAttribute("display") === "none") continue;
-            const bounds = detachedDisplayBounds(child);
-            if (!bounds) continue;
-            const box = transformedBounds(bounds, localDisplayMatrix(child));
-            if (!result) result = box;
-            else result = new Rectangle(Math.min(result.left, box.left), Math.min(result.top, box.top),
-                Math.max(result.right, box.right) - Math.min(result.left, box.left),
-                Math.max(result.bottom, box.bottom) - Math.min(result.top, box.top));
-        }
-        return result;
-    }
+    default: return childDisplayBounds(node, detachedDisplayBounds);
     }
 }
 
 function localDisplayBounds(node) {
+    // Button hit geometry participates in pointer testing only, even in an enclosing popup's bounds.
+    if (node.querySelector("[data-flash-hit]")) return childDisplayBounds(node, localDisplayBounds) ?? new Rectangle();
     const bounds = node.getBBox();
     if (bounds.width || bounds.height) return bounds;
     return detachedDisplayBounds(node) ?? bounds;
@@ -2217,14 +2222,16 @@ function bitmapRenderer(type) {
         Object.values(type.methods).some(usesBitmap) || Object.values(type.statics).some(usesBitmap));
 }
 
-function timelineAssetUrls(scene, page, roots, visited = new Set()) {
+function timelineAssetUrls(scene, page, roots, visited = new Set(), frameLimit = Infinity) {
     const urls = [];
     const visit = id => {
         if (visited.has(id)) return;
         visited.add(id);
         const url = scene.assets[id]?.url;
         if (url) urls.push(new URL(url, page).href);
-        for (const frame of scene.clips[id]?.frames ?? []) for (const row of frame[0]) visit(timelineAsset(row, scene));
+        const frames = scene.clips[id]?.frames ?? [];
+        for (let i = 0; i < Math.min(frameLimit, frames.length); ++i)
+            for (const row of frames[i][0]) visit(timelineAsset(row, scene));
         for (const state of scene.buttons[id]?.states ?? []) for (const row of state) visit(timelineAsset(row, scene));
     };
     for (const id of roots) visit(id);
@@ -2366,7 +2373,7 @@ function scriptLoader(owner = mainBundle) {
                 const { bundle, bytes } = await loadMovie(page, url, binary ? () => binary.bytes().buffer : null, domain);
                 if (pending !== current) return;
                 info.applicationDomain = domain;
-                info.bytes = bytes && new ByteArray(new Uint8Array(bytes));
+                info.bytes = bytes && new ByteArray(bytes, true);
                 if (info.bytes) movieBytes.set(info.bytes, { page, url });
                 info.bytesLoaded = info.bytesTotal = bytes?.byteLength ?? 0;
                 const display = element("g");
@@ -2916,7 +2923,7 @@ function displayView(owner, clip, layer, node) {
         this.started = true;
         const primed = this.bundle.primedClips;
         if (primed && this.animated && !primed.has(this.id))
-            for (const url of timelineAssetUrls(this.bundle.scene, this.bundle.page, [this.id], primed)) rasterImage(url);
+            for (const url of timelineAssetUrls(this.bundle.scene, this.bundle.page, [this.id], primed, 4)) rasterImage(url);
         this.initializeTree();
         if (!this.bundle.initialized.has(this.id)) {
             this.bundle.initialized.add(this.id);
@@ -3348,7 +3355,7 @@ try {
         const source = await fetch(new URL("source.bin", documentUrl));
         if (!source.ok) throw new Error("source.bin: " + source.status);
         const bytes = new Uint8Array(await source.arrayBuffer());
-        loaderInfo.bytes = new ByteArray(bytes);
+        loaderInfo.bytes = new ByteArray(bytes, true);
         loaderInfo.bytesLoaded = loaderInfo.bytesTotal = bytes.length;
     }
     const linked = document.querySelector("#linked");
@@ -3628,16 +3635,23 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
         {
             const auto face = web::web_font(movie, index);
             if (!face) continue;
-            std::string path;
-            if (share_visual) path = share_visual(face->file);
-            else
+            const bool has_glyphs = !face->file.bytes.empty();
+            auto metadata = std::format("{{\"fontName\":{},\"fontStyle\":{},\"fontType\":{}",
+                web::json_string(face->name), web::json_string(face->style),
+                web::json_string(has_glyphs ? "embedded" : "device"));
+            if (has_glyphs)
             {
-                path = std::format("assets/font-{}.ttf", id);
-                write_file(destination / path, face->file.bytes);
-                ++report.files;
+                std::string path;
+                if (share_visual) path = share_visual(face->file);
+                else
+                {
+                    path = std::format("assets/font-{}.ttf", id);
+                    write_file(destination / path, face->file.bytes);
+                    ++report.files;
+                }
+                metadata += ",\"url\":" + web::json_string(path);
             }
-            const auto metadata = std::format("{{\"fontName\":{},\"fontStyle\":{},\"fontType\":\"embedded\",\"url\":{}}}",
-                web::json_string(face->name), web::json_string(face->style), web::json_string(path));
+            metadata += '}';
             font_assets.emplace(id, metadata);
             if (fonts.size() > 1) fonts += ',';
             fonts += web::json_string(std::to_string(id)) + ':' + metadata;

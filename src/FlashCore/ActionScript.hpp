@@ -41,6 +41,12 @@ public:
         return take().text;
     }
     std::string pop_as3_value();
+    std::string_view as3_top_value() const
+    {
+        if (items_.empty())
+            throw std::runtime_error("Pile d’expressions incomplète.");
+        return items_.back().ungrouped();
+    }
     bool replace_value(std::string_view value, std::string_view replacement);
     void duplicate()
     {

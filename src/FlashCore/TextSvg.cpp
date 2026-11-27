@@ -357,6 +357,10 @@ std::optional<web::FontAsset> web::web_font(const Movie& movie, std::size_t inde
     descriptor.skip(1);
     const auto raw = descriptor.take(descriptor.u8());
     const std::string_view name(reinterpret_cast<const char*>(raw.data()), raw.size());
+    FontAsset result{{}, std::string(name.substr(0, name.find('\0'))),
+        flags & 1 ? (flags & 2 ? "boldItalic" : "bold") : (flags & 2 ? "italic" : "regular")};
+    if (!descriptor.u16())
+        return result;
     const auto outlines = font_glyphs(movie, *tag.character_id);
     const auto metrics = font_metrics(movie, *tag.character_id);
     if (metrics.codes.empty() || metrics.codes.size() >= 65535 || outlines.offsets.size() != metrics.codes.size() + 1)
@@ -427,7 +431,7 @@ std::optional<web::FontAsset> web::web_font(const Movie& movie, std::size_t inde
         big32(cmap, character); big32(cmap, character); big32(cmap, glyph);
     }
     tables["name"] = font_names();
-    return FontAsset{{L".ttf", open_type(tables)}, std::string(name.substr(0, name.find('\0'))),
-        flags & 1 ? (flags & 2 ? "boldItalic" : "bold") : (flags & 2 ? "italic" : "regular")};
+    result.file = {L".ttf", open_type(tables)};
+    return result;
 }
 }

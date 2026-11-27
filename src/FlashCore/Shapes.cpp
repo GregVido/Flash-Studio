@@ -21,6 +21,7 @@ struct Texture
     unsigned bitmap;
     Matrix matrix;
     bool repeat;
+    bool smooth;
 };
 struct Paint
 {
@@ -56,7 +57,7 @@ Paint svg_paint(const ShapePaint& original, unsigned character, unsigned& serial
     if (type >= 0x40 && type <= 0x43)
     {
         paint.id = std::format("clip-texture-{}-{}", character, ++serial);
-        paint.texture = Texture{original.bitmap, original.matrix, (type & 1) == 0};
+        paint.texture = Texture{original.bitmap, original.matrix, (type & 1) == 0, (type & 2) == 0};
         return paint;
     }
     const auto& matrix = original.matrix;
@@ -210,7 +211,9 @@ Asset export_shape(unsigned code, ByteView payload, const Movie* movie)
         read_shape_drawing(code, payload), movie);
 }
 
-Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
+namespace
+{
+Asset render_shape_svg(const ShapeDrawing& drawing, const Movie* movie, bool patterns)
 {
     const auto character = drawing.character;
     const auto& bounds = drawing.bounds;
@@ -276,8 +279,19 @@ Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
                             texture_id(character, texture->bitmap), image->second.width, image->second.height,
                             image->second.data_uri));
                     }
-                    append_path(std::format("<clipPath id=\"{}\"><path clip-rule=\"{}\" d=\"{}\"/></clipPath>\n",
-                        fill.paint.id, winding ? "nonzero" : "evenodd", fill_path(fill.edges)));
+                    if (patterns && texture->repeat)
+                    {
+                        const auto& bitmap = image->second;
+                        const auto& m = texture->matrix;
+                        append_path(std::format("<pattern id=\"{}\" patternUnits=\"userSpaceOnUse\" width=\"{}\" height=\"{}\" "
+                            "patternTransform=\"matrix({:.15g} {:.15g} {:.15g} {:.15g} {} {})\">"
+                            "<use xlink:href=\"#{}\" image-rendering=\"{}\"/></pattern>\n",
+                            fill.paint.id, bitmap.width, bitmap.height, m.scale_x, m.skew_y, m.skew_x, m.scale_y, m.x, m.y,
+                            texture_id(character, texture->bitmap), texture->smooth ? "auto" : "pixelated"));
+                    }
+                    else
+                        append_path(std::format("<clipPath id=\"{}\"><path clip-rule=\"{}\" d=\"{}\"/></clipPath>\n",
+                            fill.paint.id, winding ? "nonzero" : "evenodd", fill_path(fill.edges)));
                 }
                 append_path(fill.paint.gradient);
             }
@@ -293,7 +307,7 @@ Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
     for (const auto& fill : fills)
         if (!fill.edges.empty())
         {
-            if (const auto& texture = fill.paint.texture)
+            if (const auto& texture = fill.paint.texture; texture && !(patterns && texture->repeat))
                 append_path(texture_tiles(fill.paint, character, textures.at(texture->bitmap), bounds));
             else
                 append_path(std::format("<path {} fill-rule=\"{}\" d=\"{}\"/>\n",
@@ -310,5 +324,16 @@ Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
                 caps[stroke.cap], joins[stroke.join], (std::max)(1.0, stroke.miter), stroke_path(stroke)));
     svg += "</svg>\n";
     return {L".svg", Bytes(svg.begin(), svg.end())};
+}
+}
+
+Asset export_shape_drawing(const ShapeDrawing& drawing, const Movie* movie)
+{
+    return render_shape_svg(drawing, movie, false);
+}
+
+Asset web::shape_svg(const ShapeDrawing& drawing, const Movie* movie)
+{
+    return render_shape_svg(drawing, movie, true);
 }
 }

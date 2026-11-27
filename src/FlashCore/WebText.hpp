@@ -187,7 +187,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     const values = {
         type: definition.editable ? "input" : "dynamic", displayAsPassword: Boolean(definition.password),
         selectable: definition.selectable !== false, wordWrap: Boolean(definition.wrap), multiline: Boolean(definition.multiline),
-        border: Boolean(definition.border), background: false, borderColor: 0, backgroundColor: 0xffffff,
+        border: Boolean(definition.border), background: Boolean(definition.border), borderColor: 0, backgroundColor: 0xffffff,
         maxChars: definition.maximum ?? 0, defaultTextFormat: initialFormat, styleSheet: null, autoSize: definition.autoSize ?? "none",
         embedFonts: Boolean(definition.embedFonts || definition.fontClass),
     };
@@ -195,18 +195,18 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     let fieldWidth = width, fieldHeight = height, horizontalShift = 0, measured, unobserve;
     Object.assign(body.style, {
         width: "100%", height: "100%", boxSizing: "border-box", overflow: "hidden",
-        opacity: definition.alpha ?? 1,
     });
-    Object.assign(content.style, { lineHeight: "1.12", fontFamily: "sans-serif", outline: "none" });
+    Object.assign(content.style, { lineHeight: "1.12", fontFamily: "Arial, sans-serif", outline: "none", opacity: definition.alpha ?? 1 });
     body.append(content);
     node.append(body);
     const resolveFont = (family, style) => {
         const name = String(family).trim(), key = name.toLowerCase();
-        const device = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace",
-            "arial bold": "Arial", "arial italic": "Arial", "arial bold italic": "Arial" })[key] ?? name;
-        if (!values.embedFonts) return device;
         const bold = style.bold || style.fontWeight === "bold";
         const italic = style.italic || style.fontStyle === "italic";
+        const familyName = bold || italic ? name.replace(/(?:\s+(?:bold|italic|oblique))+$/i, "") : name;
+        const device = ({ _sans: "sans-serif", _serif: "serif", _typewriter: "monospace",
+            "arial bold": "Arial", "arial italic": "Arial", "arial bold italic": "Arial" })[key] ?? familyName;
+        if (!values.embedFonts) return device;
         const variant = bold && italic ? "boldItalic" : bold ? "bold" : italic ? "italic" : "regular";
         const embedded = key === face?.fontName?.toLowerCase() && face.family ? face.family :
             namedFonts.get(key + ":" + variant) ?? namedFonts.get(key + ":regular");
@@ -220,7 +220,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             const { fontStyle, fontWeight, fontSize, fontFamily, lineHeight } = content.style;
             measureContext.font = `${fontStyle || "normal"} ${fontWeight || "normal"} ${fontSize} ${fontFamily}`;
             const text = values.displayAsPassword ? "\u2022".repeat(source.length) : source;
-            return measured = [measureContext.measureText(text).width, parseFloat(lineHeight)];
+            return measured = [measureContext.measureText(text).width + (parseFloat(content.style.textIndent) || 0), parseFloat(lineHeight)];
         }
         const sample = content.cloneNode(true);
         sample.removeAttribute("contenteditable");
@@ -244,7 +244,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         const mode = values.autoSize;
         const automatic = mode === "left" || mode === "center" || mode === "right";
         const [textWidth, textHeight] = automatic ? measure() : [0, 0];
-        const nextWidth = automatic && !values.wordWrap ? Math.ceil((textWidth + paddingWidth()) * 20) / 20 : fieldWidth;
+        const nextWidth = automatic && !values.wordWrap ? Math.max(0.05, Math.ceil((textWidth + paddingWidth()) * 20) / 20) : fieldWidth;
         const nextHeight = automatic ? Math.ceil((textHeight + 2 * gutter) * 20) / 20 : fieldHeight;
         const anchor = mode === "right" ? 1 : mode === "center" ? 0.5 : 0;
         horizontalShift = (fieldWidth - nextWidth) * anchor;
@@ -252,23 +252,9 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             if (node.getAttribute(key) !== String(value)) node.setAttribute(key, value);
     }
 
-    function render() {
+    function renderContent() {
         measured = undefined;
         content.replaceChildren();
-        node.toggleAttribute("data-flash-passive-text", !values.selectable && values.type !== "input");
-        content.style.whiteSpace = values.multiline || values.wordWrap ? "pre-wrap" : "pre";
-        content.style.overflowWrap = values.wordWrap ? "anywhere" : "normal";
-        body.style.userSelect = values.selectable || values.type === "input" ? "text" : "none";
-        body.style.border = values.border ? "1px solid " + color(values.borderColor) : "none";
-        body.style.backgroundColor = values.background ? color(values.backgroundColor) : "transparent";
-        body.style.padding = `${gutter}px ${paddingRight()}px ${gutter}px ${paddingLeft()}px`;
-        content.style.fontSize = size + "px";
-        Object.assign(content.style, { color: color(initialFormat.color), fontFamily: "sans-serif", fontWeight: "",
-            fontStyle: "", textDecoration: "", textAlign: initialFormat.align });
-        formatting(content, values.defaultTextFormat, resolveFont);
-        const leading = values.defaultTextFormat?.leading;
-        content.style.lineHeight = Math.max(0.05, parseFloat(content.style.fontSize) * 1.12 +
-            (leading == null ? (definition.leading ?? 0) / 20 : pixels(leading))) + "px";
         if (values.displayAsPassword && values.type === "input") {
             const input = document.createElement("input");
             input.type = "password";
@@ -285,12 +271,31 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         }
         updateBounds();
     }
+
+    function render() {
+        node.toggleAttribute("data-flash-passive-text", !values.selectable && values.type !== "input");
+        content.style.whiteSpace = values.multiline || values.wordWrap ? "pre-wrap" : "pre";
+        content.style.overflowWrap = values.wordWrap ? "anywhere" : "normal";
+        body.style.userSelect = values.selectable || values.type === "input" ? "text" : "none";
+        body.style.boxShadow = values.border ? "inset 0 0 0 1px " + color(values.borderColor) : "none";
+        body.style.backgroundColor = values.background ? color(values.backgroundColor) : "transparent";
+        body.style.padding = `${gutter}px ${paddingRight()}px ${gutter}px ${paddingLeft()}px`;
+        content.style.fontSize = size + "px";
+        Object.assign(content.style, { color: color(initialFormat.color), fontFamily: "Arial, sans-serif", fontWeight: "",
+            fontStyle: "", textDecoration: "", textAlign: initialFormat.align,
+            textIndent: (values.defaultTextFormat?.indent ?? (definition.indent ?? 0) / 20) + "px" });
+        formatting(content, values.defaultTextFormat, resolveFont);
+        const leading = values.defaultTextFormat?.leading;
+        content.style.lineHeight = Math.max(0.05, parseFloat(content.style.fontSize) * 1.12 +
+            (leading == null ? (definition.leading ?? 0) / 20 : Number(leading) || 0)) + "px";
+        renderContent();
+    }
     content.addEventListener("input", event => {
         if (event.target !== content) return;
         const text = content.innerText;
         source = values.maxChars ? text.slice(0, values.maxChars) : text;
         html = false;
-        if (source !== text) render();
+        if (source !== text) renderContent();
         else { measured = undefined; updateBounds(); }
         emit("change");
     });
@@ -322,14 +327,14 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             if (!html && source === value) return;
             html = false;
             source = value;
-            render();
+            renderContent();
         } },
         htmlText: { enumerable: true, get: () => html ? source : content.innerHTML, set: value => {
             value = String(value ?? "");
             if (html && source === value) return;
             html = true;
             source = value;
-            render();
+            renderContent();
         } },
         textColor: { enumerable: true, get: () => {
             const value = values.defaultTextFormat?.color;

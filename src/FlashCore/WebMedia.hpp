@@ -4,23 +4,40 @@
 
 namespace flash::web
 {
-inline constexpr std::string_view media_runtime = R"JS(export class ByteArray {
+inline constexpr std::string_view media_runtime = R"JS(const byteIndex = /^(0|[1-9]\d*)$/;
+
+export class ByteArray {
     #bytes = new Uint8Array(32);
+    #view = new DataView(this.#bytes.buffer);
     #length = 0;
     #position = 0;
+    #shared = false;
     endian = "bigEndian";
 
-    constructor(input) {
-        if (input != null) this.append(input instanceof Uint8Array ? input : new Uint8Array(input));
+    constructor(input, shared = false) {
+        if (input != null) {
+            const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+            if (shared) {
+                if (bytes.byteLength > 0x10000000) throw new RangeError("Taille ByteArray invalide.");
+                this.#bytes = bytes;
+                this.#view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                this.#length = bytes.byteLength;
+                this.#shared = true;
+            } else this.append(bytes);
+        }
+        const methods = new Map();
         return new Proxy(this, {
             get: (target, key) => {
-                if (typeof key === "string" && /^(0|[1-9]\d*)$/.test(key))
+                if (typeof key === "string" && byteIndex.test(key))
                     return Number(key) < target.length ? target.#bytes[Number(key)] : undefined;
                 const value = Reflect.get(target, key, target);
-                return typeof value === "function" ? value.bind(target) : value;
+                if (typeof value !== "function") return value;
+                let bound = methods.get(value);
+                if (!bound) { bound = value.bind(target); methods.set(value, bound); }
+                return bound;
             },
             set: (target, key, value) => {
-                if (typeof key === "string" && /^(0|[1-9]\d*)$/.test(key)) {
+                if (typeof key === "string" && byteIndex.test(key)) {
                     const index = Number(key);
                     target.#reserve(index + 1);
                     if (index >= target.#length) target.length = index + 1;
@@ -33,10 +50,13 @@ inline constexpr std::string_view media_runtime = R"JS(export class ByteArray {
     }
     #reserve(size) {
         if (!Number.isSafeInteger(size) || size < 0 || size > 0x10000000) throw new RangeError("Taille ByteArray invalide.");
-        if (size > this.#bytes.length) {
-            const bytes = new Uint8Array(Math.max(size, Math.min(this.#bytes.length * 2, 0x10000000)));
+        if (size > this.#bytes.length || this.#shared) {
+            const capacity = size > this.#bytes.length ? Math.max(size, Math.min(this.#bytes.length * 2, 0x10000000)) : this.#length;
+            const bytes = new Uint8Array(Math.max(size, capacity));
             bytes.set(this.#bytes.subarray(0, this.#length));
             this.#bytes = bytes;
+            this.#view = new DataView(bytes.buffer);
+            this.#shared = false;
         }
     }
     get length() { return this.#length; }
@@ -72,13 +92,18 @@ inline constexpr std::string_view media_runtime = R"JS(export class ByteArray {
         return this.#bytes.subarray(start, start + size);
     }
     #write(method, width, value) {
-        const data = new Uint8Array(width);
-        new DataView(data.buffer)[method](0, value, this.endian === "littleEndian");
-        this.#out(data);
+        const end = this.#position + width;
+        this.#reserve(end);
+        if (this.#position > this.#length) this.#bytes.fill(0, this.#length, this.#position);
+        this.#view[method](this.#position, value, this.endian === "littleEndian");
+        this.#length = Math.max(this.#length, end);
+        this.#position = end;
     }
     #read(method, width) {
-        const data = this.#in(width);
-        return new DataView(data.buffer, data.byteOffset, width)[method](0, this.endian === "littleEndian");
+        if (width > this.bytesAvailable) throw new RangeError("Fin du ByteArray.");
+        const value = this.#view[method](this.#position, this.endian === "littleEndian");
+        this.#position += width;
+        return value;
     }
     writeBoolean(value) { this.writeByte(value ? 1 : 0); }
     writeByte(value) { this.#write("setInt8", 1, value); }
