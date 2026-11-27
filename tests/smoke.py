@@ -242,6 +242,24 @@ def check(exe, folder, asc=None):
     assert list((web_demo / "sources" / "avm1").glob("*.as"))
     assert not list(web_demo.rglob("*.swf"))
 
+    adpcm_movie = folder / "ADPCM.swf"
+    adpcm_stereo = struct.pack("<HBI", 1, 0x1f, 3) + bits(
+        (2, 2), (100, 16), (0, 6), (-100, 16), (0, 6), (7, 4), (15, 4), (0, 4), (8, 4))
+    adpcm_blocks = struct.pack("<HBI", 2, 0x1a, 4097) + bits(
+        (2, 2), (0, 16), (0, 6), (0, 4095 * 4), (4321, 16), (0, 6))
+    adpcm_body = (rectangle(880, 880) + struct.pack("<HH", 24 * 256, 1) +
+                  tag(14, adpcm_stereo) + tag(14, adpcm_blocks) + tag(1) + tag(0))
+    adpcm_movie.write_bytes(swf(b"FWS", adpcm_body, adpcm_body))
+    web_audio = folder / "html5-adpcm"
+    run("export-html5", adpcm_movie, web_audio)
+    scene = json.loads((web_audio / "scene.json").read_text("utf-8"))
+    assert scene["audioTiming"] == {"1": [44100, 3, 0], "2": [22050, 4097, 0]}
+    with wave.open(str(web_audio / scene["audio"]["1"]), "rb") as audio:
+        assert (audio.getnchannels(), audio.getsampwidth(), audio.getnframes()) == (2, 2, 3)
+        assert audio.readframes(3) == struct.pack("<hhhhhh", 100, -100, 111, -111, 113, -113)
+    with wave.open(str(web_audio / scene["audio"]["2"]), "rb") as audio:
+        assert audio.readframes(4097) == b"\0" * (4096 * 2) + struct.pack("<h", 4321)
+
     web_effects = folder / "html5-effects"
     effects_movie = folder / "Web effects.swf"
     color_matrix = [1, 0, 0, 0, 64, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
@@ -500,6 +518,11 @@ def check(exe, folder, asc=None):
             channel.addEventListener(Event.SOUND_COMPLETE, soundReady);
         }
         public function received(value:String):void { trace(value); receiver.close(); }
+        private function ordered():Array {
+            var numbers:Array = [3, 1, 2];
+            numbers.sort(function(left:int, right:int):int { return left - right; });
+            return numbers;
+        }
         private function httpReady(e:Event):void {
             var request:URLLoader = URLLoader(e.currentTarget);
             var parsed:XML = new XML(request.data);
@@ -566,6 +589,8 @@ def check(exe, folder, asc=None):
             assert result.returncode == 3, result.stderr
             javascript = (web_as3 / "classes.js").read_text(encoding="utf-8")
             assert 'clip.superInit(5);' in javascript and 'console.log("Converted AS3");' in javascript, javascript
+            assert '["ordered"]: { hidden: true, error: null' in javascript
+            assert '["sort"](' in javascript and 'function ($' in javascript
             scene = json.loads((web_as3 / "scene.json").read_text(encoding="utf-8"))
             assert scene["clips"]["0"]["type"] == "demo.WebScene"
             assert scene["clips"]["78"]["type"] == "demo.WebBase"

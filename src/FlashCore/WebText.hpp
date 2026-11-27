@@ -7,7 +7,7 @@ namespace flash::web
 inline constexpr std::string_view text_runtime = R"JS(const NS = "http://www.w3.org/2000/svg";
 const elements = new Set(["a", "b", "br", "em", "font", "i", "li", "p", "s", "span", "strong", "textformat", "u"]);
 const discard = new Set(["script", "style", "iframe", "object", "embed", "svg", "math", "template"]);
-const twips = value => Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0) * 20;
+const pixels = value => Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0);
 const color = value => {
     if (typeof value === "number") return "#" + (value & 0xffffff).toString(16).padStart(6, "0");
     const css = String(value ?? "").trim();
@@ -88,7 +88,7 @@ export class StyleSheet {
 function formatting(node, style, resolveFont) {
     if (!style) return;
     const size = parseFloat(style.fontSize ?? style.size);
-    if (Number.isFinite(size) && size > 0) node.style.fontSize = twips(size) + "px";
+    if (Number.isFinite(size) && size > 0) node.style.fontSize = size + "px";
     const fill = color(style.color);
     if (fill && CSS.supports("color", fill)) node.style.color = fill;
     const family = style.fontFamily ?? style.font;
@@ -135,12 +135,12 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             formatting(node, { color: item.getAttribute("color"), font: item.getAttribute("face"),
                 size: size && !/^[+-]/.test(size) ? size : null }, resolveFont);
             if (size && /^[+-]\d+(\.\d+)?$/.test(size))
-                node.style.fontSize = "calc(1em " + size[0] + " " + twips(size.slice(1)) + "px)";
+                node.style.fontSize = "calc(1em " + size[0] + " " + pixels(size.slice(1)) + "px)";
         }
         if (kind === "textformat")
             for (const [attribute, property] of [["leftmargin", "paddingLeft"], ["rightmargin", "paddingRight"], ["indent", "textIndent"]]) {
                 const number = Number(item.getAttribute(attribute));
-                if (Number.isFinite(number)) node.style[property] = number * 20 + "px";
+                if (Number.isFinite(number)) node.style[property] = number + "px";
             }
         if (kind === "a") {
             const href = item.getAttribute("href") ?? "";
@@ -169,15 +169,17 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
 }
 
 )JS" R"JS(export function createTextField(definition = {}, emit = () => {}, face) {
-    const [x, y, width, height] = definition.bounds ?? [0, 0, 2000, 2000];
+    const [x, y, width, height] = (definition.bounds ?? [0, 0, 2000, 2000]).map(value => value / 20);
     const node = document.createElementNS(NS, "foreignObject");
+    // Let the browser lay out text at its real font size inside a scene measured in twips.
+    node.setAttribute("transform", "scale(20)");
     for (const [key, value] of Object.entries({ x, y, width, height })) node.setAttribute(key, value);
     const body = document.createElement("div"), content = document.createElement("div");
-    const size = definition.height ?? 240;
-    const [left, right] = definition.margins ?? [0, 0];
-    const gutter = 40;
+    const size = (definition.height ?? 240) / 20;
+    const [left, right] = (definition.margins ?? [0, 0]).map(value => value / 20);
+    const gutter = 2;
     const initialFormat = {
-        size: size / 20, color: definition.fill ?? "#000000",
+        size, color: definition.fill ?? "#000000",
         align: ["left", "right", "center", "justify"][definition.alignment] ?? "left",
         font: face?.fontName,
         bold: face?.fontStyle.toLowerCase().includes("bold"), italic: face?.fontStyle.toLowerCase().includes("italic"),
@@ -228,21 +230,22 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             maxWidth: values.wordWrap ? Math.max(1, fieldWidth - paddingWidth()) + "px" : "none",
         });
         document.body.append(sample);
-        measured = [sample.offsetWidth, sample.offsetHeight];
+        const box = sample.getBoundingClientRect();
+        measured = [box.width, box.height];
         sample.remove();
         return measured;
     }
 
-    const paddingLeft = () => gutter + (values.defaultTextFormat?.leftMargin == null ? left : twips(values.defaultTextFormat.leftMargin));
-    const paddingRight = () => gutter + (values.defaultTextFormat?.rightMargin == null ? right : twips(values.defaultTextFormat.rightMargin));
+    const paddingLeft = () => gutter + (values.defaultTextFormat?.leftMargin == null ? left : pixels(values.defaultTextFormat.leftMargin));
+    const paddingRight = () => gutter + (values.defaultTextFormat?.rightMargin == null ? right : pixels(values.defaultTextFormat.rightMargin));
     const paddingWidth = () => paddingLeft() + paddingRight();
 
     function updateBounds() {
         const mode = values.autoSize;
         const automatic = mode === "left" || mode === "center" || mode === "right";
         const [textWidth, textHeight] = automatic ? measure() : [0, 0];
-        const nextWidth = automatic && !values.wordWrap ? Math.max(1, Math.ceil(textWidth + paddingWidth())) : fieldWidth;
-        const nextHeight = automatic ? Math.max(1, Math.ceil(textHeight + 2 * gutter)) : fieldHeight;
+        const nextWidth = automatic && !values.wordWrap ? Math.ceil((textWidth + paddingWidth()) * 20) / 20 : fieldWidth;
+        const nextHeight = automatic ? Math.ceil((textHeight + 2 * gutter) * 20) / 20 : fieldHeight;
         const anchor = mode === "right" ? 1 : mode === "center" ? 0.5 : 0;
         horizontalShift = (fieldWidth - nextWidth) * anchor;
         for (const [key, value] of [["x", x + horizontalShift], ["width", nextWidth], ["height", nextHeight]])
@@ -256,7 +259,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         content.style.whiteSpace = values.multiline || values.wordWrap ? "pre-wrap" : "pre";
         content.style.overflowWrap = values.wordWrap ? "anywhere" : "normal";
         body.style.userSelect = values.selectable || values.type === "input" ? "text" : "none";
-        body.style.border = values.border ? "20px solid " + color(values.borderColor) : "none";
+        body.style.border = values.border ? "1px solid " + color(values.borderColor) : "none";
         body.style.backgroundColor = values.background ? color(values.backgroundColor) : "transparent";
         body.style.padding = `${gutter}px ${paddingRight()}px ${gutter}px ${paddingLeft()}px`;
         content.style.fontSize = size + "px";
@@ -264,8 +267,8 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             fontStyle: "", textDecoration: "", textAlign: initialFormat.align });
         formatting(content, values.defaultTextFormat, resolveFont);
         const leading = values.defaultTextFormat?.leading;
-        content.style.lineHeight = Math.max(1, parseFloat(content.style.fontSize) * 1.12 +
-            (leading == null ? definition.leading ?? 0 : twips(leading))) + "px";
+        content.style.lineHeight = Math.max(0.05, parseFloat(content.style.fontSize) * 1.12 +
+            (leading == null ? (definition.leading ?? 0) / 20 : pixels(leading))) + "px";
         if (values.displayAsPassword && values.type === "input") {
             const input = document.createElement("input");
             input.type = "password";
@@ -313,7 +316,7 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             render();
         } });
     Object.defineProperties(field, {
-        offsetX: { value: () => horizontalShift / 20 },
+        offsetX: { value: () => horizontalShift },
         text: { enumerable: true, get: () => html ? content.innerText : source, set: value => {
             value = String(value ?? "");
             if (!html && source === value) return;
@@ -334,12 +337,12 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         }, set: value => {
             field.setTextFormat({ color: value });
         } },
-        width: { enumerable: true, get: () => Number(node.getAttribute("width")) / 20,
-            set: value => { fieldWidth = twips(value); measured = undefined; updateBounds(); } },
-        height: { enumerable: true, get: () => Number(node.getAttribute("height")) / 20,
-            set: value => { fieldHeight = twips(value); updateBounds(); } },
-        textWidth: { enumerable: true, get: () => measure()[0] / 20 },
-        textHeight: { enumerable: true, get: () => measure()[1] / 20 },
+        width: { enumerable: true, get: () => Number(node.getAttribute("width")),
+            set: value => { fieldWidth = pixels(value); measured = undefined; updateBounds(); } },
+        height: { enumerable: true, get: () => Number(node.getAttribute("height")),
+            set: value => { fieldHeight = pixels(value); updateBounds(); } },
+        textWidth: { enumerable: true, get: () => measure()[0] },
+        textHeight: { enumerable: true, get: () => measure()[1] },
         length: { enumerable: true, get: () => field.text.length },
         scrollV: { enumerable: true, get: () => Math.floor(body.scrollTop / size) + 1, set: n => { body.scrollTop = Math.max(0, n - 1) * size; } },
         maxScrollV: { enumerable: true, get: () => Math.ceil(Math.max(0, body.scrollHeight - body.clientHeight) / size) + 1 },

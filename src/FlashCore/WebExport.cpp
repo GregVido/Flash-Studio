@@ -554,6 +554,7 @@ function displayObjectFor(node) {
 }
 
 let pointerX = 0, pointerY = 0;
+let pointerEditor;
 const trackPointer = event => { pointerX = event.clientX; pointerY = event.clientY; };
 for (const type of ["pointermove", "pointerdown", "pointerup"])
     stage.addEventListener(type, trackPointer, { capture: true, passive: true });
@@ -757,7 +758,7 @@ function cloneMaskGraphic(node) {
         const bitmap = bitmapSurfaces.get(originals[index])?.();
         if (!bitmap?.width || !bitmap.height) continue;
         const image = element("image", { href: bitmap.imageUrl() });
-        for (const attr of ["x", "y", "width", "height"]) if (originals[index].hasAttribute(attr))
+        for (const attr of ["x", "y", "width", "height", "transform"]) if (originals[index].hasAttribute(attr))
             image.setAttribute(attr, originals[index].getAttribute(attr));
         surfaces[index].replaceWith(image);
     }
@@ -839,6 +840,7 @@ function property(layer, name) {
     }
 }
 
+let nextFocus;
 function eventView(node) {
     const listeners = new Map();
     return {
@@ -887,6 +889,8 @@ function eventView(node) {
                     };
                     if (kind === "MouseEvent" || kind === "KeyboardEvent" || kind === "TimerEvent")
                         view.updateAfterEvent = updateAfterEvent;
+                    if (eventType === "focusin" || eventType === "focusout")
+                        view.relatedObject = event.relatedTarget === stage ? null : displayObjectFor(event.relatedTarget);
                     if (kind === "MouseEvent") {
                         view.relatedObject = displayObjectFor(event.relatedTarget);
                         view.buttonDown = Boolean(event.buttons & 1);
@@ -901,7 +905,15 @@ function eventView(node) {
                         });
                     }
                     eventKinds.set(view, kind);
-                    callback(view);
+                    if (eventType !== "focusout") callback(view);
+                    else {
+                        const previous = nextFocus;
+                        // The DOM briefly reports body as active during a native focus transfer.
+                        nextFocus = { view: !event.relatedTarget || event.relatedTarget === stage ?
+                            displayObjectFor(pointerEditor?.node) ?? view.relatedObject : view.relatedObject };
+                        try { callback(view); }
+                        finally { nextFocus = previous; }
+                    }
                 } catch (error) { scriptProblem(error); }
             };
             byCallback.set(callback, handle);
@@ -964,6 +976,7 @@ function eventView(node) {
     let next = container.firstChild;
     for (const node of nodes) {
         if (node === next) next = next.nextSibling;
+        else if (node.parentNode === container && container.moveBefore) container.moveBefore(node, next);
         else container.insertBefore(node, next);
     }
     if (blendMasks.has(container) || container.lastElementChild?.hasAttribute("data-flash-composite")) updateBlendMask(container);
@@ -1418,7 +1431,11 @@ class BitmapData {
         this.sample = null;
         this.maskImage = null;
         this.linkedUrl = "";
-        if (!this.locked) for (const redraw of this.listeners) redraw();
+        if (!this.locked) for (const observer of this.listeners) {
+            const redraw = observer.deref();
+            if (redraw) redraw();
+            else this.listeners.delete(observer);
+        }
     }
     getPixel32(x, y) {
         x = Math.trunc(x); y = Math.trunc(y);
@@ -1864,9 +1881,10 @@ function paintDisplayContents(node, context, resources) {
 function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
     const view = scriptSprite("Bitmap", undefined, () => redraw());
     const node = displayNodes.get(view);
-    const surface = element("foreignObject");
+    const surface = element("foreignObject", { transform: "scale(20)" });
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 0;
+    const context = canvas.getContext("2d");
     canvas.style.cssText = "display:block;width:100%;height:100%";
     surface.append(canvas);
     node.firstChild.append(surface);
@@ -1874,11 +1892,12 @@ function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
     bitmapSurfaces.set(surface, () => bitmap);
     const drawPixels = () => {
         if (!canvas.width || !canvas.height) return;
-        const context = canvas.getContext("2d");
-        context.clearRect(0, 0, canvas.width, canvas.height);
         const displacement = view.filters.find(filter => displayTypes.get(filter) === "DisplacementMapFilter" && filter.mapBitmap?.width && filter.mapBitmap.height);
         if (displacement) context.putImageData(displacePixels(context, bitmap, bitmap.rect, displacement), 0, 0);
-        else context.drawImage(bitmap.canvas, 0, 0);
+        else {
+            context.globalCompositeOperation = "copy";
+            context.drawImage(bitmap.canvas, 0, 0);
+        }
         if (node.closest("[data-flash-composite]")) surface.setAttribute("data-flash-pixels", bitmap.revision);
     };
     const redraw = () => {
@@ -1886,12 +1905,13 @@ function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
         if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
-            surface.setAttribute("width", width * 20);
-            surface.setAttribute("height", height * 20);
+            surface.setAttribute("width", width);
+            surface.setAttribute("height", height);
         }
         if (width && height) pendingBitmapDraws.add(drawPixels);
         else pendingBitmapDraws.delete(drawPixels);
     };
+    const observer = new WeakRef(redraw);
     view.pixelSnapping = pixelSnapping;
     Object.defineProperties(view, {
         smoothing: { get: () => smoothing, set: value => {
@@ -1901,9 +1921,9 @@ function scriptBitmap(data, pixelSnapping = "auto", smoothing = false) {
         bitmapData: {
             get: () => bitmap,
             set: value => {
-                bitmap?.listeners?.delete(redraw);
+                bitmap?.listeners?.delete(observer);
                 bitmap = value ?? null;
-                bitmap?.listeners?.add(redraw);
+                bitmap?.listeners?.add(observer);
                 redraw();
             },
         },
@@ -2725,7 +2745,11 @@ Object.defineProperties(stageView, {
         const mode = String(value).toLowerCase();
         if (stageQuality !== mode) { stageQuality = mode; stage.dataset.flashQuality = mode; }
     } },
-    focus: { get: () => document.activeElement === stage ? null : displayObjectFor(document.activeElement),
+    focus: { get: () => {
+        if (nextFocus) return nextFocus.view;
+        const active = document.activeElement;
+        return active === stage ? displayObjectFor(pointerEditor?.node) : displayObjectFor(active);
+    },
         set: view => {
             const request = {};
             focusRequest = request;
@@ -3135,15 +3159,9 @@ function displayView(owner, clip, layer, node) {
         const rebuild = target !== this.frame + 1;
         let [updates, removals, color] = this.data.frames[target - 1];
         if (rebuild) {
-            // Compute the destination's display list before creating any new instances.
-            const placements = new Map();
-            color = "#fff";
-            for (let index = 0; index < target; ++index) {
-                const [rows, removed, fill] = this.data.frames[index];
-                for (const depth of removed) placements.delete(depth);
-                for (const row of rows) placements.set(row[0], row);
-                if (fill) color = fill;
-            }
+            const snapshot = timelineSnapshot(this.data, target);
+            const placements = snapshot.placements;
+            color = snapshot.color;
             removals = [...this.layers.keys()].filter(depth => !placements.has(depth));
             updates = placements.values();
         }
@@ -3199,7 +3217,30 @@ function displayView(owner, clip, layer, node) {
     }
 }
 
-)JS" R"JS(function makeLinkedClip(id, bundle) {
+)JS" R"JS(const timelineSnapshots = new WeakMap();
+function timelineSnapshot(timeline, frame) {
+    let cache = timelineSnapshots.get(timeline);
+    const existing = cache?.get(frame);
+    if (existing) return existing;
+    const placements = new Map();
+    let color = "#fff";
+    for (let index = 0; index < frame; ++index) {
+        const [rows, removed, fill] = timeline.frames[index];
+        for (const depth of removed) placements.delete(depth);
+        for (const row of rows) placements.set(row[0], row);
+        if (fill) color = fill;
+    }
+    const snapshot = { placements, color };
+    // Share immutable placement rows across instances of the same symbol.
+    if (placements.size <= 256) {
+        if (!cache) timelineSnapshots.set(timeline, cache = new Map());
+        if (cache.size >= 4) cache.delete(cache.keys().next().value);
+        cache.set(frame, snapshot);
+    }
+    return snapshot;
+}
+
+function makeLinkedClip(id, bundle) {
     const node = element("g");
     const layer = { row: [0, id, [1, 0, 0, 1, 0, 0], 1, "", 0, true], node, overrides: Object.create(null) };
     const clip = new Clip(id, node, [], null, layer, false, bundle);
@@ -3329,11 +3370,22 @@ try {
     root.seek(1, false);
     stage.tabIndex = -1;
     stage.addEventListener("pointerdown", event => {
-        browserMedia.resumeAudio();
-        if (!event.target.closest("input, textarea, select, button, a, [contenteditable=true], [contenteditable=plaintext-only]"))
-            stage.focus({ preventScroll: true });
-    });
-    stage.addEventListener("keydown", () => browserMedia.resumeAudio(), { passive: true });
+        if (!event.isPrimary || event.button !== 0) return;
+        const editor = event.target.closest("input, textarea, select, button, a, [contenteditable=true], [contenteditable=plaintext-only]");
+        pointerEditor = editor?.matches("input, textarea, [contenteditable]") ? { node: editor, id: event.pointerId } : null;
+        if (pointerEditor) editor.focus({ preventScroll: true });
+        else if (!editor) stage.focus({ preventScroll: true });
+    }, true);
+    for (const type of ["pointerup", "pointercancel"]) document.addEventListener(type, event => {
+        if (event.pointerId !== pointerEditor?.id) return;
+        const { node } = pointerEditor;
+        pointerEditor = null;
+        // Authored popup managers can remove and reinsert a window when it is raised.
+        if (type === "pointerup" && node.isConnected && node !== document.activeElement)
+            node.focus({ preventScroll: true });
+    }, true);
+    for (const type of ["pointerup", "keydown"])
+        stage.addEventListener(type, () => browserMedia.resumeAudio(), { capture: true, passive: true });
     button.addEventListener("click", () => {
         browserMedia.resumeAudio();
         running = !running;

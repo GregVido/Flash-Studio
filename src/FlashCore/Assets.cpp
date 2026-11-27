@@ -9,6 +9,7 @@
 #include <mfreadwrite.h>
 #include <wincodec.h>
 #include <wrl/client.h>
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -567,6 +568,65 @@ Asset bitmap_with_alpha(Bytes image, ByteView compressed_alpha)
 
 void ascii(Bytes& output, std::string_view value) { output.insert(output.end(), value.begin(), value.end()); }
 
+Asset adpcm_audio(Reader& input, unsigned settings, unsigned sample_count)
+{
+    constexpr int steps[]{
+        7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37,
+        41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173,
+        190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658,
+        724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066,
+        2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894,
+        6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289,
+        16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+    };
+    constexpr int index_changes[][16]{
+        {-1, 2},
+        {-1, -1, 2, 4},
+        {-1, -1, -1, -1, 2, 4, 6, 8},
+        {-1, -1, -1, -1, -1, -1, -1, -1, 1, 2, 4, 6, 8, 10, 13, 16},
+    };
+    const auto channels = settings & 1 ? 2u : 1u;
+    Bytes samples;
+    if (!sample_count)
+        return pcm_audio(settings | 2, samples);
+    BitReader bits(input);
+    const auto width = bits.unsigned_bits(2) + 2;
+    const auto blocks = (std::uint64_t{sample_count} + 4095) / 4096;
+    const auto expected = 2 + channels * (22 * blocks + (sample_count - blocks) * width);
+    if ((expected + 7) / 8 > input.remaining() + 1 || sample_count > max_file_size / (channels * 2))
+        throw std::runtime_error("Échantillons ADPCM invalides ou tronqués.");
+    samples.reserve(std::size_t{sample_count} * channels * 2);
+    const auto sign = 1u << (width - 1);
+    for (unsigned block = 0; block < sample_count; block += 4096)
+    {
+        std::array<int, 2> predictor{}, index{};
+        // Each block starts with one absolute PCM sample and a six-bit step index per channel.
+        for (unsigned channel = 0; channel < channels; ++channel)
+        {
+            predictor[channel] = bits.signed_bits(16);
+            index[channel] = static_cast<int>(bits.unsigned_bits(6));
+            put16(samples, static_cast<std::uint16_t>(predictor[channel]));
+        }
+        const auto last = std::min(sample_count, block + 4096);
+        for (unsigned frame = block + 1; frame < last; ++frame)
+        {
+            for (unsigned channel = 0; channel < channels; ++channel)
+            {
+                const auto code = bits.unsigned_bits(width);
+                const auto magnitude = code & (sign - 1);
+                auto step = steps[index[channel]];
+                auto delta = step >> (width - 1);
+                for (auto bit = sign >> 1; bit; bit >>= 1, step >>= 1)
+                    if (magnitude & bit) delta += step;
+                predictor[channel] = std::clamp(predictor[channel] + (code & sign ? -delta : delta), -32768, 32767);
+                index[channel] = std::clamp(index[channel] + index_changes[width - 2][magnitude], 0, 88);
+                put16(samples, static_cast<std::uint16_t>(predictor[channel]));
+            }
+        }
+    }
+    return pcm_audio(settings | 2, samples);
+}
+
 std::optional<Asset> sound(ByteView payload)
 {
     Reader input(payload);
@@ -580,6 +640,8 @@ std::optional<Asset> sound(ByteView payload)
         const auto data = input.take(input.remaining());
         return Asset{L".mp3", Bytes(data.begin(), data.end())};
     }
+    if (codec == 1)
+        return adpcm_audio(input, settings, sample_count);
     if (codec != 0 && codec != 3)
         return {};
     const auto block = (settings & 1 ? 2u : 1u) * (settings & 2 ? 2u : 1u);

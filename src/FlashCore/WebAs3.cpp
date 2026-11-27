@@ -158,6 +158,7 @@ class Compiler
     std::map<std::string_view, std::string_view> locals_;
     std::size_t cursor_{};
     unsigned depth_{}, loops_{}, switches_{}, indent_{};
+    unsigned closures_{};
     bool called_super_{};
     std::string_view return_type_;
     std::string body_;
@@ -256,6 +257,7 @@ class Compiler
     Expression primary()
     {
         const auto token = peek();
+        if (eat("function")) return {closure()};
         if (eat("("))
         {
             auto value = expression();
@@ -298,7 +300,7 @@ class Compiler
             const auto known_class = local ? std::string{} : qualified_class(first);
             if (local || (known_class.empty() && (scope_.fields.contains(first) || scope_.statics.contains(first))))
             {
-                auto value = first == "this" ? std::string("clip.view") : locals_.contains(first) ? "$" + std::string(first) :
+                auto value = first == "this" ? std::string(closures_ ? "this" : "clip.view") : locals_.contains(first) ? "$" + std::string(first) :
                     (scope_.fields.contains(first) && !scope_.static_method ? "clip.view[" : "clip.staticView[") + json_string(first) + ']';
                 for (;;)
                 {
@@ -359,7 +361,7 @@ class Compiler
         }
         auto id = name();
         if (in(id, {"true", "false", "null", "undefined", "NaN", "Infinity"})) return {std::string(id)};
-        if (id == "this") return {"clip.self"};
+        if (id == "this") return {closures_ ? "this" : "clip.self"};
         if (id == "super") return {"clip.superView"};
         if (id == "trace") return {"console.log"};
         if (id == "Array" && peek() == ".")
@@ -761,7 +763,7 @@ class Compiler
         }
         else if (start == "super" && peek(1) == "(")
         {
-            if (!scope_.constructor) fail("Appel de constructeur hors du constructeur");
+            if (!scope_.constructor || closures_) fail("Appel de constructeur hors du constructeur");
             take();
             expect("(");
             line("clip.superInit(" + arguments(")") + ");");
@@ -775,13 +777,8 @@ class Compiler
         }
     }
 
-public:
-    Compiler(std::string_view source, const WebScope& scope) : tokens_(scan(source)), scope_(scope) {}
-
-    WebFunction run()
+    WebFunction function(bool method)
     {
-        expect("function");
-        name();
         expect("(");
         std::string parameters, coercions;
         if (!eat(")"))
@@ -790,7 +787,8 @@ public:
             {
                 const auto key = name();
                 const auto annotation = eat(":") ? type() : "*";
-                parameters += ", $" + std::string(key);
+                if (method || !parameters.empty()) parameters += ", ";
+                parameters += '$' + std::string(key);
                 if (eat("=")) parameters += " = " + expression().text;
                 locals_.insert_or_assign(key, annotation);
                 const auto input = "$" + std::string(key);
@@ -802,16 +800,46 @@ public:
         }
         return_type_ = eat(":") ? type() : "*";
         expect("{");
-        const auto write = [&]
-        {
-            while (!eat("}")) statement();
-            if (!peek().empty()) fail("Source supplémentaire après la fonction");
-        };
-        write();
+        while (!eat("}")) statement();
         if (body_.find("++loopCount") != std::string::npos)
             coercions += "let loopCount = 0;\nconst loopDeadline = performance.now() + 2500;\n";
-        if (scope_.constructor && !called_super_) coercions += "clip.superInit();\n";
+        if (method && scope_.constructor && !called_super_) coercions += "clip.superInit();\n";
         return {std::move(parameters), coercions + body_};
+    }
+
+    std::string closure()
+    {
+        const Nest nest(depth_);
+        const auto identifier = peek() == "(" ? std::string{} : "$" + std::string(name());
+        const auto surrounding_locals = locals_;
+        auto surrounding_body = std::exchange(body_, {});
+        const auto surrounding_return = return_type_;
+        const auto indent = std::exchange(indent_, 0u);
+        const auto loops = std::exchange(loops_, 0u);
+        const auto switches = std::exchange(switches_, 0u);
+        if (!identifier.empty()) locals_.insert_or_assign(std::string_view(identifier).substr(1), "*");
+        ++closures_;
+        const auto compiled = function(false);
+        --closures_;
+        locals_ = surrounding_locals;
+        body_ = std::move(surrounding_body);
+        return_type_ = surrounding_return;
+        indent_ = indent;
+        loops_ = loops;
+        switches_ = switches;
+        return "(function " + identifier + '(' + compiled.parameters + ") {\n" + compiled.body + "})";
+    }
+
+public:
+    Compiler(std::string_view source, const WebScope& scope) : tokens_(scan(source)), scope_(scope) {}
+
+    WebFunction run()
+    {
+        expect("function");
+        name();
+        auto compiled = function(true);
+        if (!peek().empty()) fail("Source supplémentaire après la fonction");
+        return compiled;
     }
 };
 }

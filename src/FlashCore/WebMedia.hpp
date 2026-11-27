@@ -362,6 +362,17 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
     const mediaVolumes = new Map();
     const volumeOf = value => Math.max(0, Math.min(1, Number(value?.volume) || 0));
     let context, masterGain, masterTransform = new SoundTransform(), decodedBytes = 0;
+    function openAudio() {
+        if (typeof AudioContext !== "function") return null;
+        if (!context) {
+            context = new AudioContext();
+            masterGain = context.createGain();
+            masterGain.gain.value = volumeOf(masterTransform);
+            masterGain.connect(context.destination);
+        }
+        if (context.state === "suspended") context.resume().catch(() => {});
+        return context;
+    }
     function soundBuffer(url, ctx) {
         const cached = decodedSounds.get(url);
         if (cached) {
@@ -473,15 +484,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                     play();
                 };
                 channels.add(channel);
-                if (url.origin === location.origin && /\/assets\/[^/]+\.(mp3|wav|ogg)$/i.test(url.pathname) &&
-                    typeof AudioContext === "function") {
-                    if (!context) {
-                        context = new AudioContext();
-                        masterGain = context.createGain();
-                        masterGain.gain.value = volumeOf(masterTransform);
-                        masterGain.connect(context.destination);
-                    }
-                    if (context.state === "suspended") context.resume().catch(() => {});
+                if (url.origin === location.origin && /\/assets\/[^/]+\.(mp3|wav|ogg)$/i.test(url.pathname) && openAudio()) {
                     soundBuffer(url.href, context).then(buffer => {
                         if (stopped) return;
                         // Flash embeds PCM sample counts and the decoder's MP3 priming offset separately.
@@ -529,7 +532,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
         },
         get masterVolume() { return volumeOf(masterTransform); },
         embeddedSound(url, timing) { return sound(null, undefined, { url, timing }); },
-        resumeAudio() { if (context?.state === "suspended") context.resume().catch(() => {}); },
+        resumeAudio: openAudio,
         isSoundChannel(value) { return soundChannels.has(value); },
         stopAll() { for (const channel of channels) channel.stop(); },
         navigate(request, target = "_self", address) {
