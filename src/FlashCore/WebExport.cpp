@@ -11,6 +11,7 @@
 #include <atomic>
 #include <fstream>
 #include <format>
+#include <future>
 #include <mutex>
 #include <regex>
 #include <thread>
@@ -106,7 +107,7 @@ button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
 #stage [data-flash-composite], #stage [data-flash-composite] * { pointer-events: none !important; }
 #stage [data-flash-hit] :is(image, use, path, rect, ellipse, circle) { pointer-events: visiblePainted; }
 #stage[data-flash-quality="low"] { shape-rendering: crispEdges; }
-#stage[data-flash-quality="low"] :is(image, canvas) { image-rendering: pixelated !important; }
+#stage :is(canvas, img, image:not([href$=".svg"])) { image-rendering: pixelated !important; }
 #stage :is([data-flash-no-children], [data-flash-decoration]) * { pointer-events: none !important; }
 #linked { color: #d6ddea; max-width: min(90vw, 720px); }
 .controls a, #linked a, .catalogue a { color: #9cc9ff; overflow-wrap: anywhere; }
@@ -179,8 +180,13 @@ art.before(background);
 function asset(id, bundle) {
     const definition = bundle.scene.assets[id];
     if (!definition) return element("g");
-    const href = new URL(definition.url, bundle.page).href;
-    const key = href + "\0" + definition.bounds.join(",");
+    let resource = bundle.assetKeys.get(id);
+    if (!resource) {
+        const href = new URL(definition.url, bundle.page).href;
+        resource = { href, key: href + "\0" + definition.bounds.join(",") };
+        bundle.assetKeys.set(id, resource);
+    }
+    const { href, key } = resource;
     let entry = defined.get(key);
     if (!entry) {
         const [x, y, width, height] = definition.bounds;
@@ -967,6 +973,11 @@ function eventView(node) {
 }
 
 )JS" R"JS(function reconcileChildren(container, nodes) {
+    if (container.childNodes.length === nodes.length) {
+        let child = container.firstChild;
+        for (let index = 0; index < nodes.length && child === nodes[index]; ++index) child = child.nextSibling;
+        if (!child && !blendMasks.has(container) && !container.lastElementChild?.hasAttribute("data-flash-composite")) return;
+    }
     const retained = new Set(nodes);
     for (let child = container.firstChild; child;) {
         const next = child.nextSibling;
@@ -2693,7 +2704,7 @@ const classHooks = {
     },
 };
 function makeBundle(scene, actions, definitions, page, address = page) {
-    const bundle = { id: bundleSequence++, scene, actions, page, symbols: new Map(), initialized: new Set(),
+    const bundle = { id: bundleSequence++, scene, actions, page, symbols: new Map(), initialized: new Set(), assetKeys: new Map(),
         source: new URL(scene.workspace?.source ?? address, page) };
     for (const [id, clip] of Object.entries(scene.clips))
         if (id !== "0" && clip.type && !bundle.symbols.has(clip.type)) bundle.symbols.set(clip.type, Number(id));
@@ -3059,9 +3070,13 @@ function displayView(owner, clip, layer, node) {
             const cos = Math.cos(rotation), sin = Math.sin(rotation);
             [a, b, c, d] = [a*cos-b*sin, a*sin+b*cos, c*cos-d*sin, c*sin+d*cos];
         }
-        const put = (name, value) => { if (node.getAttribute(name) !== String(value)) node.setAttribute(name, value); };
-        if ([a, b, c, d, x, y].every(Number.isFinite))
-            put("transform", "matrix(" + [a,b,c,d,x,y].join(" ") + ")");
+        const put = (name, value) => {
+            const text = String(value);
+            if (node.getAttribute(name) !== text) node.setAttribute(name, text);
+        };
+        if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d) &&
+            Number.isFinite(x) && Number.isFinite(y))
+            put("transform", "matrix(" + a + " " + b + " " + c + " " + d + " " + x + " " + y + ")");
         if (geometryOnly) return;
         if (layer.asset && row[11] !== layer.ratio) {
             layer.ratio = row[11];
@@ -3074,7 +3089,8 @@ function displayView(owner, clip, layer, node) {
             }
         }
         const color = row[8], effects = row[9];
-        const needsColor = color && (color.slice(0, 3).some(value => value !== 256) || color.slice(4).some(Boolean));
+        const needsColor = color && (color[0] !== 256 || color[1] !== 256 || color[2] !== 256 ||
+            color[4] || color[5] || color[6] || color[7]);
         const transform = !needsColor ? null : overrides.alpha === undefined ? color :
             [...color.slice(0, 3), Math.round(overrides.alpha * 256), ...color.slice(4, 7), 0];
         if (transform) authoredTints.set(node, transform);
@@ -3491,14 +3507,20 @@ std::string utf8_path(const std::filesystem::path& path)
     return {reinterpret_cast<const char*>(text.data()), text.size()};
 }
 
-std::string shared_visual(const Asset& asset, const std::filesystem::path& root,
-    const std::filesystem::path& package, std::mutex& mutex, ExportReport& report)
+std::array<UCHAR, 32> asset_digest(ByteView bytes)
 {
     std::array<UCHAR, 32> digest{};
     if (!BCRYPT_SUCCESS(BCryptHash(BCRYPT_SHA256_ALG_HANDLE, nullptr, 0,
-        const_cast<PUCHAR>(asset.bytes.data()), static_cast<ULONG>(asset.bytes.size()),
+        const_cast<PUCHAR>(bytes.data()), static_cast<ULONG>(bytes.size()),
         digest.data(), static_cast<ULONG>(digest.size()))))
         throw std::runtime_error("Impossible de calculer l’empreinte d’une ressource HTML5.");
+    return digest;
+}
+
+std::string shared_visual(const Asset& asset, const std::filesystem::path& root,
+    const std::filesystem::path& package, std::mutex& mutex, ExportReport& report)
+{
+    const auto digest = asset_digest(asset.bytes);
     constexpr std::wstring_view hex = L"0123456789abcdef";
     std::wstring filename;
     filename.reserve(64 + asset.extension.size());
@@ -3846,7 +3868,7 @@ bool public_asset(std::string_view extension)
     return extensions.contains(extension);
 }
 
-void scan_web_folder(const std::filesystem::path& folder, const std::filesystem::path& output, bool public_files,
+void scan_web_folder(const std::filesystem::path& folder, std::vector<std::filesystem::path>* public_files,
     std::map<std::string, std::filesystem::path>& movies, std::string& warnings, const std::filesystem::path& skip = {})
 {
     std::error_code error;
@@ -3859,7 +3881,7 @@ void scan_web_folder(const std::filesystem::path& folder, const std::filesystem:
         if (item.is_directory(error))
         {
             std::error_code marker_error;
-            if (path == output || path == skip || name == "node_modules" || name == "ruffle" ||
+            if (path == skip || name == "node_modules" || name == "ruffle" ||
                 name == "__flashstudio" || name.starts_with('.') ||
                 std::filesystem::is_regular_file(path / "__flashstudio" / "catalog.json", marker_error))
                 walker.disable_recursion_pending();
@@ -3872,14 +3894,7 @@ void scan_web_folder(const std::filesystem::path& folder, const std::filesystem:
         if (extension == ".swf")
             movies.try_emplace(web_path(relative), path);
         else if (public_files && public_asset(extension))
-        {
-            const auto destination = output / relative;
-            std::filesystem::create_directories(destination.parent_path(), error);
-            if (!error)
-                std::filesystem::copy_file(path, destination, std::filesystem::copy_options::skip_existing, error);
-            if (error)
-                warnings += "- Copie impossible pour " + utf8_path(relative) + "\n";
-        }
+            public_files->push_back(relative);
     }
     if (error)
         warnings += "- Parcours incomplet de " + utf8_path(folder.filename()) + "\n";
@@ -3938,6 +3953,29 @@ std::string workspace_network(const std::filesystem::path& project, const std::f
         ",\"lazyAssetPaths\":[\"/data/fx/\",\"/data.old/fx/\"]" : "";
     return "{\"http\":{},\"sockets\":{" + sockets + "},\"tcp\":{},\"backendPort\":" + backend + parameters + effects + "}\n";
 }
+
+void reuse_workspace_movie(const std::filesystem::path& root, const WorkspaceMovie& original, const WorkspaceMovie& job)
+{
+    const auto from = root / original.package, to = root / job.package;
+    const auto contents = read_file(from / "scene.json");
+    std::string scene(reinterpret_cast<const char*>(contents.data()), contents.size());
+    const auto route = ",\"source\":" + web::json_string(url_path(original.url));
+    const auto position = scene.rfind(route);
+    if (position == std::string::npos)
+        throw std::runtime_error("Chemin du film absent du paquet HTML5.");
+    scene.replace(position, route.size(), ",\"source\":" + web::json_string(url_path(job.url)));
+    std::filesystem::create_directories(to);
+    for (const auto& entry : std::filesystem::directory_iterator(from))
+    {
+        const auto name = entry.path().filename();
+        if (name == "scene.json" || name == "index.html")
+            continue;
+        std::filesystem::copy(entry.path(), to / name, std::filesystem::copy_options::recursive);
+    }
+    write_text(to / "scene.json", scene);
+    write_text(to / "index.html", std::format(web::page, web::html_text(utf8_path(job.path.stem())),
+        "../../stage.css", "../../stage.js"));
+}
 }
 
 std::string html5_classes(const Movie& movie)
@@ -3963,31 +4001,23 @@ ExportReport export_html5(const Movie& movie, const std::filesystem::path& desti
     return write_package(movie, input, ".", title, packages);
 }
 
-WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
-    const std::filesystem::path& preferred, const WebMovieOverrides& open_movies,
-    const std::function<void(std::size_t, std::size_t)>& progress)
+WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const WebMovieOverrides& open_movies)
 {
-    const auto selected_root = normalized_path(root);
-    const auto output = normalized_path(destination);
+    WebWorkspacePlan plan;
+    const auto& selected_root = plan.root = normalized_path(root);
     if (!std::filesystem::is_directory(selected_root))
         throw std::runtime_error("Dossier source introuvable.");
-    if (std::filesystem::exists(output) &&
-        (!std::filesystem::is_directory(output) || !std::filesystem::is_empty(output)))
-        throw std::runtime_error("Choisissez un dossier vide pour créer le projet exporté.");
     const auto selected_htdocs = ascii_lower(utf8_path(selected_root.filename())) == "htdocs";
     const auto parent = selected_root.parent_path();
-    const auto project = selected_htdocs && std::filesystem::is_regular_file(parent / "app.js") ? parent : selected_root;
+    plan.project = selected_htdocs && std::filesystem::is_regular_file(parent / "app.js") ? parent : selected_root;
     const auto htdocs = selected_root / "htdocs";
     const auto nested_htdocs = !selected_htdocs && std::filesystem::is_directory(htdocs);
-    const auto public_root = nested_htdocs ? htdocs : selected_root;
+    const auto& public_root = plan.public_root = nested_htdocs ? htdocs : selected_root;
     std::map<std::string, std::filesystem::path> sources;
-    std::string warnings;
-    const auto shared = output / "__flashstudio";
-    std::filesystem::create_directories(shared);
-    scan_web_folder(public_root, output, selected_htdocs || nested_htdocs, sources, warnings);
+    scan_web_folder(public_root, selected_htdocs || nested_htdocs ? &plan.public_files : nullptr, sources, plan.warnings);
     if (nested_htdocs)
-        scan_web_folder(selected_root, output, false, sources, warnings, public_root);
-    find_flash_routes(project, sources);
+        scan_web_folder(selected_root, nullptr, sources, plan.warnings, public_root);
+    find_flash_routes(plan.project, sources);
     std::map<std::filesystem::path, std::shared_ptr<const Movie>> overrides;
     for (const auto& [path, movie] : open_movies)
     {
@@ -4001,38 +4031,85 @@ WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, con
             sources.try_emplace(web_path(name.lexically_relative(base)), name);
         overrides.emplace(name, movie);
     }
-    if (sources.empty())
+    std::map<std::filesystem::path, std::size_t> by_file;
+    for (const auto& [url, path] : sources)
+    {
+        const auto [found, added] = by_file.try_emplace(path, plan.movies.size());
+        if (added)
+        {
+            const auto edit = overrides.find(path);
+            plan.movies.push_back({path, {}, edit == overrides.end() ? nullptr : edit->second});
+        }
+        plan.movies[found->second].routes.push_back(url);
+    }
+    return plan;
+}
+
+WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
+    const std::filesystem::path& preferred, const WebMovieOverrides& open_movies,
+    const std::function<void(std::size_t, std::size_t)>& progress)
+{
+    const auto plan = plan_html5_workspace(root, open_movies);
+    std::vector<std::size_t> selection(plan.movies.size());
+    for (std::size_t index = 0; index < selection.size(); ++index)
+        selection[index] = index;
+    return export_html5_workspace(plan, destination, selection, preferred, progress);
+}
+
+WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const std::filesystem::path& destination,
+    std::span<const std::size_t> selection, const std::filesystem::path& preferred,
+    const std::function<void(std::size_t, std::size_t)>& progress)
+{
+    if (selection.empty())
         throw std::runtime_error("Aucun SWF à exporter dans ce dossier.");
+    const auto output = normalized_path(destination);
+    if (std::filesystem::exists(output) &&
+        (!std::filesystem::is_directory(output) || !std::filesystem::is_empty(output)))
+        throw std::runtime_error("Choisissez un dossier vide pour créer le projet exporté.");
+
+    std::vector<WorkspaceMovie> jobs;
+    std::map<std::string, std::size_t> aliases;
+    std::set<std::size_t> added;
+    for (const auto index : selection)
+    {
+        const auto& movie = plan.movies.at(index);
+        if (!added.insert(index).second)
+            continue;
+        for (const auto& route : movie.routes)
+            aliases.emplace(route, jobs.size());
+        const auto entry = std::ranges::find(movie.routes, "/chat/app.swf");
+        jobs.push_back({movie.path, entry == movie.routes.end() ? movie.routes.front() : *entry,
+            std::format("movies/{:05}", jobs.size() + 1), movie.edited});
+    }
+
+    auto details = plan.warnings;
+    const auto shared = output / "__flashstudio";
+    std::filesystem::create_directories(shared);
+    for (const auto& relative : plan.public_files)
+    {
+        const auto target = output / relative;
+        std::error_code error;
+        std::filesystem::create_directories(target.parent_path(), error);
+        if (!error)
+            std::filesystem::copy_file(plan.public_root / relative, target, std::filesystem::copy_options::skip_existing, error);
+        if (error)
+            details += "- Copie impossible pour " + utf8_path(relative) + "\n";
+    }
 
     write_text(shared / "stage.js", web::stage_script);
     write_text(shared / "stage.css", web::css);
     write_text(shared / "as3.js", web::class_runtime);
     write_text(shared / "text.js", web::text_runtime);
     write_text(shared / "media.js", web::media_runtime);
-    write_text(shared / "network.json", workspace_network(project, public_root));
+    write_text(shared / "network.json", workspace_network(plan.project, plan.public_root));
     write_text(output / "serve.py", web::local_server);
 
-    std::vector<WorkspaceMovie> jobs;
-    std::map<std::filesystem::path, std::size_t> by_file;
-    std::map<std::string, std::size_t> aliases;
-    for (const auto& [url, path] : sources)
-    {
-        const auto [found, added] = by_file.try_emplace(path, jobs.size());
-        if (added)
-        {
-            const auto edit = overrides.find(path);
-            jobs.push_back({path, url, std::format("movies/{:05}", jobs.size() + 1),
-                edit == overrides.end() ? nullptr : edit->second});
-        }
-        else if (url == "/chat/app.swf")
-            jobs[found->second].url = url;
-        aliases.emplace(url, found->second);
-    }
     struct Result { std::size_t omissions{}; std::string error; };
     std::vector<Result> results(jobs.size());
     std::atomic_size_t next{};
     std::size_t done{};
-    std::mutex progress_lock, visual_lock;
+    std::mutex progress_lock, visual_lock, packages_lock;
+    std::map<std::array<UCHAR, 32>, std::shared_future<std::size_t>> converted;
     std::filesystem::create_directories(shared / "assets");
     const auto convert = [&]
     {
@@ -4046,9 +4123,40 @@ WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, con
             try
             {
                 const auto movie = job.edited ? job.edited : std::make_shared<const Movie>(Movie::open(job.path));
-                Packages packages{project, shared, {}, 0, 0, &visual_lock};
-                result.omissions = write_package(*movie, job.path, job.package, utf8_path(job.path.stem()), packages,
-                    url_path(job.url)).failed;
+                const auto signature = asset_digest(movie->uncompressed());
+                std::promise<std::size_t> owner;
+                std::shared_future<std::size_t> previous;
+                {
+                    const std::scoped_lock lock(packages_lock);
+                    const auto [found, first] = converted.try_emplace(signature);
+                    if (first)
+                        found->second = owner.get_future().share();
+                    else
+                        previous = found->second;
+                }
+                const auto write = [&]
+                {
+                    Packages packages{plan.project, shared, {}, 0, 0, &visual_lock};
+                    return write_package(*movie, job.path, job.package, utf8_path(job.path.stem()), packages,
+                        url_path(job.url)).failed;
+                };
+                if (previous.valid())
+                {
+                    const auto original = previous.get();
+                    if (original == jobs.size())
+                        result.omissions = write();
+                    else
+                    {
+                        reuse_workspace_movie(shared, jobs[original], job);
+                        result.omissions = results[original].omissions;
+                    }
+                }
+                else
+                {
+                    try { result.omissions = write(); }
+                    catch (...) { owner.set_value(jobs.size()); throw; }
+                    owner.set_value(index);
+                }
             }
             catch (const std::exception& error) { result.error = error.what(); }
             catch (...) { result.error = "Erreur inconnue."; }
@@ -4065,7 +4173,10 @@ WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, con
         progress(0, jobs.size());
     {
         std::vector<std::jthread> workers;
-        const auto count = (std::min)({jobs.size(), std::size_t{4}, std::size_t{(std::max)(1u, std::thread::hardware_concurrency())}});
+        MEMORYSTATUSEX memory{sizeof(MEMORYSTATUSEX)};
+        const auto memory_limit = GlobalMemoryStatusEx(&memory) ?
+            static_cast<std::size_t>((std::clamp)(memory.ullAvailPhys / (512ull * 1024 * 1024), 1ull, 8ull)) : 4;
+        const auto count = (std::min)({jobs.size(), memory_limit, std::size_t{(std::max)(1u, std::thread::hardware_concurrency())}});
         for (std::size_t thread = 0; thread < count; ++thread)
             workers.emplace_back(convert);
     }
@@ -4089,14 +4200,13 @@ WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, con
         rows += "<li><a href=\"" + page + "\">" + web::html_text(url) + "</a></li>\n";
         const auto key = ascii_lower(url);
         const unsigned priority = key == "/chat/app.swf" ? 5 : job.path == selected ? 4 : key == "/app.swf" ||
-            key == "/main.swf" || key == "/chat.swf" ? 3 : job.path.parent_path() == public_root ? 2 : 1;
+            key == "/main.swf" || key == "/chat.swf" ? 3 : job.path.parent_path() == plan.public_root ? 2 : 1;
         if (priority > start_priority)
         {
             start = index;
             start_priority = priority;
         }
     }
-    std::string details = std::move(warnings);
     for (std::size_t index = 0; index < jobs.size(); ++index)
     {
         const auto& result = results[index];

@@ -138,6 +138,23 @@ struct WebWorkspaceReport
     std::size_t converted{}, partial{}, failed{};
 };
 using WebMovieOverrides = std::vector<std::pair<std::filesystem::path, std::shared_ptr<const Movie>>>;
+struct WebWorkspaceMovie
+{
+    std::filesystem::path path;
+    std::vector<std::string> routes;
+    std::shared_ptr<const Movie> edited;
+};
+struct WebWorkspacePlan
+{
+    std::filesystem::path root, project, public_root;
+    std::vector<WebWorkspaceMovie> movies;
+    std::vector<std::filesystem::path> public_files;
+    std::string warnings;
+};
+WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const WebMovieOverrides& open_movies = {});
+WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const std::filesystem::path& destination,
+    std::span<const std::size_t> selection, const std::filesystem::path& preferred = {},
+    const std::function<void(std::size_t, std::size_t)>& progress = {});
 WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
     const std::filesystem::path& preferred = {}, const WebMovieOverrides& open_movies = {},
     const std::function<void(std::size_t, std::size_t)>& progress = {});

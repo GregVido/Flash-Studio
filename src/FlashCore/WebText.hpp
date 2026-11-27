@@ -129,11 +129,20 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             node.style.margin = "0";
             const align = item.getAttribute("align")?.toLowerCase();
             if (["left", "right", "center", "justify"].includes(align)) node.style.textAlign = align;
+            // Empty Flash paragraphs occupy a line, which is also used to align authored hotspots.
+            if (multiline && !item.textContent && !item.querySelector("br,sbr"))
+                node.append(document.createElement("br"));
         }
         if (kind === "font") {
             const size = item.getAttribute("size");
-            formatting(node, { color: item.getAttribute("color"), font: item.getAttribute("face"),
+            const face = item.getAttribute("face");
+            formatting(node, { color: item.getAttribute("color"), font: face,
+                bold: /\bbold\b/i.test(face ?? ""), italic: /\b(?:italic|oblique)\b/i.test(face ?? ""),
                 size: size && !/^[+-]/.test(size) ? size : null }, resolveFont);
+            const spacing = parseFloat(item.getAttribute("letterspacing"));
+            if (Number.isFinite(spacing)) node.style.letterSpacing = spacing + "px";
+            const kerning = item.getAttribute("kerning");
+            if (kerning === "0" || kerning === "1") node.style.fontKerning = kerning === "1" ? "normal" : "none";
             if (size && /^[+-]\d+(\.\d+)?$/.test(size))
                 node.style.fontSize = "calc(1em " + size[0] + " " + pixels(size.slice(1)) + "px)";
         }

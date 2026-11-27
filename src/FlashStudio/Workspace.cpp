@@ -8,6 +8,7 @@
 #include <microsoft.ui.xaml.window.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
+#include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <format>
 #include <algorithm>
 #include <cmath>
@@ -1931,32 +1932,195 @@ fire_and_forget Workspace::export_folder_html5()
     if (source.empty())
         co_return;
     const auto lifetime = shared_from_this();
-    std::optional<std::filesystem::path> destination;
-    try { destination = dialog(window_, false, L"", {}, nullptr, true); }
-    catch (const hresult_error& error) { status(error.message(), true); }
-    if (!destination)
-        co_return;
     const auto selected = file_;
     flash::WebMovieOverrides open_movies;
     for (const auto& document : documents_)
         if (document.dirty)
             open_movies.emplace_back(document.path, document.movie);
-    const auto name = (source.filename().empty() ? std::wstring(L"Flash Studio") : source.filename().wstring()) + L"-html5";
-    auto target = *destination / name;
     busy_ = true;
     folder_export_.IsEnabled(false);
     folder_button_.IsEnabled(false);
+    const auto ready = [&]
+    {
+        busy_ = false;
+        folder_export_.IsEnabled(true);
+        folder_button_.IsEnabled(true);
+    };
+    const apartment_context ui;
+    const auto previous_status = status_.Text();
+    status(tr(L"Inventaire des SWF à exporter…"));
+    co_await resume_background();
+    flash::WebWorkspacePlan plan;
+    std::wstring failure;
+    try { plan = flash::plan_html5_workspace(source, open_movies); }
+    catch (const std::exception& error) { failure = widen(error.what()); }
+    co_await ui;
+    if (closed_)
+        co_return;
+    if (!failure.empty() || plan.movies.empty())
+    {
+        ready();
+        status(failure.empty() ? hstring(tr(L"Aucun SWF à exporter dans ce dossier.")) : hstring(failure), true);
+        co_return;
+    }
+
+    std::optional<std::filesystem::path> destination;
+    std::vector<std::size_t> selection;
+    try
+    {
+        ContentDialog prompt;
+        prompt.XamlRoot(root_.XamlRoot());
+        prompt.Title(box_value(tr(L"SWF à exporter en HTML5")));
+        prompt.PrimaryButtonText(tr(L"Choisir le dossier…"));
+        prompt.CloseButtonText(tr(L"Annuler"));
+
+        Grid content;
+        content.RowSpacing(8);
+        row(content);
+        row(content);
+        row(content);
+        row(content, 1, GridUnitType::Star);
+        TextBox search;
+        search.PlaceholderText(tr(L"Filtrer les SWF…"));
+        Automation::AutomationProperties::SetName(search, tr(L"Filtrer les SWF"));
+        place(content, search, 0);
+        StackPanel commands;
+        commands.Orientation(Orientation::Horizontal);
+        commands.Spacing(8);
+        Button all, none;
+        all.Content(box_value(tr(L"Tout cocher")));
+        none.Content(box_value(tr(L"Tout décocher")));
+        commands.Children().Append(all);
+        commands.Children().Append(none);
+        place(content, commands, 1);
+        auto count = label(L"", 12, secondary);
+        place(content, count, 2);
+        ListView files;
+        files.Height(std::clamp(root_.ActualHeight() - 285.0, 165.0, 440.0));
+        files.SelectionMode(ListViewSelectionMode::None);
+        files.ItemTemplate(Markup::XamlReader::Load(LR"(
+            <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                <CheckBox MinWidth="0"/>
+            </DataTemplate>)").as<DataTemplate>());
+        Automation::AutomationProperties::SetName(files, tr(L"SWF à exporter en HTML5"));
+        place(content, files, 3);
+        prompt.Content(content);
+
+        std::vector<std::wstring> names, keys;
+        std::map<std::wstring, std::size_t> by_name;
+        for (const auto& movie : plan.movies)
+        {
+            auto path = movie.path.lexically_relative(source);
+            if (path.empty() || path.has_root_path() || *path.begin() == L"..")
+                path = movie.path;
+            auto& name = names.emplace_back(path.generic_wstring());
+            auto& key = keys.emplace_back(lower(name));
+            for (const auto& route : movie.routes)
+                key += L" " + lower(widen(route));
+            by_name.emplace(name, names.size() - 1);
+        }
+        std::vector<bool> checked(names.size(), true);
+        std::vector<std::size_t> visible;
+        const auto update_count = [&]
+        {
+            const auto total = std::ranges::count(checked, true);
+            count.Text(format_message(L"{} SWF cochés sur {} · {} affichés", total, names.size(), visible.size()));
+            prompt.IsPrimaryButtonEnabled(total != 0);
+        };
+        const auto rebuild = [&]
+        {
+            auto query = lower(search.Text().c_str());
+            std::ranges::replace(query, L'\\', L'/');
+            std::vector<IInspectable> items;
+            visible.clear();
+            for (std::size_t index = 0; index < names.size(); ++index)
+                if (keys[index].find(query) != std::wstring::npos)
+                {
+                    visible.push_back(index);
+                    items.push_back(box_value(hstring(names[index])));
+                }
+            files.ItemsSource(single_threaded_observable_vector<IInspectable>(std::move(items)));
+            update_count();
+        };
+        std::vector<CheckBox::Click_revoker> toggles;
+        const auto dialog_lifetime = std::make_shared<int>(0);
+        using ItemPhase = Windows::Foundation::TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs>;
+        const ItemPhase prepare = [&, active = std::weak_ptr(dialog_lifetime)](
+            const ListViewBase&, const ContainerContentChangingEventArgs& args)
+        {
+            if (active.expired() || args.InRecycleQueue())
+                return;
+            const auto box = args.ItemContainer().ContentTemplateRoot().try_as<CheckBox>();
+            if (!box)
+                return;
+            const auto found = by_name.find(unbox_value<hstring>(args.Item()).c_str());
+            if (found == by_name.end())
+                return;
+            if (!box.Tag())
+            {
+                toggles.push_back(box.Click(auto_revoke, [&](const IInspectable& sender, auto&&)
+                {
+                    const auto item = sender.as<CheckBox>();
+                    const auto index = unbox_value<uint32_t>(item.Tag());
+                    checked[index] = item.IsChecked().Value();
+                    update_count();
+                }));
+            }
+            box.Tag(box_value(static_cast<uint32_t>(found->second)));
+            box.Content(args.Item());
+            box.IsChecked(static_cast<bool>(checked[found->second]));
+        };
+        const auto prepared = files.ContainerContentChanging(auto_revoke,
+            [&](const ListViewBase& sender, const ContainerContentChangingEventArgs& args)
+        {
+            if (!args.InRecycleQueue() && !args.ItemContainer().ContentTemplateRoot())
+                args.RegisterUpdateCallback(prepare);
+            else
+                prepare(sender, args);
+        });
+        const auto set_all = [&](bool value)
+        {
+            std::fill(checked.begin(), checked.end(), value);
+            for (std::size_t index = 0; index < visible.size(); ++index)
+                if (const auto container = files.ContainerFromIndex(static_cast<int32_t>(index)).try_as<ListViewItem>())
+                    if (const auto box = container.ContentTemplateRoot().try_as<CheckBox>())
+                        box.IsChecked(value);
+            update_count();
+        };
+        const auto filter = search.TextChanged(auto_revoke, [&](auto&&, auto&&) { rebuild(); });
+        const auto select_all = all.Click(auto_revoke, [&](auto&&, auto&&) { set_all(true); });
+        const auto deselect_all = none.Click(auto_revoke, [&](auto&&, auto&&) { set_all(false); });
+        rebuild();
+        if (co_await prompt.ShowAsync() == ContentDialogResult::Primary && !closed_)
+        {
+            for (std::size_t index = 0; index < checked.size(); ++index)
+                if (checked[index])
+                    selection.push_back(index);
+            if (!selection.empty())
+                destination = dialog(window_, false, L"", {}, nullptr, true);
+        }
+    }
+    catch (const hresult_error& error) { failure = error.message(); }
+    if (closed_)
+        co_return;
+    if (!destination)
+    {
+        ready();
+        status(failure.empty() ? std::wstring_view(previous_status) : std::wstring_view(failure), !failure.empty());
+        co_return;
+    }
+
+    const auto name = (source.filename().empty() ? std::wstring(L"Flash Studio") : source.filename().wstring()) + L"-html5";
+    auto target = *destination / name;
     const auto dispatcher = root_.DispatcherQueue();
     status(tr(L"Export HTML5…"));
-    const apartment_context ui;
     co_await resume_background();
     flash::WebWorkspaceReport report;
-    std::wstring failure;
     try
     {
         for (unsigned sequence = 2; !std::filesystem::create_directory(target); ++sequence)
             target = *destination / std::format(L"{}-{}", name, sequence);
-        report = flash::export_html5_workspace(source, target, selected, open_movies, [dispatcher, lifetime](auto done, auto total)
+        report = flash::export_html5_workspace(plan, target, selection, selected, [dispatcher, lifetime](auto done, auto total)
         {
             dispatcher.TryEnqueue([lifetime, done, total]
             {
@@ -1969,9 +2133,7 @@ fire_and_forget Workspace::export_folder_html5()
     co_await ui;
     if (closed_)
         co_return;
-    busy_ = false;
-    folder_button_.IsEnabled(true);
-    folder_export_.IsEnabled(true);
+    ready();
     if (!failure.empty())
         status(failure, true);
     else
