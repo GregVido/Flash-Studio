@@ -26,7 +26,10 @@ export function loadFonts(scene, page) {
             const weight = face.fontStyle.toLowerCase().includes("bold") ? "bold" : "normal";
             const style = face.fontStyle.toLowerCase().includes("italic") ? "italic" : "normal";
             const font = new FontFace(family, "url(" + JSON.stringify(url) + ")", { weight, style });
-            entry = { family, ready: font.load().then(() => document.fonts.add(font)).catch(() => {}) };
+            entry = { family, ready: font.load().then(() => {
+                document.fonts.add(font);
+                fontHeights.clear();
+            }).catch(() => {}) };
             embeddedFonts.set(url, entry);
         }
         if (face.fontName) namedFonts.set(face.fontName.toLowerCase() + ":" + face.fontStyle, entry.family);
@@ -101,6 +104,22 @@ function formatting(node, style, resolveFont) {
 }
 
 const measureContext = document.createElement("canvas").getContext("2d");
+const fontHeights = new Map();
+function fontSpec(style) {
+    return [style.fontStyle || "normal", style.fontWeight || "normal", style.fontSize, style.fontFamily].join(" ");
+}
+
+function fontHeight(style) {
+    const spec = fontSpec(style);
+    if (!fontHeights.has(spec)) {
+        measureContext.font = spec;
+        const metrics = measureContext.measureText("M");
+        const height = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
+        if (fontHeights.size >= 128) fontHeights.delete(fontHeights.keys().next().value);
+        fontHeights.set(spec, height || parseFloat(style.fontSize) * 1.12);
+    }
+    return fontHeights.get(spec);
+}
 
 function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
     const template = document.createElement("template");
@@ -139,6 +158,9 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             formatting(node, { color: item.getAttribute("color"), font: face,
                 bold: /\bbold\b/i.test(face ?? ""), italic: /\b(?:italic|oblique)\b/i.test(face ?? ""),
                 size: size && !/^[+-]/.test(size) ? size : null }, resolveFont);
+            // In saved SWF HTML a face can switch from the field's bold font to a regular run.
+            if (face && !node.style.fontWeight && !item.closest("b,strong")) node.style.fontWeight = "normal";
+            if (face && !node.style.fontStyle && !item.closest("i,em")) node.style.fontStyle = "normal";
             const spacing = parseFloat(item.getAttribute("letterspacing"));
             if (Number.isFinite(spacing)) node.style.letterSpacing = spacing + "px";
             const kerning = item.getAttribute("kerning");
@@ -226,10 +248,10 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
         if (measured) return measured;
         if (!source) return measured = [0, 0];
         if (!html && !values.wordWrap && !/[\n\r\t]/.test(source)) {
-            const { fontStyle, fontWeight, fontSize, fontFamily, lineHeight } = content.style;
-            measureContext.font = `${fontStyle || "normal"} ${fontWeight || "normal"} ${fontSize} ${fontFamily}`;
+            measureContext.font = fontSpec(content.style);
             const text = values.displayAsPassword ? "\u2022".repeat(source.length) : source;
-            return measured = [measureContext.measureText(text).width + (parseFloat(content.style.textIndent) || 0), parseFloat(lineHeight)];
+            return measured = [measureContext.measureText(text).width + (parseFloat(content.style.textIndent) || 0),
+                parseFloat(content.style.lineHeight)];
         }
         const sample = content.cloneNode(true);
         sample.removeAttribute("contenteditable");
@@ -295,7 +317,8 @@ function appendHtml(target, html, sheet, emit, multiline, resolveFont) {
             textIndent: (values.defaultTextFormat?.indent ?? (definition.indent ?? 0) / 20) + "px" });
         formatting(content, values.defaultTextFormat, resolveFont);
         const leading = values.defaultTextFormat?.leading;
-        content.style.lineHeight = Math.max(0.05, parseFloat(content.style.fontSize) * 1.12 +
+        const lineHeight = values.multiline || values.wordWrap ? fontHeight(content.style) : parseFloat(content.style.fontSize) * 1.12;
+        content.style.lineHeight = Math.max(0.05, lineHeight +
             (leading == null ? (definition.leading ?? 0) / 20 : Number(leading) || 0)) + "px";
         renderContent();
     }

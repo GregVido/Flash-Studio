@@ -124,9 +124,7 @@ import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } 
 import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
 
 const documentUrl = new URL(location.href);
-const [{ actions }, { definitions }] = await Promise.all([
-    import(new URL("actions.js", documentUrl).href), import(new URL("classes.js", documentUrl).href),
-]);
+const localAssetPrefix = documentUrl.origin + "/";
 const stage = document.querySelector("#stage");
 const symbols = document.querySelector("#symbols");
 const art = document.querySelector("#art");
@@ -151,6 +149,7 @@ let cachedMovieBytes = 0;
 const movieBytes = new WeakMap();
 let bundleSequence = 0;
 const rasterImages = new Map();
+const rasterDecodes = new WeakMap();
 const linkedPixels = new WeakMap();
 const pixelMapImages = new Map();
 const defined = new Map();
@@ -521,6 +520,19 @@ const displayNodes = new WeakMap();
 const displayParents = new WeakMap();
 const displayOwners = new WeakMap();
 const scriptedNodes = new Set();
+const scriptedReferences = new WeakMap();
+function trackScriptedNode(node) {
+    if (scriptedReferences.has(node)) return;
+    const reference = new WeakRef(node);
+    scriptedReferences.set(node, reference);
+    scriptedNodes.add(reference);
+}
+
+function untrackScriptedNode(node) {
+    const reference = scriptedReferences.get(node);
+    if (reference) scriptedNodes.delete(reference);
+    scriptedReferences.delete(node);
+}
 // Flash broadcasts ENTER_FRAME to display objects even when they are off stage.
 const frameListeners = new Set();
 const frameReferences = new WeakMap();
@@ -690,7 +702,7 @@ function inheritedEvent() {
     const prior = scriptMasks.get(target);
     if (prior) {
         prior.definition.remove();
-        target.removeAttribute("mask");
+        target.removeAttribute(prior.attribute);
         activeScriptMasks.delete(prior.handle);
         prior.observer.disconnect();
         const count = maskSources.get(prior.node) - 1;
@@ -704,7 +716,7 @@ function inheritedEvent() {
     const definition = element("mask", { id, "mask-type": "alpha", maskUnits: "userSpaceOnUse",
         x: "-1000000", y: "-1000000", width: "2000000", height: "2000000" });
     symbols.append(definition);
-    const entry = { view, node, definition, target: new WeakRef(target), dirty: true, matrix: null };
+    const entry = { view, node, definition, attribute: "mask", target: new WeakRef(target), dirty: true, matrix: null };
     entry.handle = { ref: new WeakRef(entry), definition, source: new WeakRef(node) };
     entry.observer = new MutationObserver(records => {
         if (records.some(record => record.target !== node || record.attributeName !== "transform")) entry.dirty = true;
@@ -715,6 +727,20 @@ function inheritedEvent() {
     maskSources.set(node, 1 + (maskSources.get(node) ?? 0));
     node.style.visibility = "hidden";
     target.setAttribute("mask", "url(#" + id + ")");
+}
+
+const scriptDrawings = new WeakMap();
+
+function opaqueClipShape(node) {
+    const drawing = scriptDrawings.get(node), shape = drawing?.firstElementChild;
+    if (!shape || drawing.childElementCount !== 1 || node.childElementCount !== 2 ||
+        node.lastElementChild.childElementCount || node.style.filter || node.style.mixBlendMode ||
+        node.hasAttribute("mask") || node.hasAttribute("clip-path") || node.hasAttribute("filter") ||
+        node.getAttribute("display") === "none" || Number(node.getAttribute("opacity") ?? 1) !== 1 ||
+        !["path", "rect", "circle", "ellipse"].includes(shape.localName) ||
+        !/^#[0-9a-f]{6}$/i.test(shape.getAttribute("fill") ?? "") ||
+        Number(shape.getAttribute("fill-opacity") ?? 1) < 1 || shape.getAttribute("stroke") !== "none") return null;
+    return shape;
 }
 
 function updateScriptMasks() {
@@ -739,13 +765,31 @@ function updateScriptMasks() {
             continue;
         }
         if (!target.isConnected) continue;
-        const destination = toStage(target), source = toStage(entry.node);
+        const siblings = target.parentNode === entry.node.parentNode;
+        const destination = siblings ? DOMMatrix.fromMatrix(localDisplayMatrix(target)) : toStage(target);
+        const source = siblings ? localDisplayMatrix(entry.node) : toStage(entry.node);
         const relative = destination.inverse().multiply(source);
         const values = [relative.a, relative.b, relative.c, relative.d, relative.e, relative.f];
         if (!values.every(Number.isFinite)) continue;
         if (entry.dirty) {
-            entry.graphic = cloneMaskGraphic(entry.node);
-            entry.graphic.style.removeProperty("visibility");
+            const shape = opaqueClipShape(entry.node);
+            const attribute = shape ? "clip-path" : "mask";
+            if (attribute !== entry.attribute) {
+                const id = entry.definition.id;
+                const definition = shape ? element("clipPath", { id, clipPathUnits: "userSpaceOnUse" }) :
+                    element("mask", { id, "mask-type": "alpha", maskUnits: "userSpaceOnUse",
+                        x: "-1000000", y: "-1000000", width: "2000000", height: "2000000" });
+                entry.definition.replaceWith(definition);
+                entry.definition = handle.definition = definition;
+                target.removeAttribute(entry.attribute);
+                entry.attribute = attribute;
+                target.setAttribute(attribute, "url(#" + id + ")");
+            }
+            entry.graphic = shape ? shape.cloneNode(false) : cloneMaskGraphic(entry.node);
+            if (shape) {
+                const rule = shape.getAttribute("fill-rule");
+                if (rule) entry.graphic.setAttribute("clip-rule", rule);
+            } else entry.graphic.style.removeProperty("visibility");
             entry.definition.replaceChildren(entry.graphic);
         }
         if (entry.dirty || !entry.matrix || values.some((value, index) => value !== entry.matrix[index])) {
@@ -772,7 +816,7 @@ function cloneMaskGraphic(node) {
     return copy;
 }
 
-function updateBlendMask(container) {
+)JS" R"JS(function updateBlendMask(container) {
     const sources = [];
     for (let node = container.lastElementChild; node?.hasAttribute("data-flash-composite"); node = node.previousElementSibling)
         sources.unshift({ node, mode: node.getAttribute("data-flash-composite") });
@@ -868,6 +912,13 @@ function eventView(node) {
                 }
                 if (eventType === "enterFrame" && event.target !== node) return;
                 try {
+                    if (event === frameEvent) {
+                        const target = displayViews.get(node);
+                        const view = { ...frameEventMethods, type, bubbles: false, cancelable: false, currentTarget: target, target };
+                        eventKinds.set(view, "Event");
+                        callback(view);
+                        return;
+                    }
                     const custom = eventObjects.get(event);
                     if (custom) {
                         const previous = activeEvents.get(custom);
@@ -1018,10 +1069,13 @@ function displayChildren(container, owner, repaint) {
             displayOwners.set(node, list);
             render();
             if (previous !== list) {
-                authoredClips.get(node)?.initializeTree();
+                const clip = authoredClips.get(node);
+                if (clip) {
+                    trackScriptedNode(node);
+                    clip.initializeTree();
+                }
                 node.dispatchEvent(scriptEvent("added", true));
                 if (container.isConnected) {
-                    if (authoredClips.has(node)) scriptedNodes.add(node);
                     node.dispatchEvent(scriptEvent("addedToStage"));
                 }
             }
@@ -1034,7 +1088,7 @@ function displayChildren(container, owner, repaint) {
             if (container.isConnected) node.dispatchEvent(scriptEvent("removedFromStage"));
             order.splice(index, 1);
             node.remove();
-            scriptedNodes.delete(node);
+            untrackScriptedNode(node);
             if (timeline.has(view)) suppressed.add(view);
             displayParents.delete(node);
             displayOwners.delete(node);
@@ -1272,6 +1326,7 @@ function scriptSprite(kind, offsetX = () => 0, effectChanged) {
     const node = element("g"), drawing = element("g"), children = element("g");
     let visibleView;
     node.append(drawing, children);
+    scriptDrawings.set(node, drawing);
     const childList = displayChildren(children, () => visibleView);
     const access = pointerAccess(node, ["Sprite", "MovieClip", "SimpleButton", "TextField", "Loader"].includes(kind));
     const view = Object.assign(Object.create(null), eventView(node), childList, {
@@ -1764,39 +1819,50 @@ function displacePixels(context, source, rect, effect) {
     return image;
 }
 
-const tintSurfaces = [];
+const tintSurfaces = [], solidTintSurfaces = [];
 
 function paintTinted(node, context, tint, resources) {
     const box = localDisplayBounds(node), matrix = context.getTransform();
-    const corners = [matrix.transformPoint({x: box.x, y: box.y}), matrix.transformPoint({x: box.x + box.width, y: box.y}),
-        matrix.transformPoint({x: box.x, y: box.y + box.height}), matrix.transformPoint({x: box.x + box.width, y: box.y + box.height})];
     const measured = box.width > 0 && box.height > 0;
-    const left = measured ? Math.max(0, Math.floor(Math.min(...corners.map(point => point.x)))) : 0;
-    const top = measured ? Math.max(0, Math.floor(Math.min(...corners.map(point => point.y)))) : 0;
-    const width = measured ? Math.min(context.canvas.width, Math.ceil(Math.max(...corners.map(point => point.x)))) - left : context.canvas.width;
-    const height = measured ? Math.min(context.canvas.height, Math.ceil(Math.max(...corners.map(point => point.y)))) - top : context.canvas.height;
+    const bounds = measured && transformedBounds(box, matrix);
+    const left = bounds ? Math.max(0, Math.floor(bounds.left)) : 0;
+    const top = bounds ? Math.max(0, Math.floor(bounds.top)) : 0;
+    const width = bounds ? Math.min(context.canvas.width, Math.ceil(bounds.right)) - left : context.canvas.width;
+    const height = bounds ? Math.min(context.canvas.height, Math.ceil(bounds.bottom)) - top : context.canvas.height;
     if (!(width > 0 && height > 0)) return;
-    const surface = tintSurfaces.pop() ?? document.createElement("canvas");
+    const solid = tint[0] === 0 && tint[1] === 0 && tint[2] === 0 && tint[3] === 256 && tint[7] === 0;
+    const pool = solid ? solidTintSurfaces : tintSurfaces;
+    const surface = pool.pop() ?? document.createElement("canvas");
     if (surface.width !== width) surface.width = width;
     if (surface.height !== height) surface.height = height;
-    const paint = surface.getContext("2d", { willReadFrequently: true });
+    const paint = surface.getContext("2d", { willReadFrequently: !solid });
     try {
         paint.resetTransform();
+        paint.globalAlpha = 1;
         paint.clearRect(0, 0, width, height);
         paint.imageSmoothingEnabled = context.imageSmoothingEnabled;
         paint.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - left, matrix.f - top);
         paintDisplayContents(node, paint, resources);
-        const image = paint.getImageData(0, 0, width, height), data = image.data;
-        for (let offset = 0; offset < data.length; offset += 4) {
-            if (!data[offset + 3]) continue;
-            for (let channel = 0; channel < 4; ++channel)
-                data[offset + channel] = data[offset + channel] * tint[channel] / 256 + tint[channel + 4];
+        if (solid) {
+            paint.resetTransform();
+            paint.globalAlpha = 1;
+            paint.fillStyle = "rgb(" + tint[4] + " " + tint[5] + " " + tint[6] + ")";
+            paint.globalCompositeOperation = "source-in";
+            paint.fillRect(0, 0, width, height);
+            paint.globalCompositeOperation = "source-over";
+        } else {
+            const image = paint.getImageData(0, 0, width, height), data = image.data;
+            for (let offset = 0; offset < data.length; offset += 4) {
+                if (!data[offset + 3]) continue;
+                for (let channel = 0; channel < 4; ++channel)
+                    data[offset + channel] = data[offset + channel] * tint[channel] / 256 + tint[channel + 4];
+            }
+            paint.putImageData(image, 0, 0);
         }
-        paint.putImageData(image, 0, 0);
         context.resetTransform();
         context.drawImage(surface, left, top);
     } finally {
-        if (width * height <= 262144 && tintSurfaces.length < 4) tintSurfaces.push(surface);
+        if (width * height <= 262144 && pool.length < 4) pool.push(surface);
     }
 }
 
@@ -1839,7 +1905,8 @@ function paintDisplayContents(node, context, resources) {
             break;
         }
         case "image": {
-            const url = new URL(node.getAttribute("href"), documentUrl).href;
+            const href = node.getAttribute("href");
+            const url = href?.startsWith(localAssetPrefix) ? href : new URL(href, documentUrl).href;
             const crisp = stageView.quality === "low" ? pixelMapImages.get(url)?.image : null;
             const image = crisp?.naturalWidth ? crisp : rasterImage(url);
             if (image.complete && image.naturalWidth) context.drawImage(image, value("x"), value("y"), value("width"), value("height"));
@@ -2234,12 +2301,12 @@ function bitmapRenderer(type) {
 }
 
 function timelineAssetUrls(scene, page, roots, visited = new Set(), frameLimit = Infinity) {
-    const urls = [];
+    const urls = new Set();
     const visit = id => {
         if (visited.has(id)) return;
         visited.add(id);
         const url = scene.assets[id]?.url;
-        if (url) urls.push(new URL(url, page).href);
+        if (url) urls.add(new URL(url, page).href);
         const frames = scene.clips[id]?.frames ?? [];
         for (let i = 0; i < Math.min(frameLimit, frames.length); ++i)
             for (const row of frames[i][0]) visit(timelineAsset(row, scene));
@@ -2247,6 +2314,15 @@ function timelineAssetUrls(scene, page, roots, visited = new Set(), frameLimit =
     };
     for (const id of roots) visit(id);
     return urls;
+}
+
+function decodeRaster(image) {
+    let ready = rasterDecodes.get(image);
+    if (!ready) {
+        ready = image.decode();
+        rasterDecodes.set(image, ready);
+    }
+    return ready;
 }
 
 function preloadBitmapSources(scene, definitions, page) {
@@ -2261,14 +2337,14 @@ function preloadBitmapSources(scene, definitions, page) {
     };
     const roots = Object.entries(scene.clips).filter(([, clip]) => clip.type && renders(clip.type)).map(([id]) => Number(id));
     const urls = timelineAssetUrls(scene, page, roots);
-    return Promise.all(urls.map(url => rasterImage(url).decode().catch(() => {})));
+    return Promise.all(Array.from(urls, url => decodeRaster(rasterImage(url)).catch(() => {})));
 }
 
 async function preloadLinkedPixels(scene, page) {
     const loaded = new Map();
     await Promise.all(Object.entries(scene.assets).filter(([, asset]) => asset.type && asset.url).map(async ([id, asset]) => {
         const image = rasterImage(new URL(asset.url, page).href);
-        try { await image.decode(); loaded.set(Number(id), image); }
+        try { await decodeRaster(image); loaded.set(Number(id), image); }
         catch { /* The usual blank BitmapData is available if the asset is missing. */ }
     }));
     if (loaded.size) linkedPixels.set(scene, loaded);
@@ -2290,26 +2366,26 @@ async function loadMovie(page, address, original, domain) {
         movieRequests.set(page.href, pending);
     } else {
         pending = Promise.all([
-            fetch(new URL("scene.json", page)).then(response => {
+            fetch(new URL("scene.json", page)).then(async response => {
                 if (!response.ok) throw new Error("Scène du projet lié indisponible.");
-                return response.json();
+                return { scene: await response.json(), size: Number(response.headers.get("content-length")) || 0 };
             }),
             import(new URL("classes.js", page).href),
             import(new URL("actions.js", page).href),
             original ? original() : fetch(new URL("source.bin", page)).then(response => response.ok ? response.arrayBuffer() : null),
-        ]).then(async ([scene, classes, script, bytes]) => {
+        ]).then(async ([{ scene, size }, classes, script, bytes]) => {
             const lazy = lazyAssetPaths.some(prefix => address.pathname.startsWith(prefix));
             const pixels = Promise.all([loadPixelMapImages(scene, page), preloadLinkedPixels(scene, page), loadFonts(scene, page)]);
             if (script.actions.length || Object.values(scene.clips).some(clip => clip.legacyInitialize))
                 await Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
-                    rasterImage(new URL(asset.url, page).href).decode().catch(() => {}))]);
+                    decodeRaster(rasterImage(new URL(asset.url, page).href)).catch(() => {}))]);
             else await Promise.all([pixels, preloadBitmapSources(scene, classes.definitions, page)]);
-            return { scene, definitions: classes.definitions, actions: script.actions, bytes, domains: new WeakMap(), lazy };
+            return { scene, size, definitions: classes.definitions, actions: script.actions, bytes, domains: new WeakMap(), lazy };
         });
         movieRequests.set(page.href, pending);
         pending.then(assets => {
             if (movieRequests.get(page.href) !== pending) return;
-            const size = assets.bytes?.byteLength ?? 0;
+            const size = (assets.bytes?.byteLength ?? 0) + assets.size;
             cachedMovieSizes.set(pending, size);
             cachedMovieBytes += size;
             trimMovieRequests();
@@ -2343,7 +2419,7 @@ function scriptLoader(owner = mainBundle) {
         pending = null;
         if (clip) {
             clip.detach();
-            scriptedNodes.delete(clip.node);
+            untrackScriptedNode(clip.node);
             clip = null;
         }
         screen.replaceChildren();
@@ -2361,7 +2437,6 @@ function scriptLoader(owner = mainBundle) {
     view.unloadAndStop = view.unload;
     const start = () => {
         if (!clip || !node.isConnected) return;
-        scriptedNodes.add(clip.node);
         clip.start();
         clip.syncStream();
     };
@@ -2393,6 +2468,7 @@ function scriptLoader(owner = mainBundle) {
                 clip = new Clip(0, display, [], null, layer, true, bundle);
                 clip.info = info;
                 authoredClips.set(display, clip);
+                trackScriptedNode(display);
                 displayParents.set(display, () => view);
                 info.content = clip.view;
                 clip.seek(1, false);
@@ -3294,13 +3370,21 @@ function makeLinkedButton(id, bundle) {
 }
 
 const frameEvent = scriptEvent("enterFrame");
+const frameEventMethods = {
+    preventDefault: () => frameEvent.preventDefault(),
+    stopPropagation: () => frameEvent.stopPropagation(),
+    stopImmediatePropagation: () => frameEvent.stopImmediatePropagation(),
+    isDefaultPrevented: () => frameEvent.defaultPrevented,
+};
 const frameDispatch = [];
 
 function animate(time) {
     requestAnimationFrame(animate);
     if (running) {
-        accumulated += Math.min(time - previous, 100);
         const interval = 1000 / data.fps;
+        accumulated = Math.min(accumulated + Math.min(time - previous, 100), Math.max(100, interval));
+        // Spread catch-up work across paints after a long main-thread task.
+        const workLimit = accumulated >= 2 * interval ? performance.now() + 8 : Infinity;
         while (accumulated >= interval) {
             for (const reference of frameListeners) frameDispatch.push(reference);
             for (const reference of frameDispatch) {
@@ -3310,9 +3394,16 @@ function animate(time) {
             }
             frameDispatch.length = 0;
             root.tick();
-            for (const node of scriptedNodes) {
-                if (!node.isConnected) { scriptedNodes.delete(node); continue; }
+            for (const reference of scriptedNodes) {
+                const node = reference.deref();
+                if (!node) { scriptedNodes.delete(reference); continue; }
                 const clip = authoredClips.get(node);
+                if (!clip) { untrackScriptedNode(node); continue; }
+                if (!node.isConnected) {
+                    if (clip.started && !clip.detached) clip.detach();
+                    continue;
+                }
+                if (!clip.started || clip.detached) clip.start();
                 if (clip?.animated) {
                     const movieInterval = 1000 / clip.bundle.scene.fps;
                     clip.time = (clip.time ?? 0) + interval;
@@ -3323,6 +3414,7 @@ function animate(time) {
                 }
             }
             accumulated -= interval;
+            if (accumulated >= interval && performance.now() >= workLimit) break;
         }
     }
     previous = time;
@@ -3332,13 +3424,22 @@ function animate(time) {
 }
 
 try {
-    const response = await fetch(new URL("scene.json", documentUrl));
+    const [{ actions }, { definitions }, response] = await Promise.all([
+        import(new URL("actions.js", documentUrl).href), import(new URL("classes.js", documentUrl).href),
+        fetch(new URL("scene.json", documentUrl)),
+    ]);
     if (!response.ok) throw new Error("scene.json: " + response.status);
     data = await response.json();
-    const [network, index] = await Promise.all([
+    const configuration = Promise.all([
         fetch(new URL(data.workspace?.network ?? "network.json", documentUrl)).catch(() => null),
         data.workspace && fetch(new URL(data.workspace.catalog, documentUrl)),
+        data.hasSource && fetch(new URL("source.bin", documentUrl)).then(source => {
+            if (!source.ok) throw new Error("source.bin: " + source.status);
+            return source.arrayBuffer();
+        }),
     ]);
+    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), preloadLinkedPixels(data, documentUrl), loadFonts(data, documentUrl)]);
+    const [network, index, bytes] = await configuration;
     if (index?.ok) {
         catalog = Object.create(null);
         for (const [path, page] of Object.entries((await index.json()).movies)) {
@@ -3347,7 +3448,6 @@ try {
         }
     }
     mainBundle = makeBundle(data, actions, definitions, documentUrl);
-    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), preloadLinkedPixels(data, documentUrl), loadFonts(data, documentUrl)]);
     mainDomain.install(mainBundle.classes);
     loaderInfo.url = mainBundle.source.href;
     loaderInfo.loaderURL = loaderInfo.url;
@@ -3367,10 +3467,7 @@ try {
             config.lazyAssetPaths.filter(path => typeof path === "string" && path.startsWith("/") && path.endsWith("/")) : [];
         loaderInfo.parameters = Object.assign(Object.create(null), config.parameters, loaderInfo.parameters);
     }
-    if (data.hasSource) {
-        const source = await fetch(new URL("source.bin", documentUrl));
-        if (!source.ok) throw new Error("source.bin: " + source.status);
-        const bytes = new Uint8Array(await source.arrayBuffer());
+    if (bytes) {
         loaderInfo.bytes = new ByteArray(bytes, true);
         loaderInfo.bytesLoaded = loaderInfo.bytesTotal = bytes.length;
     }
