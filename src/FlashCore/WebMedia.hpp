@@ -204,7 +204,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
         return [url, { method, headers, body: body ?? undefined, credentials: "same-origin" }];
     };
 
-    function urlLoader(request, address, movieForUrl, registerBytes) {
+    function urlLoader(request, address, movieForUrl, movieReference) {
         const view = dispatcher();
         let pending;
         const loader = Object.assign(view, {
@@ -220,7 +220,20 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                     const [url, options] = requestOptions(request, address);
                     const movie = loader.dataFormat === "binary" && options.method === "GET" ?
                         movieForUrl?.(request, url) : null;
-                    const response = await fetch(movie ? new URL("source.bin", movie) : url, { ...options, signal: operation.signal });
+                    if (movie) {
+                        const response = await fetch(new URL("scene.json", movie), { signal: operation.signal });
+                        if (!response.ok) throw new Error("HTTP " + response.status + " · " + url);
+                        const scene = await response.json();
+                        if (pending !== operation) return;
+                        loader.data = movieReference(movie, url, scene.swfVersion);
+                        loader.bytesLoaded = loader.bytesTotal = scene.byteSize;
+                        emit(view, "open");
+                        emit(view, "httpStatus", { status: response.status });
+                        emit(view, "progress", { bytesLoaded: loader.bytesLoaded, bytesTotal: loader.bytesTotal });
+                        emit(view, "complete");
+                        return;
+                    }
+                    const response = await fetch(url, { ...options, signal: operation.signal });
                     if (pending !== operation) return;
                     emit(view, "open");
                     emit(view, "httpStatus", { status: response.status });
@@ -233,7 +246,6 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                     emit(view, "progress", { bytesLoaded: loader.bytesLoaded, bytesTotal: loader.bytesTotal });
                     const text = loader.dataFormat === "binary" ? null : new TextDecoder().decode(bytes);
                     loader.data = loader.dataFormat === "variables" ? new URLVariables(text) : text ?? new ByteArray(bytes);
-                    if (movie) registerBytes(loader.data, movie, url);
                     emit(view, "complete");
                 } catch (error) {
                     if (pending === operation && error.name !== "AbortError") emit(view, "ioError", { text: error.message });
@@ -385,6 +397,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
     const decodedSounds = new Map();
     const audioBudget = 24 * 1024 * 1024;
     const mediaVolumes = new Map();
+    const blockedAudio = new Map();
     const volumeOf = value => Math.max(0, Math.min(1, Number(value?.volume) || 0));
     let context, masterGain, masterTransform = new SoundTransform(), decodedBytes = 0;
     function openAudio() {
@@ -475,6 +488,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                     if (loop) { loop.disconnect(); gain.disconnect(); loop.stop(); }
                     channels.delete(channel);
                     mediaVolumes.delete(channel);
+                    blockedAudio.delete(channel);
                 };
                 const finish = () => { channel.stop(); emit(channel, "soundComplete"); };
                 Object.defineProperties(channel, {
@@ -493,11 +507,15 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                     mediaVolumes.set(channel, syncMediaVolume);
                     syncMediaVolume();
                     const seek = () => { audio.currentTime = offset; };
-                    const play = () => audio.play().catch(error => {
-                        if (stopped) return;
-                        channel.stop();
-                        emit(view, "ioError", { text: error.message });
-                    });
+                    const play = () => {
+                        blockedAudio.delete(channel);
+                        audio.play().catch(error => {
+                            if (stopped) return;
+                            if (error.name === "NotAllowedError") { blockedAudio.set(channel, play); return; }
+                            channel.stop();
+                            emit(view, "ioError", { text: error.message });
+                        });
+                    };
                     if (offset) audio.addEventListener("loadedmetadata", seek, { once: true });
                     const next = () => {
                         if (stopped) return;
@@ -557,7 +575,10 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
         },
         get masterVolume() { return volumeOf(masterTransform); },
         embeddedSound(url, timing) { return sound(null, undefined, { url, timing }); },
-        resumeAudio: openAudio,
+        resumeAudio() {
+            if (context) openAudio();
+            for (const play of [...blockedAudio.values()]) play();
+        },
         isSoundChannel(value) { return soundChannels.has(value); },
         stopAll() { for (const channel of channels) channel.stop(); },
         navigate(request, target = "_self", address) {

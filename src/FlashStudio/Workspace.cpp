@@ -2143,6 +2143,7 @@ fire_and_forget Workspace::export_folder_html5()
     const auto name = (source.filename().empty() ? std::wstring(L"Flash Studio") : source.filename().wstring()) + L"-html5";
     auto target = *destination / name;
     const auto dispatcher = root_.DispatcherQueue();
+    const auto locale = language() == Language::english ? flash::WebLanguage::english : flash::WebLanguage::french;
     status(tr(L"Export HTML5…"));
     co_await resume_background();
     flash::WebWorkspaceReport report;
@@ -2157,7 +2158,7 @@ fire_and_forget Workspace::export_folder_html5()
                 if (!lifetime->closed_ && lifetime->busy_)
                     lifetime->status(format_message(L"Export HTML5 · {} sur {} SWF", done, total));
             });
-        });
+        }, locale);
     }
     catch (const std::exception& error) { failure = widen(error.what()); }
     co_await ui;
@@ -2190,6 +2191,7 @@ fire_and_forget Workspace::export_all(bool project, std::wstring visual_format, 
     auto target = *destination / name;
     busy_ = true;
     export_.IsEnabled(false);
+    const auto locale = language() == Language::english ? flash::WebLanguage::english : flash::WebLanguage::french;
     status(html5 ? tr(L"Export HTML5…") : project ? tr(L"Export du projet…") : tr(L"Export des ressources…"));
     const apartment_context ui;
     co_await resume_background();
@@ -2199,7 +2201,7 @@ fire_and_forget Workspace::export_all(bool project, std::wstring visual_format, 
     {
         for (unsigned sequence = 2; !std::filesystem::create_directory(target); ++sequence)
             target = *destination / std::format(L"{}-{}", name, sequence);
-        report = html5 ? flash::export_html5(*movie, target, to_string(hstring(title)), source, folder) :
+        report = html5 ? flash::export_html5(*movie, target, to_string(hstring(title)), source, folder, locale) :
             !visual_format.empty() ? flash::export_visuals(*movie, target, visual_format) :
             project ? flash::export_project(*movie, target) : flash::export_all(*movie, target);
     }

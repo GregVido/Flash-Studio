@@ -58,41 +58,35 @@ std::string html_text(std::string_view value)
         case '&': escaped += "&amp;"; break;
         case '<': escaped += "&lt;"; break;
         case '>': escaped += "&gt;"; break;
+        case '"': escaped += "&quot;"; break;
         default: escaped.push_back(c); break;
         }
     return escaped;
 }
 
 constexpr std::string_view page = R"HTML(<!doctype html>
-<html lang="fr">
+<html lang="{}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{}</title>
-  <link rel="stylesheet" href="{}">
 </head>
-<body>
-  <main>
-    <svg id="stage" tabindex="-1" aria-label="Scène convertie"><defs id="symbols"></defs><g id="art"></g></svg>
-    <div class="controls">
-      <button id="play" type="button" disabled>Lire</button>
-      <span id="status" role="status">Chargement de la scène…</span>
-    </div>
-    <details id="linked" hidden><summary>Animations liées</summary><ul></ul></details>
-  </main>
+<body style="margin:0;background:white">
+  <svg id="stage" tabindex="-1" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"
+       style="position:fixed;inset:0;outline:none" data-bundle="{}"><defs id="symbols"></defs><g id="art"></g></svg>
   <script type="module" src="{}"></script>
 </body>
 </html>
 )HTML";
 
-constexpr std::string_view css = R"CSS(:root { color-scheme: dark; font: 14px/1.5 system-ui, sans-serif; background: #121418; }
-* { box-sizing: border-box; }
-body { margin: 0; }
-main { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
-#stage { display: block; width: min(100%, var(--scene-width)); height: auto; max-height: calc(100dvh - 84px); background: #fff; }
-.controls { display: flex; align-items: center; gap: 12px; color: #d6ddea; }
-button { font: inherit; padding: 5px 18px; border: 1px solid #56637b; border-radius: 5px; background: #242c3a; color: #fff; }
-button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
+constexpr std::string_view stage_script = R"JS(
+import { ConvertedClasses, convertedClassName, convertedMethodReceiver } from "./as3.js";
+import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
+import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
+import { createLegacyRuntime } from "./avm1.js";
+
+const style = document.createElement("style");
+style.textContent = `
 #stage [role=button] { cursor: pointer; outline-offset: 2px; }
 #stage[data-flash-hide-cursor], #stage[data-flash-hide-cursor] * { cursor: none !important; }
 #stage [data-flash-mouse="on"] { pointer-events: visiblePainted; }
@@ -110,29 +104,16 @@ button:focus-visible { outline: 2px solid #9cc9ff; outline-offset: 2px; }
 #stage[data-flash-quality="low"] { shape-rendering: crispEdges; }
 #stage :is(canvas, img, image:not([href$=".svg"])) { image-rendering: pixelated !important; }
 #stage :is([data-flash-no-children], [data-flash-decoration]) * { pointer-events: none !important; }
-#linked { color: #d6ddea; max-width: min(90vw, 720px); }
-.controls a, #linked a, .catalogue a { color: #9cc9ff; overflow-wrap: anywhere; }
-.catalogue { max-width: 760px; margin: auto; align-items: stretch; justify-content: flex-start; }
-.catalogue input { font: inherit; padding: 8px 10px; }
-html[data-embedded] main { min-height: 0; padding: 0; }
-html[data-embedded] #stage { width: 100%; max-height: none; }
-html[data-embedded] :is(.controls, #linked) { display: none; }
-)CSS";
-
-constexpr std::string_view stage_script = R"JS(
-import { ConvertedClasses, convertedClassName, convertedMethodReceiver } from "./as3.js";
-import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
-import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
-import { createLegacyRuntime } from "./avm1.js";
+`;
+document.head.append(style);
 
 const documentUrl = new URL(location.href);
+const projectUrl = new URL("../", import.meta.url);
 const localAssetPrefix = documentUrl.origin + "/";
 const stage = document.querySelector("#stage");
+const bundleUrl = new URL(stage.dataset.bundle, documentUrl);
 const symbols = document.querySelector("#symbols");
 const art = document.querySelector("#art");
-const button = document.querySelector("#play");
-const status = document.querySelector("#status");
-if (new URLSearchParams(location.search).has("embedded")) document.documentElement.dataset.embedded = "";
 const NS = "http://www.w3.org/2000/svg";
 const element = (name, attributes = {}) => {
     const created = document.createElementNS(NS, name);
@@ -140,7 +121,7 @@ const element = (name, attributes = {}) => {
     return created;
 };
 
-let data, root, mainBundle, catalog, running = false, entered = false, previous = 0, accumulated = 0, masks = 0;
+let data, root, mainBundle, catalog, running = false, previous = 0, accumulated = 0, masks = 0;
 let sockets = Object.create(null), httpRoutes = Object.create(null);
 let movieRoutes = Object.create(null);
 let lazyAssetPaths = [];
@@ -176,6 +157,11 @@ const bitmapSurfaces = new WeakMap();
 const bitmapPatterns = new WeakMap();
 const playbackEpoch = performance.now();
 const background = element("rect");
+const stageClip = element("clipPath", { id: "stage-bounds" });
+const stageBounds = element("rect");
+stageClip.append(stageBounds);
+symbols.append(stageClip);
+art.setAttribute("clip-path", "url(#stage-bounds)");
 art.before(background);
 
 function asset(id, bundle) {
@@ -669,7 +655,6 @@ function scriptProblem(error) {
     if (!reportedErrors.has(message)) {
         reportedErrors.add(message);
         console.error(error);
-        status.textContent = message;
     }
 }
 
@@ -2296,18 +2281,43 @@ function applicationDomain(parent = null) {
     };
 }
 
-)JS" R"JS(function moviePage(raw, url, bundle) {
+)JS" R"JS(function movieRoute(url, bundle) {
     if (catalog && url.origin === documentUrl.origin) {
-        const path = decodeURIComponent(url.pathname);
-        const source = decodeURIComponent(bundle.source.pathname);
+        const projectPath = value => decodeURIComponent(value.startsWith(projectUrl.pathname) ?
+            "/" + value.slice(projectUrl.pathname.length) : value);
+        const path = projectPath(url.pathname);
+        const source = projectPath(bundle.source.pathname);
         const route = Object.hasOwn(movieRoutes, source) ? movieRoutes[source] : null;
         const requested = route && Object.hasOwn(route, path) ? route[path] : path;
-        const entry = catalog[requested] ?? catalog[requested.toLowerCase()];
-        if (entry) return new URL(entry, documentUrl);
+        return catalog[requested] ?? catalog[requested.toLowerCase()];
     }
+}
+
+function moviePage(raw, url, bundle) {
+    const route = movieRoute(url, bundle);
+    if (route) return new URL(route.bundle.slice(1), projectUrl);
     const path = raw.split(/[?#]/)[0];
     const local = Object.entries(bundle.scene.dependencies).find(([source]) => source.split(/[?#]/)[0] === path);
     return local ? new URL(local[1], bundle.page) : null;
+}
+
+function movieAddress(value, bundle) {
+    const url = httpAddress(value, bundle.source);
+    const route = movieRoute(url, bundle);
+    if (route) {
+        const page = new URL(route.html.slice(1), projectUrl);
+        page.search = url.search;
+        page.hash = url.hash;
+        return page;
+    }
+    return url;
+}
+
+function movieReference(page, url, version = 0) {
+    // A signature and identity for loadBytes. The original SWF is not exported.
+    const bytes = new ByteArray(Uint8Array.of(70, 87, 83, version));
+    movieBytes.set(bytes, { page, url });
+    return bytes;
 }
 
 function bitmapRenderer(type) {
@@ -2374,7 +2384,7 @@ async function preloadLinkedPixels(scene, page) {
     }
 }
 
-async function loadMovie(page, address, original, domain) {
+async function loadMovie(page, address, domain) {
     if (page.origin !== documentUrl.origin) throw new Error("Le projet lié doit être sur la même origine.");
     let pending = movieRequests.get(page.href);
     if (pending) {
@@ -2388,20 +2398,19 @@ async function loadMovie(page, address, original, domain) {
             }),
             import(new URL("classes.js", page).href),
             import(new URL("actions.js", page).href),
-            original ? original() : fetch(new URL("source.bin", page)).then(response => response.ok ? response.arrayBuffer() : null),
-        ]).then(async ([{ scene, size }, classes, script, bytes]) => {
+        ]).then(async ([{ scene, size }, classes, script]) => {
             const lazy = lazyAssetPaths.some(prefix => address.pathname.startsWith(prefix));
             const pixels = Promise.all([loadPixelMapImages(scene, page), preloadLinkedPixels(scene, page), loadFonts(scene, page)]);
             if (script.actions.length || Object.values(scene.clips).some(clip => clip.legacyInitialize))
                 await Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
                     decodeRaster(rasterImage(new URL(asset.url, page).href)).catch(() => {}))]);
             else await Promise.all([pixels, preloadBitmapSources(scene, classes.definitions, page)]);
-            return { scene, size, definitions: classes.definitions, actions: script.actions, bytes, domains: new WeakMap(), lazy };
+            return { scene, size, definitions: classes.definitions, actions: script.actions, domains: new WeakMap(), lazy };
         });
         movieRequests.set(page.href, pending);
         pending.then(assets => {
             if (movieRequests.get(page.href) !== pending) return;
-            const size = (assets.bytes?.byteLength ?? 0) + assets.size;
+            const size = assets.size;
             cachedMovieSizes.set(pending, size);
             cachedMovieBytes += size;
             trimMovieRequests();
@@ -2417,7 +2426,7 @@ async function loadMovie(page, address, original, domain) {
         assets.domains.set(domain, bundle);
         domain.install(bundle.classes);
     }
-    return { bundle, bytes: assets.bytes };
+    return bundle;
 }
 
 function scriptLoader(owner = mainBundle) {
@@ -2472,12 +2481,11 @@ function scriptLoader(owner = mainBundle) {
             event("open");
             if (page) {
                 const domain = context?.applicationDomain ?? applicationDomain(mainDomain);
-                const { bundle, bytes } = await loadMovie(page, url, binary ? () => binary.bytes().buffer : null, domain);
+                const bundle = await loadMovie(page, url, domain);
                 if (pending !== current) return;
                 info.applicationDomain = domain;
-                info.bytes = bytes && new ByteArray(bytes, true);
-                if (info.bytes) movieBytes.set(info.bytes, { page, url });
-                info.bytesLoaded = info.bytesTotal = bytes?.byteLength ?? 0;
+                info.bytes = movieReference(page, url, bundle.scene.swfVersion);
+                info.bytesLoaded = info.bytesTotal = bundle.scene.byteSize;
                 const display = element("g");
                 const layer = { row: [0, 0, [1, 0, 0, 1, 0, 0], 1, "", 0, true],
                     node: display, overrides: Object.create(null) };
@@ -2811,7 +2819,7 @@ function makeBundle(scene, actions, definitions, page, address = page) {
         native: (name, ...args) => bundleNative(bundle, name, args),
         nativeSymbol(name) {
             if (name === "navigateToURL")
-                return (request, target) => browserMedia.navigate(request, target, value => httpAddress(value, bundle.source));
+                return (request, target) => browserMedia.navigate(request, target, value => movieAddress(value, bundle));
             if (name === "getDefinitionByName") return value => {
                 const key = String(value).replace("::", ".");
                 return bundle.classes.has(key) ? bundle.classes.definition(key) : (bundle.domain ?? mainDomain).getDefinition(key);
@@ -2829,7 +2837,7 @@ function bundleNative(bundle, name, args) {
     if (name === "URLLoader")
         value = browserMedia.urlLoader(args[0], address,
             (request, url) => moviePage(String(request?.url ?? request), url, bundle),
-            (bytes, page, url) => movieBytes.set(bytes, { page, url }));
+            movieReference);
     else if (name === "Sound") value = browserMedia.sound(args[0], address);
     else return nativeObject(name, ...args);
     displayTypes.set(value, name);
@@ -2981,7 +2989,7 @@ const legacy = createLegacyRuntime({
     },
     navigate(clip, url, target) {
         if (url && !/^\s*(?:javascript|fscommand):/i.test(String(url)))
-            browserMedia.navigate(url, target || "_self", value => httpAddress(value, clip.bundle.source));
+            browserMedia.navigate(url, target || "_self", value => movieAddress(value, clip.bundle));
     }
 });
 
@@ -3239,7 +3247,12 @@ const legacy = createLegacyRuntime({
         const time = Math.max(0, (this.frame - track[0]) / this.bundle.scene.fps + offset);
         if (audio.readyState && (force || Math.abs(audio.currentTime - time) > 0.2))
             audio.currentTime = time;
-        if (audio.paused && !audio.ended) audio.play().catch(() => {});
+        const stream = this.stream;
+        if (audio.paused && !audio.ended && !stream.pendingPlay && !stream.waitingForGesture) {
+            stream.pendingPlay = true;
+            audio.play().catch(error => { stream.waitingForGesture = error.name === "NotAllowedError"; })
+                .finally(() => { stream.pendingPlay = false; });
+        }
     }
 
     run(action, ...parameters) {
@@ -3582,38 +3595,32 @@ function animate(time) {
 
 try {
     const [{ actions }, { definitions }, response] = await Promise.all([
-        import(new URL("actions.js", documentUrl).href), import(new URL("classes.js", documentUrl).href),
-        fetch(new URL("scene.json", documentUrl)),
+        import(new URL("actions.js", bundleUrl).href), import(new URL("classes.js", bundleUrl).href),
+        fetch(new URL("scene.json", bundleUrl)),
     ]);
     if (!response.ok) throw new Error("scene.json: " + response.status);
     data = await response.json();
     const configuration = Promise.all([
-        fetch(new URL(data.workspace?.network ?? "network.json", documentUrl)).catch(() => null),
-        data.workspace && fetch(new URL(data.workspace.catalog, documentUrl)),
-        data.hasSource && fetch(new URL("source.bin", documentUrl)).then(source => {
-            if (!source.ok) throw new Error("source.bin: " + source.status);
-            return source.arrayBuffer();
-        }),
+        fetch(new URL("network.json", import.meta.url)).catch(() => null),
+        fetch(new URL("catalog.json", import.meta.url)).catch(() => null),
     ]);
-    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, documentUrl), preloadLinkedPixels(data, documentUrl), loadFonts(data, documentUrl)]);
-    const [network, index, bytes] = await configuration;
+    const bitmapSources = Promise.all([preloadBitmapSources(data, definitions, bundleUrl), preloadLinkedPixels(data, bundleUrl), loadFonts(data, bundleUrl)]);
+    const [network, index] = await configuration;
     if (index?.ok) {
         catalog = Object.create(null);
-        for (const [path, page] of Object.entries((await index.json()).movies)) {
-            catalog[path.toLowerCase()] ??= page;
-            catalog[path] = page;
+        const { movies, packages } = await index.json();
+        for (const [path, html] of Object.entries(movies)) {
+            const route = { html, bundle: packages[path] };
+            catalog[path.toLowerCase()] ??= route;
+            catalog[path] = route;
         }
     }
-    mainBundle = makeBundle(data, actions, definitions, documentUrl);
+    const source = new URL(documentUrl);
+    source.pathname = source.pathname.replace(/\.html$/i, ".swf");
+    mainBundle = makeBundle(data, actions, definitions, bundleUrl, source);
     mainDomain.install(mainBundle.classes);
     loaderInfo.url = mainBundle.source.href;
     loaderInfo.loaderURL = loaderInfo.url;
-    if (data.workspace) {
-        const catalogueLink = document.createElement("a");
-        catalogueLink.href = "/catalogue.html";
-        catalogueLink.textContent = "Catalogue des animations";
-        button.parentElement.append(catalogueLink);
-    }
     if (network?.ok) {
         const config = await network.json();
         sockets = Object.assign(Object.create(null), Object.fromEntries(
@@ -3624,24 +3631,15 @@ try {
             config.lazyAssetPaths.filter(path => typeof path === "string" && path.startsWith("/") && path.endsWith("/")) : [];
         loaderInfo.parameters = Object.assign(Object.create(null), config.parameters, loaderInfo.parameters);
     }
-    if (bytes) {
-        loaderInfo.bytes = new ByteArray(bytes, true);
-        loaderInfo.bytesLoaded = loaderInfo.bytesTotal = bytes.length;
-    }
-    const linked = document.querySelector("#linked");
-    for (const [name, url] of Object.entries(data.dependencies)) {
-        const item = document.createElement("li"), link = document.createElement("a");
-        link.textContent = name;
-        link.href = url;
-        item.append(link);
-        linked.lastElementChild.append(item);
-        linked.hidden = false;
-    }
+    loaderInfo.bytes = movieReference(bundleUrl, mainBundle.source, data.swfVersion);
+    loaderInfo.bytesLoaded = loaderInfo.bytesTotal = data.byteSize;
     stage.setAttribute("viewBox", data.viewBox.join(" "));
-    document.documentElement.style.setProperty("--scene-width", data.viewBox[2] / 20 + "px");
     const [x, y, width, height] = data.viewBox;
-    for (const [key, value] of Object.entries({ x, y, width, height, fill: "#fff" })) background.setAttribute(key, value);
-    status.textContent = "";
+    for (const [key, value] of Object.entries({ x, y, width, height })) {
+        background.setAttribute(key, value);
+        stageBounds.setAttribute(key, value);
+    }
+    background.setAttribute("fill", "#fff");
     await bitmapSources;
     root = new Clip(0, art);
     root.seek(1, false);
@@ -3661,22 +3659,17 @@ try {
         if (type === "pointerup" && node.isConnected && node !== document.activeElement)
             node.focus({ preventScroll: true });
     }, true);
-    for (const type of ["pointerup", "keydown"])
-        stage.addEventListener(type, () => browserMedia.resumeAudio(), { capture: true, passive: true });
-    button.addEventListener("click", () => {
+    for (const type of ["pointerup", "keydown"]) stage.addEventListener(type, () => {
         browserMedia.resumeAudio();
-        running = !running;
-        if (!entered) {
-            entered = true;
-            root.start();
-            loaderNode.dispatchEvent(scriptEvent("complete"));
+        for (const clip of activeStreams) {
+            clip.stream.waitingForGesture = false;
+            clip.syncStream();
         }
-        for (const clip of activeStreams) clip.syncStream();
-        button.textContent = running ? "Pause" : "Lire";
-        if (running) stage.focus({ preventScroll: true });
-    });
-    button.disabled = false;
-    if (!Object.values(data.clips).some(clip => clip.streams.length || clip.frames.some(frame => frame[4].length))) button.click();
+    }, { capture: true, passive: true });
+    stage.focus({ preventScroll: true });
+    running = true;
+    root.start();
+    loaderNode.dispatchEvent(scriptEvent("complete"));
     if (actions.length) {
         document.addEventListener("keydown", event => {
             if (!running || (event.target !== document.body && !stage.contains(event.target))) return;
@@ -3697,8 +3690,8 @@ try {
     requestAnimationFrame(animate);
 } catch (error) {
     console.error(error);
-    status.textContent = location.protocol === "file:" ?
-        "Ouvre ce projet avec un serveur HTTP local. Consulte LISEZ-MOI.txt." : "Impossible de charger la scène convertie.";
+    if (location.protocol === "file:") console.error(document.documentElement.lang === "en" ?
+        "Serve this export over HTTP. See LISEZ-MOI.txt." : "Ouvre cet export via HTTP. Consulte LISEZ-MOI.txt.");
 }
 )JS";
 
@@ -3720,10 +3713,15 @@ struct Packages
 
 struct WorkspaceMovie
 {
-    std::filesystem::path path;
+    std::filesystem::path path, page;
     std::string url;
     std::string package;
     std::shared_ptr<const Movie> edited;
+};
+
+struct WebRoute
+{
+    std::filesystem::path page, bundle;
 };
 
 std::string method_value(const web::WebMethod& method)
@@ -3856,13 +3854,13 @@ std::filesystem::path resolve_swf(const std::filesystem::path& root, const std::
 }
 
 ExportReport write_package(const Movie& movie, const std::filesystem::path& source, const std::filesystem::path& relative,
-    std::string_view title, Packages& packages, std::string_view workspace_url = {})
+    Packages& packages, std::string_view workspace_url = {})
 {
     const auto destination = packages.destination / relative;
     std::filesystem::create_directories(destination);
     ExportReport report;
     std::set<std::string> references;
-    const auto scripts = web::movie_scripts(movie, destination / "sources", report, workspace_url.empty() ? &references : nullptr);
+    const auto scripts = web::movie_scripts(movie, report, workspace_url.empty() ? &references : nullptr);
     std::string links = "{";
     for (const auto& reference : references)
     {
@@ -3882,7 +3880,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
                     web::omission(report, std::format("Dépendance hors limite d’export : {}", reference));
                     continue;
                 }
-                const auto target = std::filesystem::path("dependencies") / std::format("film-{}", ++packages.sequence);
+                const auto target = std::filesystem::path("__flashstudio/movies") / std::format("film-{}", ++packages.sequence);
                 found = packages.converted.emplace(path, target).first;
                 try
                 {
@@ -3890,11 +3888,10 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
                     if (child.header().expanded_size > 2 * max_file_size - packages.expanded)
                         throw std::runtime_error("Budget dépassé pour l’ensemble des SWF liés.");
                     packages.expanded += child.header().expanded_size;
-                    const auto converted = write_package(child, path, target, utf8_path(path.stem()), packages);
+                    const auto converted = write_package(child, path, target, packages);
                     report.files += converted.files;
                     if (converted.failed)
-                        web::omission(report, std::format("Dépendance {} : {} points de portage dans {}/LISEZ-MOI.txt.",
-                            reference, converted.failed, utf8_path(target.lexically_relative(relative))));
+                        web::omission(report, std::format("Dépendance {} : {} points de portage.", reference, converted.failed));
                 }
                 catch (...)
                 {
@@ -3905,7 +3902,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
             if (links.size() > 1)
                 links += ',';
             links += web::json_string(reference) + ':' +
-                web::json_string(utf8_path((found->second / "index.html").lexically_relative(relative)));
+                web::json_string(utf8_path(found->second.lexically_relative(relative)) + "/");
         }
         catch (const std::exception& error) { web::omission(report, std::format("Dépendance {} : {}", reference, error.what())); }
     }
@@ -3915,7 +3912,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
         share_visual = [&](const Asset& asset) { return shared_visual(asset, packages.destination, destination, *packages.visuals, report); };
     auto scene = web::export_timeline(movie, destination, report, actions, scripts.clips, share_visual);
     scene.pop_back();
-    scene += ",\"hasSource\":true";
+    scene += ",\"swfVersion\":" + std::to_string(movie.header().version);
     scene += ",\"dependencies\":" + links + "}";
     std::string audio_classes = "{", font_classes = "{", fonts = "{";
     std::map<unsigned, std::string> font_assets;
@@ -4007,8 +4004,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
     scene += ",\"fontClasses\":" + font_classes + '}';
     scene += ",\"fonts\":" + fonts + '}';
     if (!workspace_url.empty())
-        scene += ",\"workspace\":{\"catalog\":\"../../catalog.json\",\"network\":\"../../network.json\",\"source\":" +
-            web::json_string(workspace_url) + "}";
+        scene += ",\"workspace\":{\"source\":" + web::json_string(workspace_url) + "}";
     scene += "}";
     write_text(destination / "scene.json", scene);
     std::string script = "export const actions = [\n";
@@ -4027,53 +4023,7 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
     script += "];\n";
     write_text(destination / "actions.js", script);
     write_text(destination / "classes.js", class_modules(scripts));
-    if (workspace_url.empty())
-    {
-        write_text(destination / "as3.js", web::class_runtime);
-        write_text(destination / "text.js", web::text_runtime);
-        write_text(destination / "media.js", web::media_runtime);
-        write_text(destination / "avm1.js", web::avm1_runtime);
-        write_text(destination / "network.json", "{\n  \"http\": {},\n  \"sockets\": {},\n  \"tcp\": {}\n}\n");
-        write_text(destination / "stage.js", web::stage_script);
-        write_text(destination / "stage.css", web::css);
-        write_text(destination / "serve.py", web::local_server);
-        report.files += 8;
-    }
-    write_file(destination / "source.bin", movie.uncompressed());
-    ++report.files;
-
-    std::string notes = "Projet HTML5 Flash Studio\n\n";
-    notes += workspace_url.empty() ?
-        "Démarrage local : py -3 serve.py, puis ouvrir http://127.0.0.1:8000/ dans le navigateur.\n"
-        "Hébergement : publier le dossier sur un serveur statique.\n\n" :
-        "Le serveur local et le catalogue se trouvent à la racine de l’export.\n\n";
-    notes +=
-        "scene.json : placement des objets, images clés, labels, sprites, boutons et sons.\n"
-        "assets/ : ressources converties ou extraites.\n"
-        "classes.js : classes ActionScript 3 converties en JavaScript, avec les diagnostics des méthodes à porter.\n"
-        "actions.js : fonctions JavaScript issues des scripts ActionScript 1 et 2 convertis.\n"
-        "sources/ : ActionScript récupéré pour poursuivre le portage.\n";
-    notes += workspace_url.empty() ?
-        "dependencies/ : projets web des SWF liés détectés dans l’espace de travail.\n"
-        "network.json : routes HTTP, WebSocket et TCP. Les routes TCP passent par serve.py.\n" :
-        "../../catalog.json : chemins SWF et pages converties de l’espace de travail.\n"
-        "../../network.json : routes HTTP, WebSocket et TCP. Les routes TCP passent par serve.py.\n";
-    notes += "\n"
-        "La scène utilise SVG et JavaScript dans le navigateur. Les appels externes, les effets et les scripts sans équivalent"
-        " dans ce convertisseur demandent un portage.\n";
-    if (scripts.as3_bodies)
-        notes += std::format("\nAS3 : {} corps compilés sur {}. La compilation ne vérifie pas la disponibilité des services utilisés à l’exécution.\n",
-            scripts.compiled_bodies, scripts.as3_bodies);
-    notes += std::format("\n{} points de portage signalés.\n", report.failed);
-    for (const auto& error : report.errors)
-        notes += "- " + error + '\n';
-    if (report.failed > report.errors.size())
-        notes += std::format("- {} autres points.\n", report.failed - report.errors.size());
-    write_text(destination / "LISEZ-MOI.txt", notes);
-    const auto prefix = workspace_url.empty() ? "" : "../../";
-    write_text(destination / "index.html", std::format(web::page, web::html_text(title),
-        std::string(prefix) + "stage.css", std::string(prefix) + "stage.js"));
-    report.files += 5;
+    report.files += 3;
     return report;
 }
 
@@ -4113,6 +4063,87 @@ std::string url_path(std::string_view path)
     return escaped;
 }
 
+std::filesystem::path film_page(std::filesystem::path path)
+{
+    path = path.lexically_normal();
+    if (path.empty() || path.has_root_path() || *path.begin() == ".." ||
+        ascii_lower(utf8_path(*path.begin())) == "__flashstudio")
+        throw std::runtime_error("Chemin de film HTML5 invalide : " + utf8_path(path));
+    return path.replace_extension(".html");
+}
+
+void write_movie_page(const std::filesystem::path& root, const WebRoute& route, std::string_view title, WebLanguage language)
+{
+    const auto path = root / route.page;
+    std::filesystem::create_directories(path.parent_path());
+    const auto bundle = route.bundle.lexically_relative(route.page.parent_path().empty() ? "." : route.page.parent_path());
+    const auto script = std::filesystem::path("__flashstudio/stage.js").lexically_relative(
+        route.page.parent_path().empty() ? "." : route.page.parent_path());
+    write_text(path, std::format(web::page, language == WebLanguage::english ? "en" : "fr", web::html_text(title),
+        web::html_text(url_path(utf8_path(bundle)) + "/"), web::html_text(url_path(utf8_path(script)))));
+}
+
+void write_web_catalog(const std::filesystem::path& root, const std::filesystem::path& entry,
+    const std::map<std::string, WebRoute>& routes)
+{
+    std::string pages, bundles;
+    for (const auto& [path, target] : routes)
+    {
+        const auto key = "    " + web::json_string(path) + ": ";
+        if (!pages.empty())
+        {
+            pages += ",\n";
+            bundles += ",\n";
+        }
+        pages += key + web::json_string(url_path(web_path(target.page)));
+        bundles += key + web::json_string(url_path(web_path(target.bundle)) + "/");
+    }
+    const auto start = entry.empty() ? "" : url_path(web_path(entry));
+    write_text(root / "__flashstudio/catalog.json", "{\n  \"entry\": " + web::json_string(start) + ",\n  \"movies\": {\n" +
+        pages + "\n  },\n  \"packages\": {\n" + bundles + "\n  }\n}\n");
+}
+
+void write_web_runtime(const std::filesystem::path& root, std::string_view network)
+{
+    const auto shared = root / "__flashstudio";
+    std::filesystem::create_directories(shared);
+    write_text(shared / "stage.js", web::stage_script);
+    write_text(shared / "as3.js", web::class_runtime);
+    write_text(shared / "text.js", web::text_runtime);
+    write_text(shared / "media.js", web::media_runtime);
+    write_text(shared / "avm1.js", web::avm1_runtime);
+    write_text(shared / "network.json", network);
+    write_text(root / "serve.py", web::local_server);
+}
+
+void write_web_guide(const std::filesystem::path& root, const std::filesystem::path& entry, WebLanguage language,
+    std::string_view details)
+{
+    const auto link = entry.empty() ? std::string{} : "http://127.0.0.1:8000" + url_path(web_path(entry));
+    const auto guide = language == WebLanguage::english ?
+        std::format("Flash Studio HTML5 export\n\n"
+            "Run py -3 serve.py in this folder to start the local server.\n"
+            "Main movie: {}\n\n"
+            "Each converted movie has an HTML page at the original SWF's relative path.\n"
+            "The converted runtime and movie assets are in __flashstudio/.\n"
+            "Scripts that inspect the original SWF bytes require manual porting.\n"
+            "Publish the whole export at the website root to preserve absolute resource URLs.\n"
+            "Projects using HTTP or WebSocket services still need their backend.\n"
+            "Local connection settings: __flashstudio/network.json\n"
+            "Click the stage to enable sound if the browser blocks autoplay.\n\n{}", link, details) :
+        std::format("Export HTML5 Flash Studio\n\n"
+            "Exécutez py -3 serve.py dans ce dossier pour démarrer le serveur local.\n"
+            "Film principal : {}\n\n"
+            "Chaque film converti a une page HTML au chemin relatif du SWF d’origine.\n"
+            "Le lecteur et les ressources converties se trouvent dans __flashstudio/.\n"
+            "Les scripts qui lisent les octets du SWF d’origine demandent un portage.\n"
+            "Publiez l’export entier à la racine du site pour conserver les URL absolues des ressources.\n"
+            "Les projets utilisant des services HTTP ou WebSocket ont toujours besoin de leur serveur.\n"
+            "Réglages de connexion locale : __flashstudio/network.json\n"
+            "Cliquez sur la scène pour activer le son si le navigateur bloque la lecture automatique.\n\n{}", link, details);
+    write_text(root / "LISEZ-MOI.txt", guide);
+}
+
 void find_flash_routes(const std::filesystem::path& project, std::map<std::string, std::filesystem::path>& movies)
 {
     const auto app = read_small_text(project / "app.js");
@@ -4141,7 +4172,8 @@ bool public_asset(std::string_view extension)
 }
 
 void scan_web_folder(const std::filesystem::path& folder, std::vector<std::filesystem::path>* public_files,
-    std::map<std::string, std::filesystem::path>& movies, std::string& warnings, const std::filesystem::path& skip = {})
+    std::map<std::string, std::filesystem::path>& movies, std::vector<std::filesystem::path>& incomplete_folders,
+    const std::filesystem::path& skip = {})
 {
     std::error_code error;
     auto walker = std::filesystem::recursive_directory_iterator(folder, std::filesystem::directory_options::skip_permission_denied, error);
@@ -4169,7 +4201,7 @@ void scan_web_folder(const std::filesystem::path& folder, std::vector<std::files
             public_files->push_back(relative);
     }
     if (error)
-        warnings += "- Parcours incomplet de " + utf8_path(folder.filename()) + "\n";
+        incomplete_folders.push_back(folder.filename());
 }
 
 std::string workspace_network(const std::filesystem::path& project, const std::filesystem::path& public_root)
@@ -4231,33 +4263,31 @@ void reuse_workspace_movie(const std::filesystem::path& root, const WorkspaceMov
     const auto from = root / original.package, to = root / job.package;
     const auto contents = read_file(from / "scene.json");
     std::string scene(reinterpret_cast<const char*>(contents.data()), contents.size());
-    const auto route = ",\"source\":" + web::json_string(url_path(original.url));
+    const auto route = "\"workspace\":{\"source\":" + web::json_string(url_path(original.url));
     const auto position = scene.rfind(route);
     if (position == std::string::npos)
         throw std::runtime_error("Chemin du film absent du paquet HTML5.");
-    scene.replace(position, route.size(), ",\"source\":" + web::json_string(url_path(job.url)));
+    scene.replace(position, route.size(), "\"workspace\":{\"source\":" + web::json_string(url_path(job.url)));
     std::filesystem::create_directories(to);
     for (const auto& entry : std::filesystem::directory_iterator(from))
     {
         const auto name = entry.path().filename();
-        if (name == "scene.json" || name == "index.html")
+        if (name == "scene.json")
             continue;
         std::filesystem::copy(entry.path(), to / name, std::filesystem::copy_options::recursive);
     }
     write_text(to / "scene.json", scene);
-    write_text(to / "index.html", std::format(web::page, web::html_text(utf8_path(job.path.stem())),
-        "../../stage.css", "../../stage.js"));
 }
 }
 
 std::string html5_classes(const Movie& movie)
 {
     ExportReport report;
-    return class_modules(web::movie_scripts(movie, {}, report, nullptr));
+    return class_modules(web::movie_scripts(movie, report, nullptr));
 }
 
 ExportReport export_html5(const Movie& movie, const std::filesystem::path& destination, std::string_view title,
-    const std::filesystem::path& source, const std::filesystem::path& workspace)
+    const std::filesystem::path& source, const std::filesystem::path& workspace, WebLanguage language)
 {
     if (std::filesystem::exists(destination) &&
         (!std::filesystem::is_directory(destination) || !std::filesystem::is_empty(destination)))
@@ -4267,10 +4297,33 @@ ExportReport export_html5(const Movie& movie, const std::filesystem::path& desti
     if (!input.empty() && !inside(root, input))
         root = input.parent_path();
     Packages packages{std::move(root), std::filesystem::absolute(destination), {}};
+    const std::filesystem::path main_bundle = "__flashstudio/movies/00001";
     packages.expanded = movie.header().expanded_size;
     if (!input.empty())
-        packages.converted.emplace(input, ".");
-    return write_package(movie, input, ".", title, packages);
+        packages.converted.emplace(input, main_bundle);
+    const auto original = input.empty() ? std::filesystem::path("movie.swf") : input.lexically_relative(packages.root);
+    const auto entry = film_page(original);
+    auto report = write_package(movie, input, main_bundle, packages);
+    std::map<std::string, WebRoute> routes;
+    for (const auto& [path, bundle] : packages.converted)
+    {
+        const auto relative = path.lexically_relative(packages.root);
+        routes.emplace(web_path(relative), WebRoute{film_page(relative), bundle});
+    }
+    routes.try_emplace(web_path(original), WebRoute{entry, main_bundle});
+    for (const auto& [key, route] : routes)
+        write_movie_page(packages.destination, route, route.page == entry ? std::string(title) : utf8_path(route.page.stem()), language);
+    write_web_runtime(packages.destination, "{\n  \"http\": {},\n  \"sockets\": {},\n  \"tcp\": {}\n}\n");
+    write_web_catalog(packages.destination, entry, routes);
+    const auto english = language == WebLanguage::english;
+    auto details = english ? std::format("{} conversion issues reported. See the browser console for runtime diagnostics.\n", report.failed) :
+        std::format("{} points de portage signalés.\n", report.failed);
+    if (!english)
+        for (const auto& error : report.errors)
+            details += "- " + error + '\n';
+    write_web_guide(packages.destination, entry, language, details);
+    report.files += routes.size() + 9;
+    return report;
 }
 
 WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const WebMovieOverrides& open_movies)
@@ -4286,9 +4339,9 @@ WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const W
     const auto nested_htdocs = !selected_htdocs && std::filesystem::is_directory(htdocs);
     const auto& public_root = plan.public_root = nested_htdocs ? htdocs : selected_root;
     std::map<std::string, std::filesystem::path> sources;
-    scan_web_folder(public_root, selected_htdocs || nested_htdocs ? &plan.public_files : nullptr, sources, plan.warnings);
+    scan_web_folder(public_root, selected_htdocs || nested_htdocs ? &plan.public_files : nullptr, sources, plan.incomplete_folders);
     if (nested_htdocs)
-        scan_web_folder(selected_root, nullptr, sources, plan.warnings, public_root);
+        scan_web_folder(selected_root, nullptr, sources, plan.incomplete_folders, public_root);
     find_flash_routes(plan.project, sources);
     std::map<std::filesystem::path, std::shared_ptr<const Movie>> overrides;
     for (const auto& [path, movie] : open_movies)
@@ -4319,18 +4372,18 @@ WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const W
 
 WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
     const std::filesystem::path& preferred, const WebMovieOverrides& open_movies,
-    const std::function<void(std::size_t, std::size_t)>& progress)
+    const std::function<void(std::size_t, std::size_t)>& progress, WebLanguage language)
 {
     const auto plan = plan_html5_workspace(root, open_movies);
     std::vector<std::size_t> selection(plan.movies.size());
     for (std::size_t index = 0; index < selection.size(); ++index)
         selection[index] = index;
-    return export_html5_workspace(plan, destination, selection, preferred, progress);
+    return export_html5_workspace(plan, destination, selection, preferred, progress, language);
 }
 
 WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const std::filesystem::path& destination,
     std::span<const std::size_t> selection, const std::filesystem::path& preferred,
-    const std::function<void(std::size_t, std::size_t)>& progress)
+    const std::function<void(std::size_t, std::size_t)>& progress, WebLanguage language)
 {
     if (selection.empty())
         throw std::runtime_error("Aucun SWF à exporter dans ce dossier.");
@@ -4342,6 +4395,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
     std::vector<WorkspaceMovie> jobs;
     std::map<std::string, std::size_t> aliases;
     std::set<std::size_t> added;
+    std::set<std::string> pages;
     for (const auto index : selection)
     {
         const auto& movie = plan.movies.at(index);
@@ -4350,11 +4404,21 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
         for (const auto& route : movie.routes)
             aliases.emplace(route, jobs.size());
         const auto entry = std::ranges::find(movie.routes, "/chat/app.swf");
-        jobs.push_back({movie.path, entry == movie.routes.end() ? movie.routes.front() : *entry,
+        const auto& url = entry == movie.routes.end() ? movie.routes.front() : *entry;
+        const auto original = inside(plan.root, movie.path) ? movie.path.lexically_relative(plan.root) :
+            std::filesystem::path(std::u8string(url.begin(), url.end())).relative_path();
+        const auto page = film_page(original);
+        if (!pages.insert(ascii_lower(utf8_path(page))).second)
+            throw std::runtime_error("Plusieurs SWF utilisent la même page HTML : " + utf8_path(page));
+        aliases.emplace(web_path(original), jobs.size());
+        jobs.push_back({movie.path, page, url,
             std::format("movies/{:05}", jobs.size() + 1), movie.edited});
     }
 
-    auto details = plan.warnings;
+    const auto english = language == WebLanguage::english;
+    std::string details;
+    for (const auto& path : plan.incomplete_folders)
+        details += (english ? "- Could not scan all of " : "- Parcours incomplet de ") + utf8_path(path) + '\n';
     const auto shared = output / "__flashstudio";
     std::filesystem::create_directories(shared);
     for (const auto& relative : plan.public_files)
@@ -4365,17 +4429,10 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
         if (!error)
             std::filesystem::copy_file(plan.public_root / relative, target, std::filesystem::copy_options::skip_existing, error);
         if (error)
-            details += "- Copie impossible pour " + utf8_path(relative) + "\n";
+            details += (english ? "- Could not copy " : "- Copie impossible pour ") + utf8_path(relative) + '\n';
     }
 
-    write_text(shared / "stage.js", web::stage_script);
-    write_text(shared / "stage.css", web::css);
-    write_text(shared / "as3.js", web::class_runtime);
-    write_text(shared / "text.js", web::text_runtime);
-    write_text(shared / "media.js", web::media_runtime);
-    write_text(shared / "avm1.js", web::avm1_runtime);
-    write_text(shared / "network.json", workspace_network(plan.project, plan.public_root));
-    write_text(output / "serve.py", web::local_server);
+    write_web_runtime(output, workspace_network(plan.project, plan.public_root));
 
     struct Result { std::size_t omissions{}; std::string error; };
     std::vector<Result> results(jobs.size());
@@ -4410,8 +4467,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
                 const auto write = [&]
                 {
                     Packages packages{plan.project, shared, {}, 0, 0, &visual_lock};
-                    return write_package(*movie, job.path, job.package, utf8_path(job.path.stem()), packages,
-                        url_path(job.url)).failed;
+                    return write_package(*movie, job.path, job.package, packages, url_path(job.url)).failed;
                 };
                 if (previous.valid())
                 {
@@ -4430,6 +4486,8 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
                     catch (...) { owner.set_value(jobs.size()); throw; }
                     owner.set_value(index);
                 }
+                write_movie_page(output, {job.page, std::filesystem::path("__flashstudio") / job.package},
+                    utf8_path(job.path.stem()), language);
             }
             catch (const std::exception& error) { result.error = error.what(); }
             catch (...) { result.error = "Erreur inconnue."; }
@@ -4455,8 +4513,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
     }
 
     WebWorkspaceReport report;
-    std::string rows;
-    std::string entries;
+    std::map<std::string, WebRoute> routes;
     const auto selected = preferred.empty() ? std::filesystem::path{} : normalized_path(preferred);
     std::size_t start = jobs.size();
     unsigned start_priority = 0;
@@ -4466,11 +4523,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
         const auto& result = results[index];
         if (!result.error.empty())
             continue;
-        const auto page = "/__flashstudio/" + job.package + "/index.html";
-        if (!entries.empty())
-            entries += ",\n";
-        entries += "    " + web::json_string(url) + ": " + web::json_string(page);
-        rows += "<li><a href=\"" + page + "\">" + web::html_text(url) + "</a></li>\n";
+        routes.emplace(url, WebRoute{job.page, std::filesystem::path("__flashstudio") / job.package});
         const auto key = ascii_lower(url);
         const unsigned priority = key == "/chat/app.swf" ? 5 : job.path == selected ? 4 : key == "/app.swf" ||
             key == "/main.swf" || key == "/chat.swf" ? 3 : job.path.parent_path() == plan.public_root ? 2 : 1;
@@ -4487,7 +4540,9 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
         if (!result.error.empty())
         {
             ++report.failed;
-            details += "- " + job.url + " · échec de l’export\n";
+            details += "- " + job.url + (english ? " · export failed\n" : " · échec de l’export\n");
+            if (!english)
+                details += "  " + result.error + '\n';
         }
         else
         {
@@ -4495,32 +4550,17 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
             if (result.omissions)
             {
                 ++report.partial;
-                details += std::format("- {} · {} points de portage · __flashstudio/{}/LISEZ-MOI.txt\n",
-                    job.url, result.omissions, job.package);
+                details += std::format("- {} · {}{}\n", utf8_path(job.page), result.omissions,
+                    english ? " conversion issues" : " points de portage");
             }
         }
     }
-    const auto entry = start == jobs.size() ? "/catalogue.html" : "/__flashstudio/" + jobs[start].package + "/index.html";
-    write_text(shared / "catalog.json", "{\n  \"entry\": " + web::json_string(entry) + ",\n  \"movies\": {\n" + entries + "\n  }\n}\n");
-    write_text(output / "catalogue.html", "<!doctype html><html lang=\"fr\"><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Animations HTML5</title>"
-        "<link rel=\"stylesheet\" href=\"/__flashstudio/stage.css\"><main class=\"catalogue\"><h1>Animations HTML5</h1>"
-        "<a href=\"/\">Ouvrir le film principal</a><label for=\"filter\">Rechercher un film</label>"
-        "<input type=\"search\" id=\"filter\"><ul>" + rows + "</ul></main>"
-        "<script>const filter = document.querySelector('#filter'); const movies = document.querySelectorAll('li');"
-        "filter.addEventListener('input', () => { const query = filter.value.toLowerCase().trim();"
-        "for (const movie of movies) movie.hidden = !movie.textContent.toLowerCase().includes(query); });</script></html>");
-    write_text(output / "index.html", "<!doctype html><meta charset=\"utf-8\"><title>Projet HTML5</title>"
-        "<a href=\"" + entry + "\">Ouvrir le film principal</a><a href=\"/catalogue.html\">Catalogue des animations</a>"
-        "<script>location.replace(" + web::json_string(entry) + " + location.search + location.hash)</script>\n");
-    write_text(output / "LISEZ-MOI.txt", std::format("Projet HTML5 Flash Studio\n\n"
-        "Démarrage local : py -3 serve.py, puis ouvrir http://127.0.0.1:8000/.\n"
-        "Catalogue : http://127.0.0.1:8000/catalogue.html\n"
-        "Hébergement : publier le dossier à la racine du site. Les services HTTP et WebSocket du projet restent nécessaires.\n"
-        "Configuration locale : __flashstudio/network.json\n"
-        "Film principal : {}\n\n"
-        "{} SWF exportés, dont {} avec des points de portage. {} échecs.\n\n{}",
-        start == jobs.size() ? "" : jobs[start].url, report.converted, report.partial, report.failed, details));
+    const auto entry = start == jobs.size() ? std::filesystem::path{} : jobs[start].page;
+    write_web_catalog(output, entry, routes);
+    const auto summary = english ?
+        std::format("{} SWFs exported, including {} with conversion issues. {} failed.\n\n", report.converted, report.partial, report.failed) :
+        std::format("{} SWF exportés, dont {} avec des points de portage. {} échecs.\n\n", report.converted, report.partial, report.failed);
+    write_web_guide(output, entry, language, summary + details);
     return report;
 }
 }

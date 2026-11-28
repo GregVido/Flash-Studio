@@ -21,6 +21,7 @@ MAX_FRAME = 2 ** 20
 NETWORK_FILE = ROOT / "__flashstudio" / "network.json"
 if not NETWORK_FILE.exists():
     NETWORK_FILE = ROOT / "network.json"
+CATALOG_FILE = ROOT / "__flashstudio" / "catalog.json"
 
 
 def pack_frame(opcode, payload):
@@ -59,6 +60,8 @@ class SiteHandler(SimpleHTTPRequestHandler):
         if not path.startswith("/__flashstudio_socket/"):
             if self.is_static(path):
                 return super().do_GET()
+            if self.redirect_movie():
+                return
             return self.forward_http()
 
         port = self.server.server_port
@@ -107,7 +110,30 @@ class SiteHandler(SimpleHTTPRequestHandler):
     def do_HEAD(self):
         if self.is_static(urlsplit(self.path).path):
             return super().do_HEAD()
+        if self.redirect_movie():
+            return
         return self.forward_http()
+
+    def redirect_movie(self):
+        request = urlsplit(self.path)
+        path = unquote(request.path)
+        if path != "/" and not path.lower().endswith(".swf"):
+            return False
+        try:
+            catalog = json.loads(CATALOG_FILE.read_text("utf-8"))
+            movies = catalog["movies"]
+            page = catalog["entry"] if path == "/" else movies.get(path)
+            if not page and path != "/":
+                page = next((value for key, value in movies.items() if key.lower() == path.lower()), None)
+        except (OSError, ValueError, KeyError, AttributeError):
+            return False
+        if not page or not page.startswith("/") or page.startswith("//") or not self.is_static(page):
+            return False
+        self.send_response(302)
+        self.send_header("Location", page + ("?" + request.query if request.query else ""))
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
 
     def do_POST(self):
         self.forward_http()

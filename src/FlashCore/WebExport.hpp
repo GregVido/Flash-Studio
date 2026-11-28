@@ -44,7 +44,6 @@ struct WebProgram
 {
     std::map<unsigned, ScriptAsset> clips;
     std::map<std::string, WebClass, std::less<>> classes;
-    std::size_t as3_bodies{}, compiled_bodies{};
 };
 
 struct WebFunction
@@ -74,8 +73,7 @@ struct FontMetrics
 };
 FontMetrics font_metrics(const Movie& movie, unsigned id);
 std::string text_field_json(const Movie& movie, std::size_t index);
-WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& sources,
-    ExportReport& report, std::set<std::string>* references);
+WebProgram movie_scripts(const Movie& movie, ExportReport& report, std::set<std::string>* references);
 std::string export_timeline(const Movie& movie, const std::filesystem::path& destination, ExportReport& report,
     std::vector<std::string>& actions, const std::map<unsigned, ScriptAsset>& scripts,
     const std::function<std::string(const Asset&)>& share_visual = {});

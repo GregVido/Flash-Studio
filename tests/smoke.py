@@ -8,9 +8,13 @@ import shutil
 import struct
 import subprocess
 import tempfile
+from urllib.parse import unquote
 import wave
 import xml.etree.ElementTree as etree
 import zlib
+
+
+WEB_BUNDLE = Path("__flashstudio/movies/00001")
 
 
 def bits(*fields):
@@ -165,15 +169,16 @@ def check(exe, folder, asc=None):
 
     web = folder / "html5-sprite"
     run("export-html5", animation, web)
-    scene = json.loads((web / "scene.json").read_text(encoding="utf-8"))
+    assert list(web.rglob("*.html")) == [web / animation.with_suffix(".html").name]
+    scene = json.loads((web / WEB_BUNDLE / "scene.json").read_text(encoding="utf-8"))
     assert scene["fps"] == 2 and scene["viewBox"] == [0, 0, 12800, 7200]
     assert scene["clips"]["0"]["frames"][0][0][0][1] == 7
     frames = scene["clips"]["7"]["frames"]
     assert len(frames) == 12 and frames[11][0][0][2] == [1, 0, 0, 1, 3520, 0]
-    assert (web / scene["assets"]["10"]["url"]).is_file()
-    original = (web / "scene.json").read_bytes()
+    assert (web / WEB_BUNDLE / scene["assets"]["10"]["url"]).is_file()
+    original = (web / WEB_BUNDLE / "scene.json").read_bytes()
     run("export-html5", animation, web, ok=False)
-    assert (web / "scene.json").read_bytes() == original
+    assert (web / WEB_BUNDLE / "scene.json").read_bytes() == original
 
     morph = folder / "Morph.swf"
     body = rectangle(4400, 2200) + struct.pack("<HH", 24 * 256, 2)
@@ -185,45 +190,54 @@ def check(exe, folder, asc=None):
     morph.write_bytes(swf(b"FWS", body, body))
     web_morph = folder / "html5-morph"
     run("export-html5", morph, web_morph)
-    scene = json.loads((web_morph / "scene.json").read_text("utf-8"))
+    scene = json.loads((web_morph / WEB_BUNDLE / "scene.json").read_text("utf-8"))
     assert [row[1] for row in scene["clips"]["0"]["frames"][0][0]] == [10, 11, 182]
     updated = scene["clips"]["0"]["frames"][1][0]
     assert [row[11] for row in updated] == [32768, 65535]
     for key, side, color in [("10@32768", 660, "#7F0080"), ("11@65535", 880, "#0000FF")]:
         asset = scene["assets"][key]
-        root = etree.parse(web_morph / asset["url"]).getroot()
+        root = etree.parse(web_morph / WEB_BUNDLE / asset["url"]).getroot()
         assert asset["bounds"] == [0, 0, side, side]
         assert root.find("{*}path").get("fill") == color
 
     web_folder = folder / "site-source"
     web_root = web_folder / "htdocs"
     (web_root / "data" / "fx").mkdir(parents=True)
-    (web_root / "data" / "skin").mkdir()
+    (web_root / "data" / "skin" / "7").mkdir(parents=True)
+    (web_root / "chat").mkdir()
+    deployed = web_root / "chat" / "app_original.swf"
+    deployed.write_bytes(animation.read_bytes())
     (web_root / "data" / "fx" / "asset.swf").write_bytes(animation.read_bytes())
-    (web_root / "data" / "skin" / "asset.swf").write_bytes(animation.read_bytes())
+    (web_root / "data" / "skin" / "7" / "peau & #.swf").write_bytes(animation.read_bytes())
     (web_folder / "app.js").write_text(
         'app.get("/chat/app.swf", (req, res) => {\n'
-        f'  res.sendFile(path.join({json.dumps(str(animation))}));\n'
+        f'  res.sendFile(path.join({json.dumps(str(deployed))}));\n'
         '});\napp.listen(config.webServerPort);\n', encoding="utf-8")
     (web_root / "params.xml").write_text("<config/>", encoding="utf-8")
     (web_folder / "config.json").write_text('{"webServerPort":36000,"secret":"must stay private"}', encoding="utf-8")
     web_batch = folder / "html5-workspace"
     run("export-html5-workspace", web_folder, web_batch)
     web_index = json.loads((web_batch / "__flashstudio" / "catalog.json").read_text("utf-8"))
-    assert web_index["entry"] == web_index["movies"]["/chat/app.swf"]
-    assert len(web_index["movies"]) == 3 and len(set(web_index["movies"].values())) == 3
+    assert web_index["entry"] == web_index["movies"]["/chat/app.swf"] == "/htdocs/chat/app_original.html"
+    assert web_index["movies"]["/chat/app_original.swf"] == web_index["entry"]
+    assert set(file.relative_to(web_batch).as_posix() for file in web_batch.rglob("*.html")) == {
+        "htdocs/chat/app_original.html", "htdocs/data/fx/asset.html", "htdocs/data/skin/7/peau & #.html"}
     shared_shapes = set()
     for url, page in web_index["movies"].items():
-        player = web_batch / page.lstrip("/")
-        assert "../../stage.js" in player.read_text("utf-8")
-        scene = json.loads(player.with_name("scene.json").read_text("utf-8"))
-        assert scene["workspace"]["source"] == url
-        shared_shapes.add((player.parent / scene["assets"]["10"]["url"]).resolve())
-        assert player.with_name("source.bin").read_bytes().startswith(b"FWS")
+        player = web_batch / unquote(page.lstrip("/"))
+        markup = player.read_text("utf-8")
+        assert 'preserveAspectRatio="xMidYMid meet"' in markup and 'background:white' in markup
+        assert "__flashstudio/stage.js" in markup and "<button" not in markup and 'rel="stylesheet"' not in markup
+        bundle = web_batch / web_index["packages"][url].lstrip("/")
+        scene = json.loads((bundle / "scene.json").read_text("utf-8"))
+        assert web_index["packages"][unquote(scene["workspace"]["source"])] == web_index["packages"][url]
+        shared_shapes.add((bundle / scene["assets"]["10"]["url"]).resolve())
+    assert not any(web_batch.rglob("source.bin")) and not any(web_batch.rglob("sources"))
+    assert not any(web_batch.rglob("*.swf")) and not any(web_batch.rglob("stage.css"))
     assert len(shared_shapes) == 1 and next(iter(shared_shapes)).is_file()
     assert (web_batch / "params.xml").is_file() and not (web_batch / "config.json").exists()
     assert sorted(web_folder.rglob("*.swf")) == sorted([
-        web_root / "data" / "fx" / "asset.swf", web_root / "data" / "skin" / "asset.swf"
+        deployed, web_root / "data" / "fx" / "asset.swf", web_root / "data" / "skin" / "7" / "peau & #.swf"
     ])
     previous_export = web_root / "test" / "htdocs-html5"
     (previous_export / "__flashstudio").mkdir(parents=True)
@@ -231,19 +245,22 @@ def check(exe, folder, asc=None):
     (previous_export / "old.css").write_text("body {}", encoding="utf-8")
     direct_batch = folder / "html5-direct-htdocs"
     run("export-html5-workspace", web_root, direct_batch)
-    assert json.loads((direct_batch / "__flashstudio" / "catalog.json").read_text("utf-8")) == web_index
+    direct_index = json.loads((direct_batch / "__flashstudio" / "catalog.json").read_text("utf-8"))
+    assert direct_index["entry"] == "/chat/app_original.html"
+    assert direct_index["movies"]["/data/fx/asset.swf"] == "/data/fx/asset.html"
+    assert unquote(direct_index["movies"]["/data/skin/7/peau & #.swf"]) == "/data/skin/7/peau & #.html"
     assert json.loads((direct_batch / "__flashstudio" / "network.json").read_text("utf-8"))["backendPort"] == 36000
     assert (direct_batch / "params.xml").is_file() and not (direct_batch / "test").exists()
 
     web_demo = folder / "html5-demo"
     assert "points de portage" in run("export-html5", path, web_demo, ok=False)
-    scene = json.loads((web_demo / "scene.json").read_text(encoding="utf-8"))
-    assert (web_demo / scene["audio"]["11"]).is_file()
+    scene = json.loads((web_demo / WEB_BUNDLE / "scene.json").read_text(encoding="utf-8"))
+    assert (web_demo / WEB_BUNDLE / scene["audio"]["11"]).is_file()
     assert scene["audioTiming"]["11"] == [5512, 2, 0]
-    actions = (web_demo / "actions.js").read_text(encoding="utf-8")
+    actions = (web_demo / WEB_BUNDLE / "actions.js").read_text(encoding="utf-8")
     assert 's.push("Bonjour, Flash Studio !");' in actions and "console.log(s.pop());" in actions
-    assert (web_demo / "avm1.js").is_file()
-    assert list((web_demo / "sources" / "avm1").glob("*.as"))
+    assert (web_demo / "__flashstudio" / "avm1.js").is_file()
+    assert not any(web_demo.rglob("*.as")) and not any(web_demo.rglob("source.bin"))
     assert not list(web_demo.rglob("*.swf"))
 
     def legacy_action(opcode, operands):
@@ -273,8 +290,8 @@ def check(exe, folder, asc=None):
             import assert from "node:assert/strict";
             import {readFileSync} from "node:fs";
             const load = name => import("data:text/javascript;base64," + readFileSync(name).toString("base64"));
-            const {createLegacyRuntime} = await load("avm1.js");
-            const {actions} = await load("actions.js");
+            const {createLegacyRuntime} = await load("__flashstudio/avm1.js");
+            const {actions} = await load("__flashstudio/movies/00001/actions.js");
             const runtime = createLegacyRuntime({ writeVariable() {}, owner() {} });
             const clip = { view: {}, variables: Object.create(null), bundle: {}, namedLayer() {} };
             clip.legacyContext = () => runtime.context(clip);
@@ -295,12 +312,12 @@ def check(exe, folder, asc=None):
     adpcm_movie.write_bytes(swf(b"FWS", adpcm_body, adpcm_body))
     web_audio = folder / "html5-adpcm"
     run("export-html5", adpcm_movie, web_audio)
-    scene = json.loads((web_audio / "scene.json").read_text("utf-8"))
+    scene = json.loads((web_audio / WEB_BUNDLE / "scene.json").read_text("utf-8"))
     assert scene["audioTiming"] == {"1": [44100, 3, 0], "2": [22050, 4097, 0]}
-    with wave.open(str(web_audio / scene["audio"]["1"]), "rb") as audio:
+    with wave.open(str(web_audio / WEB_BUNDLE / scene["audio"]["1"]), "rb") as audio:
         assert (audio.getnchannels(), audio.getsampwidth(), audio.getnframes()) == (2, 2, 3)
         assert audio.readframes(3) == struct.pack("<hhhhhh", 100, -100, 111, -111, 113, -113)
-    with wave.open(str(web_audio / scene["audio"]["2"]), "rb") as audio:
+    with wave.open(str(web_audio / WEB_BUNDLE / scene["audio"]["2"]), "rb") as audio:
         assert audio.readframes(4097) == b"\0" * (4096 * 2) + struct.pack("<h", 4321)
 
     bitmap = struct.pack("<HBHH", 9, 5, 2, 1) + zlib.compress(bytes([255, 240, 100, 60] * 2))
@@ -315,10 +332,10 @@ def check(exe, folder, asc=None):
     visual_movie.write_bytes(swf(b"FWS", visual_body, visual_body))
     web_visual = folder / "html5-motif"
     run("export-html5", visual_movie, web_visual)
-    visual_scene = json.loads((web_visual / "scene.json").read_text("utf-8"))
+    visual_scene = json.loads((web_visual / WEB_BUNDLE / "scene.json").read_text("utf-8"))
     assert visual_scene["fonts"]["15"] == {"fontName": "Tahoma", "fontStyle": "regular", "fontType": "device"}
     assert visual_scene["assets"]["16"]["indent"] == 20 and visual_scene["assets"]["16"]["leading"] == -10
-    tiled_svg = (web_visual / visual_scene["assets"]["10"]["url"]).read_text("utf-8")
+    tiled_svg = (web_visual / WEB_BUNDLE / visual_scene["assets"]["10"]["url"]).read_text("utf-8")
     assert 'patternUnits="userSpaceOnUse"' in tiled_svg and tiled_svg.count("<use ") == 1
 
     web_effects = folder / "html5-effects"
@@ -333,14 +350,14 @@ def check(exe, folder, asc=None):
                     tag(70, placement) + tag(45, b"\x0e\x3e\x04\x00") + tag(19, samples) + tag(1) + tag(0))
     effects_movie.write_bytes(swf(b"FWS", effects_body, effects_body))
     run("export-html5", effects_movie, web_effects)
-    clip = json.loads((web_effects / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
+    clip = json.loads((web_effects / WEB_BUNDLE / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
     layer = clip["frames"][0][0][0]
     assert layer[9][0] == [1, 2, 3, 2] and abs(layer[9][1][5] - 64 / 255) < 1e-6
     assert layer[9][2] == [5, 2, 1, 3, 0, 3, [2, 1]]
     assert layer[10] == "multiply"
     first, last, wav, offset = clip["streams"][0]
     assert (first, last, offset) == (1, 1, 0)
-    with wave.open(str(web_effects / wav), "rb") as audio:
+    with wave.open(str(web_effects / WEB_BUNDLE / wav), "rb") as audio:
         assert audio.getframerate() == 44100 and audio.readframes(4) == samples
 
     fractional = folder / "Sprite cadence fractionnaire.swf"
@@ -446,7 +463,7 @@ def check(exe, folder, asc=None):
     assert "Profondeur : 1" in run("inspect", tag_movie, "2")
     web_tags = folder / "html5-labels"
     run("export-html5", tag_movie, web_tags)
-    web_timeline = json.loads((web_tags / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
+    web_timeline = json.loads((web_tags / WEB_BUNDLE / "scene.json").read_text(encoding="utf-8"))["clips"]["0"]
     assert web_timeline["labels"]["Fin"] == 2
     assert [frame[0][0][6] for frame in web_timeline["frames"]] == [False, True]
     run("frame", tag_movie, "1", first_frame)
@@ -648,11 +665,11 @@ def check(exe, folder, asc=None):
             web_as3 = folder / "html5-as3"
             result = subprocess.run([exe, "export-html5", web_movie, web_as3, web_workspace], capture_output=True, timeout=15)
             assert result.returncode == 3, result.stderr
-            javascript = (web_as3 / "classes.js").read_text(encoding="utf-8")
+            javascript = (web_as3 / WEB_BUNDLE / "classes.js").read_text(encoding="utf-8")
             assert 'clip.superInit(5);' in javascript and 'console.log("Converted AS3");' in javascript, javascript
             assert '["ordered"]: { hidden: true, error: null' in javascript
             assert '["sort"](' in javascript and 'function ($' in javascript
-            scene = json.loads((web_as3 / "scene.json").read_text(encoding="utf-8"))
+            scene = json.loads((web_as3 / WEB_BUNDLE / "scene.json").read_text(encoding="utf-8"))
             assert scene["clips"]["0"]["type"] == "demo.WebScene"
             assert scene["clips"]["78"]["type"] == "demo.WebBase"
             assert 'clip.eventName("CLICK")' in javascript and 'clip.create("demo.WebHelper"' in javascript, javascript
@@ -665,8 +682,9 @@ def check(exe, folder, asc=None):
             assert scene["assets"]["24"]["html"] and scene["assets"]["24"]["text"].startswith("<p><b>Initial")
             dependency = scene["dependencies"]
             assert list(dependency) == ["../data/linked.swf"]
-            assert (web_as3 / dependency["../data/linked.swf"]).is_file()
-            assert (web_as3 / dependency["../data/linked.swf"]).with_name("source.bin").read_bytes().startswith(b"FWS")
+            assert (web_as3 / WEB_BUNDLE / dependency["../data/linked.swf"] / "scene.json").is_file()
+            assert (web_as3 / "pages/web-scene.html").is_file() and (web_as3 / "data/linked.html").is_file()
+            assert not any(web_as3.rglob("source.bin")) and not any(web_as3.rglob("*.as"))
             assert "Dépendance SWF non résolue : ../../outside.swf" in (web_as3 / "LISEZ-MOI.txt").read_text("utf-8")
         source = folder / "Panel.as"
         panel_source = """package demo {
@@ -1582,9 +1600,9 @@ fin:
     font_movie.write_bytes(swf(b"FWS", font_body, font_body))
     font_web = folder / "html5-police"
     run("export-html5", font_movie, font_web)
-    font_scene = json.loads((font_web / "scene.json").read_bytes())
+    font_scene = json.loads((font_web / WEB_BUNDLE / "scene.json").read_bytes())
     assert font_scene["assets"]["1"]["fontId"] == 2 and font_scene["assets"]["1"]["embedFonts"]
-    font_bytes = (font_web / font_scene["fonts"]["2"]["url"]).read_bytes()
+    font_bytes = (font_web / WEB_BUNDLE / font_scene["fonts"]["2"]["url"]).read_bytes()
     assert font_bytes[:4] == b"\x00\x01\x00\x00"
     assert sum(item[0] for item in struct.iter_unpack(">I", font_bytes)) & 0xffffffff == 0xb1b0afba
 

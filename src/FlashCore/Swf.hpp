@@ -131,8 +131,10 @@ ExportReport export_all(const Movie& movie, const std::filesystem::path& destina
 ExportReport export_visuals(const Movie& movie, const std::filesystem::path& destination, std::wstring_view extension);
 ExportReport export_project(const Movie& movie, const std::filesystem::path& destination);
 
+enum class WebLanguage { french, english };
 ExportReport export_html5(const Movie& movie, const std::filesystem::path& destination, std::string_view title,
-    const std::filesystem::path& source = {}, const std::filesystem::path& workspace = {});
+    const std::filesystem::path& source = {}, const std::filesystem::path& workspace = {},
+    WebLanguage language = WebLanguage::french);
 std::string html5_classes(const Movie& movie);
 struct WebWorkspaceReport
 {
@@ -150,15 +152,15 @@ struct WebWorkspacePlan
     std::filesystem::path root, project, public_root;
     std::vector<WebWorkspaceMovie> movies;
     std::vector<std::filesystem::path> public_files;
-    std::string warnings;
+    std::vector<std::filesystem::path> incomplete_folders;
 };
 WebWorkspacePlan plan_html5_workspace(const std::filesystem::path& root, const WebMovieOverrides& open_movies = {});
 WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const std::filesystem::path& destination,
     std::span<const std::size_t> selection, const std::filesystem::path& preferred = {},
-    const std::function<void(std::size_t, std::size_t)>& progress = {});
+    const std::function<void(std::size_t, std::size_t)>& progress = {}, WebLanguage language = WebLanguage::french);
 WebWorkspaceReport export_html5_workspace(const std::filesystem::path& root, const std::filesystem::path& destination,
     const std::filesystem::path& preferred = {}, const WebMovieOverrides& open_movies = {},
-    const std::function<void(std::size_t, std::size_t)>& progress = {});
+    const std::function<void(std::size_t, std::size_t)>& progress = {}, WebLanguage language = WebLanguage::french);
 
 std::optional<Asset> extract(const Movie& movie, std::size_t index);
 bool is_visual_tag(unsigned code) noexcept;

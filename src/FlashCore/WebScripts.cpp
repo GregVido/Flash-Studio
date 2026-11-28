@@ -10,15 +10,6 @@ namespace flash::web
 {
 namespace
 {
-void source_file(const std::filesystem::path& folder, std::size_t index, const AbcClassSource& source)
-{
-    std::filesystem::create_directories(folder);
-    write_text(folder / std::format(L"class-{:04}.as", index), source.text);
-}
-}
-
-namespace
-{
 bool is_static(const AbcMember& member) { return member.declaration.find(" static ") != std::string::npos; }
 bool is_private(const AbcMember& member) { return member.declaration.starts_with("private "); }
 
@@ -188,8 +179,7 @@ if (target?.width && target.height && $arg1?.width && $arg1.height) {
 }
 }
 
-WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& sources,
-    ExportReport& report, std::set<std::string>* references)
+WebProgram movie_scripts(const Movie& movie, ExportReport& report, std::set<std::string>* references)
 {
     WebProgram result;
     std::map<std::size_t, AbcModule> modules;
@@ -204,58 +194,15 @@ WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& source
                 auto& abc = modules.try_emplace(tag, abc_bytecode(movie, tag)).first->second;
                 if (references)
                     find_references(abc, *references);
-                const auto folder = sources / std::format(L"abc-{:06}", tag);
-                for (std::size_t index = 0; index < abc.classes().size(); ++index)
-                {
-                    const auto& type = abc.classes()[index];
+                for (const auto& type : abc.classes())
                     if (!classes.emplace(type.qualified, ClassInput{tag, &type}).second)
                         omission(report, std::format("ABC {} : classe {} définie plusieurs fois.", tag, type.qualified));
-                    if (sources.empty())
-                        continue;
-                    try
-                    {
-                        source_file(folder, index, abc.decompile_class(index));
-                        ++report.files;
-                    }
-                    catch (const std::exception& error)
-                    {
-                        omission(report, std::format("Classe {} : {}", type.qualified, error.what()));
-                    }
-                }
-
-                if (sources.empty())
-                    continue;
-                std::string free_methods;
-                for (const auto& method : abc.methods())
-                    if (method.owner.empty() && method.code_size && !abc.declares_classes(method.id))
-                    {
-                        if (free_methods.size() > 32 * 1024 * 1024)
-                            throw std::runtime_error("Le fichier des méthodes libres dépasse 32 Mio.");
-                        try { free_methods += abc.decompile(method.id) + '\n'; }
-                        catch (const std::exception& error) { omission(report, std::format("Méthode {} : {}", method.id, error.what())); }
-                    }
-                if (!free_methods.empty())
-                {
-                    std::filesystem::create_directories(folder);
-                    write_text(folder / "standalone.as", free_methods);
-                    ++report.files;
-                }
             }
-            else if (!sources.empty())
+            else if (code == 59)
             {
-                if (code == 59)
-                {
-                    Reader initialize(movie.data(tag));
-                    const auto sprite = initialize.u16();
-                    result.clips[sprite].legacy_initializer += frame_action(initialize.take(initialize.remaining()));
-                }
-                if (has_avm1_actions(movie, tag))
-                {
-                    const auto folder = sources / "avm1";
-                    std::filesystem::create_directories(folder);
-                    write_text(folder / std::format(L"tag-{:06}.as", tag), decompile(movie, tag));
-                    ++report.files;
-                }
+                Reader initialize(movie.data(tag));
+                const auto sprite = initialize.u16();
+                result.clips[sprite].legacy_initializer += frame_action(initialize.take(initialize.remaining()));
             }
         }
         catch (const std::exception& error) { omission(report, std::format("Script du tag {} : {}", tag, error.what())); }
@@ -278,8 +225,6 @@ WebProgram movie_scripts(const Movie& movie, const std::filesystem::path& source
         {
             return method.code_size && !abc.declares_classes(method.id);
         });
-        result.as3_bodies += static_cast<std::size_t>(bodies);
-        result.compiled_bodies += compiled.size();
         if (compiled.size() < static_cast<std::size_t>(bodies))
             omission(report, std::format("ABC {} : {} corps ActionScript 3 convertis sur {}.", tag, compiled.size(), bodies));
     }
