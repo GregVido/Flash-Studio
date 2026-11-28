@@ -44,7 +44,7 @@ void Workspace::build_script_tabs()
         {
             selected_script_.reset();
             previous_script_.reset();
-            member_lines_.clear();
+            member_ranges_.clear();
             select_tag({});
             refresh_scripts();
         }

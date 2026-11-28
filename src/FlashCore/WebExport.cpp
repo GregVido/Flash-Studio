@@ -3,6 +3,7 @@
 #include "WebClassRuntime.hpp"
 #include "WebText.hpp"
 #include "WebMedia.hpp"
+#include "WebAvm1.hpp"
 #include "WebServer.hpp"
 
 #include <Windows.h>
@@ -122,6 +123,7 @@ constexpr std::string_view stage_script = R"JS(
 import { ConvertedClasses, convertedClassName, convertedMethodReceiver } from "./as3.js";
 import { createTextField, loadFonts, StyleSheet, TextFormat, scriptXml, isXml } from "./text.js";
 import { mediaAdapters, ByteArray, URLRequest, URLRequestHeader, URLVariables, SoundTransform } from "./media.js";
+import { createLegacyRuntime } from "./avm1.js";
 
 const documentUrl = new URL(location.href);
 const localAssetPrefix = documentUrl.origin + "/";
@@ -418,8 +420,9 @@ function playSound([id, from, to, loops, unique, stop], bundle) {
     sound.addEventListener("ioError", clear);
 }
 
+const legacyButtonKeys = new WeakMap();
 function makeButton(definition, node, parent, ancestry) {
-    let state = 0, pointer = null, lastHit, hitCopy, enabled = true, useHandCursor = true;
+    let state = 0, pointer = null, lastHit, hitCopy, inside = false, enabled = true, useHandCursor = true;
     const drawing = element("g"), hitArea = element("g", { opacity: 0 });
     drawing.style.pointerEvents = "none";
     drawing.setAttribute("data-flash-decoration", "");
@@ -462,29 +465,42 @@ function makeButton(definition, node, parent, ancestry) {
     });
     select(0);
     const fire = index => parent.run(definition.handlers[index]);
+    if (definition.keys && Object.keys(definition.keys).length) {
+        node.setAttribute("data-avm1-keys", "");
+        legacyButtonKeys.set(node, key => { if (enabled) parent.run(definition.keys[key]); });
+    }
     node.setAttribute("role", "button");
     node.setAttribute("tabindex", "0");
-    node.addEventListener("pointerenter", () => { if (pointer === null) { select(1); fire(2); } });
-    node.addEventListener("pointerleave", () => {
-        if (pointer !== null) { pointer = null; fire(4); }
-        select(0);
-        fire(3);
+    node.addEventListener("pointerenter", () => {
+        inside = true;
+        if (pointer === null) { select(1); fire(2); }
+        else { select(2); fire(6); }
     });
+    node.addEventListener("pointerleave", () => {
+        inside = false;
+        select(0);
+        fire(pointer === null ? 3 : 5);
+    });
+    const release = event => {
+        if (pointer !== event.pointerId) return;
+        pointer = null;
+        window.removeEventListener("pointerup", release);
+        window.removeEventListener("pointercancel", release);
+        select(inside ? 1 : 0);
+        if (!enabled || event.type === "pointercancel") return;
+        fire(inside ? 0 : 4);
+        if (inside) node.dispatchEvent(new MouseEvent("click", event));
+    };
     node.addEventListener("pointerdown", event => {
         if (event.button !== 0 || !enabled) return;
+        inside = true;
         pointer = event.pointerId;
         select(2);
         fire(1);
+        window.addEventListener("pointerup", release);
+        window.addEventListener("pointercancel", release);
     });
-    node.addEventListener("pointercancel", () => { pointer = null; select(0); });
-    node.addEventListener("pointerup", event => {
-        if (pointer !== event.pointerId) return;
-        pointer = null;
-        if (!enabled) return;
-        select(1);
-        fire(0);
-        node.dispatchEvent(new MouseEvent("click", event));
-    });
+    node.addEventListener("pointerup", release);
     node.addEventListener("click", event => {
         // Flash activates this button on release even when the browser retargets its native click.
         if (event.isTrusted && event.detail > 0) { event.preventDefault(); event.stopImmediatePropagation(); }
@@ -2861,7 +2877,115 @@ Object.defineProperties(stageView, {
 displayViews.set(stage, stageView);
 displayNodes.set(stageView, stage);
 
-function displayView(owner, clip, layer, node) {
+)JS" R"JS(const legacyOwners = new WeakMap(), legacyFields = new WeakMap();
+function bindLegacyField(clip, field, variable) {
+    const {owner, name} = legacy.binding(clip, variable);
+    if (!owner) return;
+    let names = legacyFields.get(owner);
+    if (!names) legacyFields.set(owner, names = new Map());
+    let fields = names.get(name);
+    if (!fields) names.set(name, fields = new Set());
+    fields.add(new WeakRef(field));
+    if (Object.hasOwn(owner.variables, name)) field.text = String(owner.variables[name] ?? "");
+}
+const legacy = createLegacyRuntime({
+    owner: view => legacyOwners.get(view),
+    size: clip => clip?.bundle.scene.byteSize ?? 1,
+    writeVariable(clip, name, value) {
+        const fields = legacyFields.get(clip)?.get(name);
+        if (!fields) return;
+        for (const reference of fields) {
+            const field = reference.deref();
+            if (field) field.text = String(value ?? "");
+            else fields.delete(reference);
+        }
+    },
+    hitTest(view, other, x, y, shape) {
+        const node = displayNodes.get(view);
+        if (!node?.isConnected) return false;
+        const box = displayBounds(node, stageView);
+        if (other) {
+            const target = displayNodes.get(other);
+            if (!target?.isConnected) return false;
+            const rect = displayBounds(target, stageView);
+            return box.x < rect.x + rect.width && rect.x < box.x + box.width &&
+                box.y < rect.y + rect.height && rect.y < box.y + box.height;
+        }
+        x = Number(x); y = Number(y);
+        if (!(x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height)) return false;
+        if (!shape) return true;
+        const matrix = stage.getScreenCTM();
+        if (!matrix) return true;
+        const at = new DOMPoint(x * 20, y * 20).matrixTransform(matrix);
+        const paths = node.querySelectorAll("path, rect, circle, ellipse, polygon, polyline, line");
+        if (!paths.length || node.querySelector("use, image")) return true;
+        for (const path of paths) {
+            const transform = path.getScreenCTM();
+            if (transform) {
+                const point = at.matrixTransform(transform.inverse());
+                if (path.isPointInFill(point) || path.isPointInStroke(point)) return true;
+            }
+        }
+        return false;
+    },
+    clone(clip, name, depth) { return clip?.parent?.duplicateLegacy(clip, name, depth); },
+    remove(clip) { clip?.parent?.removeLegacy(clip); },
+    color(view) {
+        let transform = { ra: 100, ga: 100, ba: 100, aa: 100, rb: 0, gb: 0, bb: 0, ab: 0 };
+        return {
+            getTransform: () => ({ ...transform }),
+            setTransform(value) {
+                if (!view || !value) return;
+                transform = { ...transform, ...value };
+                const {ra, ga, ba, aa, rb, gb, bb, ab} = transform;
+                view.transform.colorTransform = new ColorTransform(ra / 100, ga / 100, ba / 100, aa / 100, rb, gb, bb, ab);
+            },
+            setRGB(value) {
+                this.setTransform({ ra: 0, ga: 0, ba: 0, rb: (value >>> 16) & 255, gb: (value >>> 8) & 255, bb: value & 255 });
+            },
+            getRGB: () => (transform.rb & 255) << 16 | (transform.gb & 255) << 8 | (transform.bb & 255),
+        };
+    },
+    sound(clip) {
+        let sound, channel, id, volume = 100, pan = 0;
+        const stop = () => {
+            if (!channel) return;
+            channel.stop();
+            sounds.get(clip.bundle.id + ":" + id)?.delete(channel);
+            channel = null;
+        };
+        const settings = () => new SoundTransform(Math.max(0, Math.min(100, volume)) / 100, pan / 100);
+        return {
+            attachSound(name) {
+                stop();
+                id = clip.bundle.scene.legacySymbols?.[name];
+                const path = clip.bundle.scene.audio[id];
+                sound = path ? browserMedia.embeddedSound(new URL(path, clip.bundle.page).href, clip.bundle.scene.audioTiming?.[id]) : null;
+            },
+            start(offset = 0, loops = 1) {
+                stop();
+                channel = sound?.play(Number(offset) * 1000, Math.max(0, Number(loops) - 1), settings());
+                if (!channel) return;
+                const key = clip.bundle.id + ":" + id;
+                if (!sounds.has(key)) sounds.set(key, new Set());
+                const group = sounds.get(key), playing = channel;
+                group.add(playing);
+                playing.addEventListener("soundComplete", () => group.delete(playing), { once: true });
+            },
+            stop,
+            setVolume(value) { volume = Number(value); if (channel) channel.soundTransform = settings(); },
+            setPan(value) { pan = Number(value); if (channel) channel.soundTransform = settings(); },
+            getVolume: () => volume,
+            getPan: () => pan,
+        };
+    },
+    navigate(clip, url, target) {
+        if (url && !/^\s*(?:javascript|fscommand):/i.test(String(url)))
+            browserMedia.navigate(url, target || "_self", value => httpAddress(value, clip.bundle.source));
+    }
+});
+
+)JS" R"JS(function displayView(owner, clip, layer, node) {
     const state = Object.create(null), handlers = eventView(node), bound = new Map();
     let effects = [];
     const single = clip?.data.frames.length === 1 && clip.data.frames[0][0];
@@ -2987,6 +3111,36 @@ function displayView(owner, clip, layer, node) {
         }
     }
     elapsed() { return Math.trunc(performance.now() - playbackEpoch); }
+    legacyContext() { return legacy.context(this); }
+
+)JS" R"JS(    duplicateLegacy(source, name, depth) {
+        depth = Math.trunc(Number(depth));
+        if (!Number.isSafeInteger(depth)) return undefined;
+        const row = source.parentLayer.row.slice();
+        row[0] = depth;
+        row[4] = String(name);
+        const original = source.parentLayer.overrides;
+        this.layers.get(depth)?.child?.detach();
+        const layer = this.makeLayer(row);
+        layer.dynamic = true;
+        Object.assign(layer.overrides, original);
+        layer.overrides.name = String(name);
+        this.layers.set(depth, layer);
+        this.namedLayers = null;
+        this.update(layer);
+        this.refreshMasks();
+        layer.child?.start();
+        return legacy.wrap(layer.child, layer.view);
+    }
+
+    removeLegacy(clip) {
+        const layer = clip.parentLayer;
+        if (!layer?.dynamic || this.layers.get(layer.row[0]) !== layer) return;
+        clip.detach();
+        this.layers.delete(layer.row[0]);
+        this.namedLayers = null;
+        this.refreshMasks();
+    }
 
     initializeTree() {
         if (this.treeInitialized) return;
@@ -3120,10 +3274,13 @@ function displayView(owner, clip, layer, node) {
                     layer.field = createTextField(definition, (type, detail) => node.dispatchEvent(scriptEvent(type, true, false, detail)),
                         data.fonts?.[definition.fontId] ?? data.fontClasses?.[definition.fontClass]);
                     node.append(layer.field.node);
+                    if (this.bundle.actions.length && definition.variable)
+                        bindLegacyField(this, layer.field, definition.variable);
                 }
             }
         }
         if (!layer.view) layer.view = displayView(this, null, layer, node).view;
+        if (this.bundle.actions.length) legacyOwners.set(layer.view, this);
         this.update(layer);
         return layer;
     }
@@ -3261,7 +3418,7 @@ function displayView(owner, clip, layer, node) {
             const snapshot = timelineSnapshot(this.data, target);
             const placements = snapshot.placements;
             color = snapshot.color;
-            removals = [...this.layers.keys()].filter(depth => !placements.has(depth));
+            removals = [...this.layers].filter(([depth, layer]) => !layer.dynamic && !placements.has(depth)).map(([depth]) => depth);
             updates = placements.values();
         }
         if (this === root && color) background.setAttribute("fill", color);
@@ -3520,6 +3677,23 @@ try {
     });
     button.disabled = false;
     if (!Object.values(data.clips).some(clip => clip.streams.length || clip.frames.some(frame => frame[4].length))) button.click();
+    if (actions.length) {
+        document.addEventListener("keydown", event => {
+            if (!running || (event.target !== document.body && !stage.contains(event.target))) return;
+            const code = event.keyCode;
+            if (code) legacy.key(code, true);
+            if ((event.target === document.body || event.target === stage) && [32, 37, 38, 39, 40].includes(code))
+                event.preventDefault();
+            const special = { ArrowLeft: 1, ArrowRight: 2, Home: 3, End: 4, Insert: 5, Delete: 6, Backspace: 8,
+                Enter: 13, ArrowUp: 14, ArrowDown: 15, PageUp: 16, PageDown: 17, Tab: 18, Escape: 19 };
+            const key = special[event.key] ?? (event.key.length === 1 ? event.key.charCodeAt(0) : 0);
+            if (key && !event.repeat)
+                for (const node of stage.querySelectorAll("[data-avm1-keys]"))
+                    legacyButtonKeys.get(node)?.(key);
+        }, true);
+        window.addEventListener("keyup", event => legacy.key(event.keyCode, false));
+        window.addEventListener("blur", () => legacy.clearKeys());
+    }
     requestAnimationFrame(animate);
 } catch (error) {
     console.error(error);
@@ -3858,11 +4032,12 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
         write_text(destination / "as3.js", web::class_runtime);
         write_text(destination / "text.js", web::text_runtime);
         write_text(destination / "media.js", web::media_runtime);
+        write_text(destination / "avm1.js", web::avm1_runtime);
         write_text(destination / "network.json", "{\n  \"http\": {},\n  \"sockets\": {},\n  \"tcp\": {}\n}\n");
         write_text(destination / "stage.js", web::stage_script);
         write_text(destination / "stage.css", web::css);
         write_text(destination / "serve.py", web::local_server);
-        report.files += 7;
+        report.files += 8;
     }
     write_file(destination / "source.bin", movie.uncompressed());
     ++report.files;
@@ -4198,6 +4373,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
     write_text(shared / "as3.js", web::class_runtime);
     write_text(shared / "text.js", web::text_runtime);
     write_text(shared / "media.js", web::media_runtime);
+    write_text(shared / "avm1.js", web::avm1_runtime);
     write_text(shared / "network.json", workspace_network(plan.project, plan.public_root));
     write_text(output / "serve.py", web::local_server);
 

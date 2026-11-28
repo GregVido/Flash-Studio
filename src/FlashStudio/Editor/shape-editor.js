@@ -622,7 +622,9 @@ window.addEventListener("keyup", event => { if (event.key === " ") space = false
 window.addEventListener("blur", () => { space = false; cancelGesture(); });
 
 bridge?.addEventListener("message", ({ data }) => {
-    if (data.action === "open") {
+    if (data.action === "theme") {
+        document.documentElement.dataset.theme = data.value;
+    } else if (data.action === "open") {
         language = locale[data.locale] ?? locale.en;
         document.documentElement.lang = data.locale;
         $("title").textContent = data.title;

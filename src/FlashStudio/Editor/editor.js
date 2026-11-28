@@ -1,14 +1,17 @@
 import {
-    basicSetup, EditorView, EditorState, Compartment, Prec, keymap, StreamLanguage,
+    basicSetup, EditorView, EditorState, Compartment, Prec, keymap,
     syntaxHighlighting, autocompletion, completionStatus, lintGutter, setDiagnostics
 } from "./vendor/codemirror.js";
-import { language, colors, makeCatalog, suggest } from "./as3-language.js";
+import { language, colors, lightColors, makeCatalog, suggest } from "./as3-language.js";
+import { pcodeLanguage, suggestPcode } from "./pcode-language.js";
 import platformSymbols from "./platform-symbols.js";
-import { codeLink } from "./code-navigation.js";
+import { codeLink, sourceMemberAtLine } from "./code-navigation.js";
 
 const bridge = window.chrome.webview;
 const parent = document.querySelector("#editor");
 const locking = new Compartment();
+const appearance = new Compartment();
+let light = false;
 let session;
 
 const frenchPhrases = {
@@ -27,7 +30,7 @@ const frenchPhrases = {
     "go": "aller"
 };
 
-const theme = EditorView.theme({
+const themeRules = {
     "&": { height: "100%", color: "#f2f4f8", backgroundColor: "#121418" },
     ".cm-scroller": { fontFamily: "Consolas, monospace", fontSize: "13px", lineHeight: "20px" },
     ".cm-content": { padding: "11px 0 20px", caretColor: "#ffba72" },
@@ -53,7 +56,30 @@ const theme = EditorView.theme({
     ".cm-completionIcon-class": { color: "#80dbbe" },
     ".cm-completionIcon-function, .cm-completionIcon-method": { color: "#ae9dff" },
     ".cm-diagnostic-error": { borderLeftColor: "#ff9299" }
-}, { dark: true });
+};
+const darkTheme = EditorView.theme(themeRules, { dark: true });
+const lightTheme = EditorView.theme({
+    ...themeRules,
+    "&": { height: "100%", color: "#17232d", backgroundColor: "#f1f5f8" },
+    ".cm-content": { padding: "11px 0 20px", caretColor: "#006784" },
+    ".cm-gutters": { backgroundColor: "#edf3f7", color: "#4e6072", borderRight: "1px solid #d1dce5" },
+    ".cm-scroller::-webkit-scrollbar-thumb": { backgroundColor: "#879aab", border: "2px solid #f1f5f8", borderRadius: "6px" },
+    ".cm-scroller::-webkit-scrollbar-corner": { backgroundColor: "#f1f5f8" },
+    ".cm-activeLine": { backgroundColor: "#e4eef7" },
+    ".cm-activeLineGutter": { backgroundColor: "#ddeaf4" },
+    ".cm-cursor": { borderLeftColor: "#006784" },
+    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#c6ddf0" },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#afd3ef" },
+    ".cm-content ::selection": { backgroundColor: "#afd3ef" },
+    ".cm-tooltip": { backgroundColor: "#fafcfd", color: "#17232d", borderColor: "#c5d2df", borderRadius: "5px" },
+    ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "#d4e8f6", color: "#17232d" },
+    ".cm-completionDetail": { color: "#4e6072", fontStyle: "normal", marginLeft: "10px" },
+    ".cm-completionIcon-class": { color: "#096855" },
+    ".cm-completionIcon-function, .cm-completionIcon-method": { color: "#6232a2" },
+    ".cm-diagnostic-error": { borderLeftColor: "#ab273d" }
+});
+const editorAppearance = () => light ? [lightTheme, syntaxHighlighting(lightColors)] :
+    [darkTheme, syntaxHighlighting(colors)];
 
 function send(action, data = {}) {
     if (session) bridge.postMessage({ action, id: session.id, ...data });
@@ -63,24 +89,6 @@ function save() {
     if (session?.dirty && !session.locked) send("save", { source: session.view.state.doc.toString() });
     return true;
 }
-
-const assembly = StreamLanguage.define({
-    startState: () => ({ command: true }),
-    token(stream, state) {
-        if (stream.sol()) state.command = true;
-        if (stream.eatSpace()) return null;
-        if (stream.match(/^;.*/)) return "lineComment";
-        if (stream.match(/^L[0-9a-f]+:?/i)) return "typeName";
-        if (stream.match(/^"(?:[^"\\]|\\.)*"/)) return "string";
-        if (stream.match(/^-?(?:0x[0-9a-f]+|\d+)/i)) return "number";
-        if (state.command && stream.match(/^\.?[A-Za-z_][\w_]*/)) {
-            state.command = false;
-            return "keyword";
-        }
-        stream.next();
-        return null;
-    }
-});
 
 const workspaceKeys = [
     ["Mod-o", "open"], ["Mod-Shift-o", "folder"], ["Mod-Shift-e", "workspace"],
@@ -98,7 +106,7 @@ function openPreview(message) {
     session?.view.destroy();
     const french = message.locale === "fr";
     document.documentElement.lang = french ? "fr" : "en";
-    document.title = french ? "Code ActionScript" : "ActionScript code";
+    document.title = message.instructions ? "P-code" : french ? "Code ActionScript" : "ActionScript code";
     const catalog = makeCatalog(message.classes, platformSymbols);
     const navigate = (editor, position, control) => {
         const line = editor.state.doc.lineAt(position);
@@ -112,7 +120,7 @@ function openPreview(message) {
         parent,
         doc: message.source,
         extensions: [
-            theme, basicSetup, message.instructions ? assembly : language(catalog), syntaxHighlighting(colors),
+            appearance.of(editorAppearance()), basicSetup, message.instructions ? pcodeLanguage : language(catalog),
             EditorState.readOnly.of(true),
             EditorState.phrases.of(french ? frenchPhrases : {}),
             EditorView.contentAttributes.of({ tabindex: "0", "aria-label": document.title }),
@@ -124,7 +132,16 @@ function openPreview(message) {
                 click(event, editor) {
                     if (event.button !== 0 || !editor.state.selection.main.empty) return false;
                     const position = editor.posAtCoords({ x: event.clientX, y: event.clientY });
-                    return position !== null && navigate(editor, position, event.ctrlKey) && event.ctrlKey;
+                    if (position === null) return false;
+                    if (!event.ctrlKey && message.methodRanges && event.target.closest(".cm-line")) {
+                        const line = editor.state.doc.lineAt(position).number;
+                        const member = sourceMemberAtLine(message.methodRanges, line);
+                        if (member !== undefined) {
+                            send("member", { index: member });
+                            return false;
+                        }
+                    }
+                    return navigate(editor, position, event.ctrlKey) && event.ctrlKey;
                 },
                 mousemove(event, editor) {
                     editor.contentDOM.toggleAttribute("data-navigation", event.ctrlKey);
@@ -158,19 +175,22 @@ function openPreview(message) {
 
 function replaceSession(message) {
     session?.view.destroy();
-    const catalog = makeCatalog(message.classes, platformSymbols);
     const french = message.locale === "fr";
+    const instructions = Boolean(message.instructions);
+    const catalog = instructions ? null : makeCatalog(message.classes, platformSymbols);
+    const completion = instructions ? suggestPcode(message.opcodes, french) : suggest(catalog, message.qualified);
     document.documentElement.lang = french ? "fr" : "en";
-    document.title = french ? "Éditeur ActionScript 3" : "ActionScript 3 editor";
+    document.title = instructions ? (french ? "Éditeur de P-code" : "P-code editor") :
+        french ? "Éditeur ActionScript 3" : "ActionScript 3 editor";
     parent.setAttribute("aria-label", document.title);
     const state = EditorState.create({
         doc: message.source,
         extensions: [
-            theme, basicSetup, locking.of([]), language(catalog), syntaxHighlighting(colors),
-            autocompletion({ override: [suggest(catalog, message.qualified)], maxRenderedOptions: 10 }),
+            appearance.of(editorAppearance()), basicSetup, locking.of([]), instructions ? pcodeLanguage : language(catalog),
+            autocompletion({ override: [completion], maxRenderedOptions: 10 }),
             lintGutter(),
             EditorState.phrases.of(french ? frenchPhrases : {}),
-            EditorView.contentAttributes.of({ "aria-label": french ? "Source ActionScript 3" : "ActionScript 3 source", spellcheck: "false" }),
+            EditorView.contentAttributes.of({ "aria-label": document.title, spellcheck: "false" }),
             Prec.highest(keymap.of([
                 { key: "Mod-s", run: save },
                 { key: "Escape", run: view => {
@@ -194,7 +214,8 @@ function replaceSession(message) {
         ]
     });
     const view = new EditorView({ state, parent });
-    session = { id: message.id, view, original: state.doc, newClass: message.newClass, dirty: message.newClass, locked: false, failed: false };
+    const original = message.original === undefined ? state.doc : state.toText(message.original);
+    session = { id: message.id, view, original, newClass: message.newClass, dirty: message.dirty, locked: false, failed: false };
     jump(view, message.line);
     view.focus();
 }
@@ -217,7 +238,11 @@ function setState(message) {
 }
 
 bridge.addEventListener("message", ({ data }) => {
-    if (data.action === "open") {
+    if (data.action === "theme") {
+        light = data.value === "light";
+        document.documentElement.dataset.theme = data.value;
+        session?.view.dispatch({ effects: appearance.reconfigure(editorAppearance()) });
+    } else if (data.action === "open") {
         replaceSession(data);
     } else if (data.action === "preview") {
         openPreview(data);

@@ -726,7 +726,8 @@ std::string buttons_json(const Movie& movie, std::size_t index, std::vector<std:
             if (flags & (1u << state))
                 states[state][depth] = item;
     }
-    std::array<std::string, 5> handlers;
+    std::array<std::string, 8> handlers;
+    std::map<unsigned, std::string> keys;
     if (!modern)
     {
         try { handlers[0] = frame_action(input.take(input.remaining())); }
@@ -751,12 +752,14 @@ std::string buttons_json(const Movie& movie, std::size_t index, std::vector<std:
             try
             {
                 const auto code = frame_action(event.take(event.remaining()));
-                constexpr std::array<std::uint8_t, 5> supported{8, 4, 1, 2, 64};
+                constexpr std::array<std::uint8_t, 8> supported{8, 4, 1, 2, 64, 16, 32, 128};
                 for (std::size_t i = 0; i < supported.size(); ++i)
                     if (flags & supported[i])
                         handlers[i] += code;
-                if (key || (flags & 0xB0))
-                    omission(report, std::format("Bouton {} : transition clavier ou glisser à porter.", index));
+                if (key & 1)
+                    handlers[4] += code;
+                if (key >> 1)
+                    keys[key >> 1] += code;
             }
             catch (const std::exception& error)
             {
@@ -779,7 +782,14 @@ std::string buttons_json(const Movie& movie, std::size_t index, std::vector<std:
     {
         output += store_action(actions, handler);
     });
-    return json + '}';
+    json += ",\"keys\":{";
+    bool comma = false;
+    for (const auto& [key, code] : keys)
+    {
+        if (std::exchange(comma, true)) json += ',';
+        json += json_string(std::to_string(key)) + ':' + store_action(actions, code);
+    }
+    return json + "}}";
 }
 
 std::string timeline_json(const Movie& movie, std::optional<std::size_t> sprite, std::vector<std::string>& actions,
@@ -1156,10 +1166,37 @@ std::string export_timeline(const Movie& movie, const std::filesystem::path& des
                 omission(report, std::format("Forme interpolée #{} (ratio {}) : {}.", id, ratio, error.what()));
             }
     }
+    std::map<std::string, unsigned> exports;
+    if (!actions.empty())
+        for (std::size_t i = 0; i < movie.tags().size(); ++i)
+            if (movie.tags()[i].code == 56)
+            {
+                try
+                {
+                    Reader input(movie.data(i));
+                    const auto count = input.u16();
+                    for (unsigned symbol = 0; symbol < count; ++symbol)
+                    {
+                        const auto id = input.u16();
+                        exports.try_emplace(input.cstring(), id);
+                    }
+                }
+                catch (const std::runtime_error& error)
+                {
+                    omission(report, std::format("ExportAssets {} : {}", i, error.what()));
+                }
+            }
+    std::string legacy_symbols = "{";
+    for (const auto& [name, id] : exports)
+    {
+        if (legacy_symbols.size() > 1) legacy_symbols += ',';
+        legacy_symbols += json_string(name) + ':' + std::to_string(id);
+    }
     const auto& h = movie.header();
-    return std::format("{{\"fps\":{:g},\"viewBox\":[{},{},{},{}],\"assets\":{},\"audio\":{},\"audioTiming\":{},\"buttons\":{},\"clips\":{}}}",
+    return std::format("{{\"fps\":{:g},\"viewBox\":[{},{},{},{}],\"assets\":{},\"audio\":{},\"audioTiming\":{},\"buttons\":{},\"clips\":{},\"legacySymbols\":{},\"byteSize\":{}}}",
         playback_fps(movie), h.left, h.top, std::max<std::int64_t>(20, std::int64_t{h.right} - h.left),
-        std::max<std::int64_t>(20, std::int64_t{h.bottom} - h.top), assets + '}', audios + '}', audio_timing + '}', buttons + '}', clips + '}');
+        std::max<std::int64_t>(20, std::int64_t{h.bottom} - h.top), assets + '}', audios + '}', audio_timing + '}', buttons + '}',
+        clips + '}', legacy_symbols + '}', h.expanded_size);
 }
 }
 }

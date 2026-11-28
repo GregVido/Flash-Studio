@@ -58,18 +58,24 @@ TreeViewNode navigation_node(wchar_t icon, std::wstring_view title, unsigned tin
 }
 }
 
-void Workspace::build_modes(const Grid& header)
+void Workspace::build_modes(const Grid& workspace)
 {
-    auto tabs = horizontal(4);
-    tabs.VerticalAlignment(VerticalAlignment::Center);
+    StackPanel tabs;
+    tabs.Padding(pad(6, 10, 6, 6));
+    tabs.Spacing(6);
+    tabs.Background(brush(base));
     const wchar_t* names[]{tr(L"Ressources"), L"Scripts", L"Tags"};
     static constexpr wchar_t icons[]{L'\uE8B7', L'\uE943', L'\uE8A9'};
     for (std::size_t i = 0; i < mode_tabs_.size(); ++i)
     {
         auto& tab = mode_tabs_[i];
-        tab.Padding(pad(12, 8, 12, 8));
-        tab.Content(icon_label(icons[i], names[i], primary, 13));
+        tab.Width(44);
+        tab.Height(44);
+        tab.Padding(pad(0));
+        tab.CornerRadius({8, 8, 8, 8});
+        tab.Content(glyph(icons[i], 19));
         Automation::AutomationProperties::SetName(tab, names[i]);
+        ToolTipService::SetToolTip(tab, box_value(names[i]));
         tab.IsEnabled(false);
         tab.Click([this, i](auto&&, auto&&)
         {
@@ -80,7 +86,7 @@ void Workspace::build_modes(const Grid& header)
         });
         tabs.Children().Append(tab);
     }
-    place(header, tabs, 0, 1);
+    place(workspace, tabs, 0);
 }
 
 void Workspace::build_script_browser(const Grid& sidebar)
@@ -209,7 +215,6 @@ void Workspace::build_gallery()
 
     Grid title;
     column(title, 1, GridUnitType::Star);
-    column(title, 1, GridUnitType::Auto);
     StackPanel titles;
     titles.Spacing(3);
     gallery_title_ = label(tr(L"Ressources"), 22, primary, true);
@@ -218,14 +223,16 @@ void Workspace::build_gallery()
     titles.Children().Append(gallery_count_);
     place(title, titles, 0);
     gallery_back_ = Button();
-    gallery_back_.Content(box_value(tr(L"Fermer l’aperçu")));
+    gallery_back_.Content(glyph(L'\uE72B', 16));
+    gallery_back_.VerticalAlignment(VerticalAlignment::Center);
+    Automation::AutomationProperties::SetName(gallery_back_, tr(L"Retour à la galerie"));
+    ToolTipService::SetToolTip(gallery_back_, box_value(tr(L"Retour à la galerie")));
     gallery_back_.Click([this](auto&&, auto&&)
     {
         const UpdatingSelection updating(refreshing_);
         tiles_.SelectedIndex(-1);
         select_tag({});
     });
-    place(title, gallery_back_, 0, 1);
     place(gallery_, title, 0);
 
     gallery_search_ = TextBox();
@@ -276,7 +283,7 @@ void Workspace::update_layout()
     const bool gallery_selection = gallery_mode && selected_.has_value();
     const auto visibility = [](bool visible) { return visible ? Visibility::Visible : Visibility::Collapsed; };
     listing_.Visibility(visibility(mode_ == Mode::tags));
-    gallery_.Visibility(visibility(gallery_mode));
+    gallery_.Visibility(visibility(gallery_mode && !gallery_selection));
     gallery_back_.Visibility(visibility(gallery_selection));
     categories_.Visibility(visibility(!script_mode));
     script_navigation_.Visibility(visibility(script_mode));
@@ -285,9 +292,9 @@ void Workspace::update_layout()
     toggle_outline_.Visibility(visibility(class_open));
     outline_column_.Width({outline_open ? (root_.ActualWidth() < 990 ? 173.0 : 233.0) : 0.0, GridUnitType::Pixel});
     inspector_.Visibility(visibility(!gallery_mode || gallery_selection));
-    Grid::SetColumn(inspector_, script_mode ? 1 : 2);
-    Grid::SetColumnSpan(inspector_, script_mode ? 2 : 1);
-    Grid::SetColumnSpan(gallery_, gallery_selection ? 1 : 2);
+    Grid::SetColumn(inspector_, mode_ == Mode::tags ? 2 : 1);
+    Grid::SetColumnSpan(inspector_, mode_ == Mode::tags ? 1 : 2);
+    Grid::SetColumnSpan(gallery_, 2);
 }
 
 void Workspace::switch_mode(Mode mode)
@@ -312,14 +319,14 @@ void Workspace::switch_mode(Mode mode)
     if (mode != Mode::scripts)
         pending_script_target_.reset();
     selected_script_.reset();
-    member_lines_.clear();
+    member_ranges_.clear();
     for (std::size_t i = 0; i < mode_tabs_.size(); ++i)
     {
         mode_tabs_[i].IsEnabled(static_cast<bool>(movie_));
         const auto checked = i == static_cast<std::size_t>(mode);
         mode_tabs_[i].IsChecked(checked);
-        mode_tabs_[i].BorderBrush(brush(checked ? code_accent : stroke));
-        mode_tabs_[i].Background(brush(checked ? 0x23353A : surface));
+        mode_tabs_[i].BorderBrush(brush(checked ? accent : base));
+        mode_tabs_[i].Background(brush(checked ? selected_surface : base));
     }
     sidebar_title_.Text(mode == Mode::scripts ? tr(L"Explorateur de scripts") : mode == Mode::tags ? tr(L"Catégories") : tr(L"Bibliothèque"));
     select_tag({});
@@ -365,7 +372,7 @@ void Workspace::reset_explorer()
     scripts_.RootNodes().Clear();
     packages_.clear();
     members_.Items().Clear();
-    member_lines_.clear();
+    member_ranges_.clear();
     script_search_.Text(L"");
     gallery_search_.Text(L"");
     visible_assets_.clear();
@@ -561,10 +568,10 @@ void Workspace::select_script(std::size_t index, std::optional<unsigned> method,
         return;
     remember_script_tab();
     const auto& entry = script_entries_[index];
-    if (method && *method >= entry.module->methods().size())
+    if (method && entry.module && *method >= entry.module->methods().size())
         method.reset();
     selected_script_ = index;
-    member_lines_.clear();
+    member_ranges_.clear();
     {
         const UpdatingSelection updating(refreshing_);
         members_.Items().Clear();
@@ -605,9 +612,28 @@ void Workspace::select_script(std::size_t index, std::optional<unsigned> method,
 void Workspace::jump_to_member()
 {
     const auto index = members_.SelectedIndex();
-    if (index < 0 || static_cast<std::size_t>(index) >= member_lines_.size())
+    if (index < 0 || static_cast<std::size_t>(index) >= member_ranges_.size())
         return;
-    jump_to_code_line(member_lines_[index]);
+    jump_to_code_line(member_ranges_[index].first_line);
+}
+
+void Workspace::select_source_member(std::size_t index)
+{
+    if (busy_ || view_ != View::source || !selected_script_ || !abc_ || index >= member_ranges_.size())
+        return;
+    const auto type = script_entries_[*selected_script_].type;
+    if (!type)
+        return;
+    const auto& members = abc_->classes()[*type].members;
+    if (index >= members.size() || !members[index].method || members_.SelectedIndex() == static_cast<int>(index))
+        return;
+    const UpdatingSelection updating(refreshing_);
+    members_.SelectedIndex(static_cast<int>(index));
+    abc_method_ = members[index].method;
+    if (outline_.Visibility() == Visibility::Visible)
+        members_.ScrollIntoView(members_.SelectedItem());
+    update_abc_visibility();
+    remember_script_tab();
 }
 
 CodeReference Workspace::code_references(std::wstring_view source)
@@ -742,7 +768,8 @@ void Workspace::resolve_script_target()
         return;
     const auto match = std::ranges::find_if(script_entries_, [&](const ScriptEntry& entry)
     {
-        return entry.type && (!target->tag || entry.tag == *target->tag) && (!target->type || entry.type == target->type) &&
+        return (entry.type || !target->qualified.empty()) && (!target->tag || entry.tag == *target->tag) &&
+            (!target->type || entry.type == target->type) &&
             (target->qualified.empty() || entry.qualified == target->qualified);
     });
     if (match == script_entries_.end())

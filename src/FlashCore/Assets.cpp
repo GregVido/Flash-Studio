@@ -192,8 +192,15 @@ Asset lossless_bitmap(ByteView payload, bool alpha)
 
 ByteView normalized_jpeg(ByteView data)
 {
-    if (data.size() >= 4 && data[0] == 255 && data[1] == 217 && data[2] == 255 && data[3] == 216)
-        return data.subspan(2);
+    while (data.size() >= 4 && data[0] == 255 && (data[1] == 217 || data[1] == 216) && data[2] == 255)
+    {
+        if (data[3] == 216)
+            data = data.subspan(2);
+        else if (data.size() >= 6 && data[1] == 216 && data[3] == 217 && data[4] == 255 && data[5] == 216)
+            data = data.subspan(4);
+        else
+            break;
+    }
     return data;
 }
 
@@ -209,9 +216,6 @@ Asset encoded_bitmap(ByteView bytes)
         bytes = normalized_jpeg(bytes);
         if (bytes.size() < 2 || bytes[0] != 255 || bytes[1] != 216)
             throw std::runtime_error("Format d’image incorporée non reconnu.");
-        // Some early encoders also inserted EOI/SOI after the first SOI.
-        if (bytes.size() >= 6 && bytes[2] == 255 && bytes[3] == 217 && bytes[4] == 255 && bytes[5] == 216)
-            bytes = bytes.subspan(4);
     }
     return {extension, Bytes(bytes.begin(), bytes.end())};
 }
@@ -893,13 +897,8 @@ Movie Movie::replace_sound(std::size_t index, const std::filesystem::path& audio
     return replace_tag(index, payload);
 }
 
-std::string binary_preview(const Movie& movie, std::size_t index)
+std::string binary_swf_summary(ByteView data)
 {
-    const auto tag = movie.tags().at(index);
-    if (tag.code != 87 || tag.size < 6)
-        throw std::runtime_error("Ce tag ne contient pas de données binaires.");
-    const auto data = movie.data(index).subspan(6);
-    auto summary = std::format("DefineBinaryData #{} · {} octets\n", tag.character_id.value_or(0), data.size());
     try
     {
         std::optional<Movie> nested;
@@ -914,9 +913,21 @@ std::string binary_preview(const Movie& movie, std::size_t index)
             nested = Movie::parse(reconstructed);
         }
         if (nested)
-            summary += '\n' + summarize(*nested) + '\n';
+            return summarize(*nested);
     }
     catch (const std::runtime_error&) {}
+    return {};
+}
+
+std::string binary_preview(const Movie& movie, std::size_t index)
+{
+    const auto tag = movie.tags().at(index);
+    if (tag.code != 87 || tag.size < 6)
+        throw std::runtime_error("Ce tag ne contient pas de données binaires.");
+    const auto data = movie.data(index).subspan(6);
+    auto summary = std::format("DefineBinaryData #{} · {} octets\n", tag.character_id.value_or(0), data.size());
+    if (const auto nested = binary_swf_summary(data); !nested.empty())
+        summary += '\n' + nested + '\n';
     return summary + '\n' + hex_dump(data, 64 * 1024);
 }
 

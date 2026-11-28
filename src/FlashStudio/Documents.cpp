@@ -61,19 +61,13 @@ void Workspace::build_documents()
             close_document(static_cast<std::size_t>(found - documents_.begin()));
     });
 
-    recent_ = DropDownButton();
-    recent_.Padding(pad(10, 8, 10, 8));
-    recent_.Content(glyph(L'\uE823', 16));
-    Automation::AutomationProperties::SetName(recent_, tr(L"Fichiers récents"));
-    ToolTipService::SetToolTip(recent_, box_value(tr(L"Fichiers récents")));
-    MenuFlyout recent_menu;
-    recent_menu.Opening([this](auto&&, auto&&) { show_recent(); });
-    recent_.Flyout(recent_menu);
+    recent_ = MenuFlyoutSubItem();
+    recent_.Text(tr(L"Fichiers récents"));
 }
 
 void Workspace::show_recent()
 {
-    const auto items = recent_.Flyout().as<MenuFlyout>().Items();
+    const auto items = recent_.Items();
     items.Clear();
     try
     {
@@ -342,6 +336,7 @@ fire_and_forget Workspace::close_document(std::size_t index)
     }
     ++preview_version_;
     hide_code();
+    hide_resource_preview();
     close_frame_player();
     movie_.reset();
     indexed_rows_.clear();

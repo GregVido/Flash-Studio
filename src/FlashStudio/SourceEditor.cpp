@@ -1,4 +1,5 @@
 #include "UiStyle.hpp"
+#include "../FlashCore/Avm2Code.hpp"
 #include "../FlashCore/ClassEditing.hpp"
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -7,6 +8,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <variant>
 
 namespace studio
 {
@@ -35,7 +37,8 @@ std::filesystem::path Workspace::editor_assets()
     if (!length || length >= path.size())
         throw std::runtime_error("Le dossier de Flash Studio est introuvable.");
     const auto assets = std::filesystem::path(path.data()).parent_path() / L"Editor";
-    for (const auto file : {L"index.html", L"editor.js", L"as3-language.js", L"code-navigation.js", L"platform-symbols.js", L"vendor/codemirror.js"})
+    for (const auto file : {L"index.html", L"editor.js", L"as3-language.js", L"pcode-language.js",
+        L"code-navigation.js", L"platform-symbols.js", L"vendor/codemirror.js"})
         if (!std::filesystem::is_regular_file(assets / file))
             throw std::runtime_error("Les ressources de l’éditeur AS3 sont introuvables.");
     return assets;
@@ -61,14 +64,28 @@ bool identifier(std::string_view name)
 
 struct Workspace::SourceEdit
 {
+    struct Method
+    {
+        std::size_t tag;
+        unsigned id;
+        std::shared_ptr<const flash::AbcModule> abc;
+    };
+
     std::shared_ptr<const flash::Movie> movie;
-    ScriptEntry script;
+    std::variant<ScriptEntry, Method> target;
     std::string source;
     std::size_t line;
-    std::wstring id;
     View return_view;
+    std::optional<std::string> original;
+    std::wstring id;
     bool dirty = false;
     bool saving = false;
+
+    bool new_class() const
+    {
+        const auto* script = std::get_if<ScriptEntry>(&target);
+        return script && !script->type;
+    }
 };
 
 void Workspace::build_source_editor(const Grid& preview)
@@ -121,8 +138,12 @@ void Workspace::build_source_editor(const Grid& preview)
 void Workspace::set_source_editing(bool editing)
 {
     busy_ = editing;
-    for (const auto& control : {open_, save_, save_as_, global_search_, source_edit_, document_class_})
+    for (const auto& control : {open_, save_, global_search_, source_edit_, document_class_, gallery_back_, replace_, shape_edit_})
         control.IsEnabled(!editing);
+    for (const auto& control : {categories_, tags_})
+        control.IsEnabled(!editing);
+    search_.IsEnabled(!editing);
+    save_as_.IsEnabled(!editing);
     for (const auto& tab : tabs_)
         tab.IsEnabled(!editing);
     for (const auto& mode : mode_tabs_)
@@ -147,6 +168,7 @@ void Workspace::set_source_editing(bool editing)
     {
         ++preview_version_;
         hide_code();
+        hide_resource_preview();
         source_editor_.Visibility(Visibility::Visible);
         output_.Visibility(Visibility::Collapsed);
         preview_error_.Visibility(Visibility::Collapsed);
@@ -171,34 +193,58 @@ void Workspace::open_editor_source()
     put(message, L"action", L"open");
     put(message, L"id", source_session_->id);
     put(message, L"source", widen(source_session_->source));
-    put(message, L"qualified", source_session_->script.qualified);
-    put(message, L"locale", language() == Language::french ? L"fr" : L"en");
-    message.SetNamedValue(L"newClass", JsonValue::CreateBooleanValue(!source_session_->script.type));
+    const bool french = language() == Language::french;
+    put(message, L"locale", french ? L"fr" : L"en");
+    message.SetNamedValue(L"newClass", JsonValue::CreateBooleanValue(source_session_->new_class()));
+    message.SetNamedValue(L"dirty", JsonValue::CreateBooleanValue(source_session_->dirty));
     message.SetNamedValue(L"line", JsonValue::CreateNumberValue(static_cast<double>(source_session_->line)));
-    JsonObject classes;
-    for (const auto& entry : script_entries_)
+    if (source_session_->original)
+        put(message, L"original", widen(*source_session_->original));
+    const auto* script = std::get_if<ScriptEntry>(&source_session_->target);
+    if (!script)
     {
-        if (!entry.type || classes.HasKey(hstring(entry.qualified)))
-            continue;
-        const auto& type = entry.module->classes()[*entry.type];
-        JsonArray members;
-        for (const auto& member : type.members)
+        message.SetNamedValue(L"instructions", JsonValue::CreateBooleanValue(true));
+        JsonArray instructions;
+        for (const auto& op : flash::script::opcodes)
         {
-            if (!identifier(member.name) || member.name == type.name)
+            if (op.name.empty() || op.unknown_operands)
                 continue;
-            JsonObject item;
-            put(item, L"label", widen(member.name));
-            put(item, L"detail", widen(member.declaration));
-            put(item, L"type", member.declaration.find("function ") != std::string::npos &&
-                member.declaration.find("function get ") == std::string::npos &&
-                member.declaration.find("function set ") == std::string::npos ? L"method" : L"property");
-            item.SetNamedValue(L"isPublic", JsonValue::CreateBooleanValue(member.declaration.starts_with("public ")));
-            item.SetNamedValue(L"isStatic", JsonValue::CreateBooleanValue(member.declaration.find("static ") != std::string::npos));
-            members.Append(item);
+            JsonArray item;
+            item.Append(JsonValue::CreateStringValue(widen(op.name)));
+            item.Append(JsonValue::CreateNumberValue(op.value));
+            item.Append(JsonValue::CreateNumberValue(op.count));
+            instructions.Append(item);
         }
-        classes.SetNamedValue(hstring(entry.qualified), members);
+        message.SetNamedValue(L"opcodes", instructions);
     }
-    message.SetNamedValue(L"classes", classes);
+    else
+    {
+        put(message, L"qualified", script->qualified);
+        JsonObject classes;
+        for (const auto& entry : script_entries_)
+        {
+            if (!entry.type || classes.HasKey(hstring(entry.qualified)))
+                continue;
+            const auto& type = entry.module->classes()[*entry.type];
+            JsonArray members;
+            for (const auto& member : type.members)
+            {
+                if (!identifier(member.name) || member.name == type.name)
+                    continue;
+                JsonObject item;
+                put(item, L"label", widen(member.name));
+                put(item, L"detail", widen(member.declaration));
+                put(item, L"type", member.declaration.find("function ") != std::string::npos &&
+                    member.declaration.find("function get ") == std::string::npos &&
+                    member.declaration.find("function set ") == std::string::npos ? L"method" : L"property");
+                item.SetNamedValue(L"isPublic", JsonValue::CreateBooleanValue(member.declaration.starts_with("public ")));
+                item.SetNamedValue(L"isStatic", JsonValue::CreateBooleanValue(member.declaration.find("static ") != std::string::npos));
+                members.Append(item);
+            }
+            classes.SetNamedValue(hstring(entry.qualified), members);
+        }
+        message.SetNamedValue(L"classes", classes);
+    }
     source_web_.Focus(FocusState::Programmatic);
     source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
     set_editor_state(editor_hint());
@@ -238,9 +284,29 @@ void Workspace::open_code_preview()
     message.SetNamedValue(L"line", JsonValue::CreateNumberValue(static_cast<double>(code_line_)));
     JsonObject classes;
     if (!code_instructions_)
+    {
         for (const auto& entry : script_entries_)
             if (entry.type)
                 classes.SetNamedValue(hstring(entry.qualified), JsonValue::CreateNullValue());
+        if (selected_script_ && abc_)
+            if (const auto type = script_entries_[*selected_script_].type)
+            {
+                const auto& members = abc_->classes()[*type].members;
+                JsonArray ranges;
+                for (std::size_t i = 0; i < member_ranges_.size(); ++i)
+                {
+                    const auto& range = member_ranges_[i];
+                    if (!members[i].method || range.first_line >= range.past_last_line)
+                        continue;
+                    JsonArray item;
+                    item.Append(JsonValue::CreateNumberValue(static_cast<double>(i)));
+                    item.Append(JsonValue::CreateNumberValue(static_cast<double>(range.first_line)));
+                    item.Append(JsonValue::CreateNumberValue(static_cast<double>(range.past_last_line)));
+                    ranges.Append(item);
+                }
+                message.SetNamedValue(L"methodRanges", ranges);
+            }
+    }
     message.SetNamedValue(L"classes", classes);
     source_web_.CoreWebView2().PostWebMessageAsJson(message.Stringify());
 }
@@ -250,6 +316,7 @@ void Workspace::hide_code()
     if (!code_visible_)
         return;
     code_visible_ = false;
+    member_ranges_.clear();
     preview_reference_ = {};
     code_text_.clear();
     source_editor_.Visibility(Visibility::Collapsed);
@@ -287,6 +354,12 @@ void Workspace::code_preview_message(std::wstring_view action, const JsonObject&
     }
     else if (action == L"shortcut")
         run_shortcut(message.GetNamedString(L"name", L""));
+    else if (action == L"member")
+    {
+        const auto index = message.GetNamedNumber(L"index", -1);
+        if (index >= 0 && index < static_cast<double>(member_ranges_.size()))
+            select_source_member(static_cast<std::size_t>(index));
+    }
     else if (action == L"file" && !busy_)
         follow_swf_reference(message.GetNamedString(L"path", L""));
     else if (action == L"reference" && !busy_ && preview_reference_)
@@ -340,12 +413,13 @@ void Workspace::end_source_edit()
     post_editor_action(L"close");
     next_code_line_ = source_session_->line;
     const auto view = source_session_->return_view;
-    const bool creating = !source_session_->script.type;
+    const bool creating = source_session_->new_class();
+    const bool pcode = std::holds_alternative<SourceEdit::Method>(source_session_->target);
     source_session_.reset();
     set_source_editing(false);
     set_view(view);
     (creating ? source_create_ : source_edit_).Focus(FocusState::Programmatic);
-    status(tr(L"Source ActionScript affiché"));
+    status(tr(pcode && view == View::instructions ? L"P-code affiché" : L"Source ActionScript affiché"));
 }
 
 bool Workspace::has_source_draft() const { return source_session_ && source_session_->dirty; }
@@ -455,26 +529,80 @@ fire_and_forget Workspace::begin_class_source(ScriptEntry script)
         }
         if (script.type && view_ != View::source)
             set_view(View::source);
-        source_session_ = std::make_shared<SourceEdit>(SourceEdit{movie, script, std::move(source), line,
-            std::to_wstring(++source_revision_), script.type ? View::source : previous_view, !script.type});
-        set_source_editing(true);
+        start_source_edit({movie, script, std::move(source), line, script.type ? View::source : previous_view,
+            {}, {}, !script.type}, script.qualified);
         if (!script.type)
         {
             detail_title_.Text(script.qualified);
             detail_meta_.Text(tr(L"Nouvelle classe ActionScript"));
         }
-        set_editor_state(tr(L"Chargement de l’éditeur…"));
-        status(tr(L"Édition de ") + script.qualified);
-        if (source_ready_)
-            open_editor_source();
-        else
-        {
-            code_unavailable_ = false;
-            initialize_code_view();
-        }
     }
     catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
     catch (const std::exception& error) { if (!closed_) status(widen(error.what()), true); }
+}
+
+fire_and_forget Workspace::begin_method_source(bool simplify)
+{
+    if (busy_ || source_preparing_ || !movie_ || !selected_ || !abc_ || !abc_method_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    const auto movie = movie_;
+    const auto abc = abc_;
+    const auto tag = *selected_;
+    const auto method = *abc_method_;
+    const auto& info = abc->methods().at(method);
+    if (!info.code_size || (simplify && info.handlers))
+        co_return;
+    source_preparing_ = true;
+    const apartment_context ui_thread;
+    status(tr(L"Préparation du P-code…"));
+    co_await resume_background();
+    std::string source, failure;
+    std::optional<std::string> original;
+    try
+    {
+        source = abc->pcode(method, simplify);
+        if (simplify)
+            original = abc->pcode(method);
+    }
+    catch (const std::exception& error) { failure = error.what(); }
+    co_await ui_thread;
+    source_preparing_ = false;
+    if (closed_ || busy_ || movie_ != movie || selected_ != tag || abc_ != abc || abc_method_ != method)
+        co_return;
+    if (!failure.empty())
+    {
+        status(widen(failure), true);
+        co_return;
+    }
+    try
+    {
+        const auto previous_view = view_;
+        const auto line = !simplify && view_ == View::instructions ? code_line_ : 1;
+        if (view_ != View::instructions)
+            set_view(View::instructions);
+        const bool dirty = original && source != *original;
+        start_source_edit({movie, SourceEdit::Method{tag, method, abc}, std::move(source), line, previous_view,
+            std::move(original), {}, dirty}, widen(info.signature));
+    }
+    catch (const hresult_error& error) { if (!closed_) status(error.message(), true); }
+    catch (const std::exception& error) { if (!closed_) status(widen(error.what()), true); }
+}
+
+void Workspace::start_source_edit(SourceEdit session, std::wstring_view title)
+{
+    session.id = std::to_wstring(++source_revision_);
+    source_session_ = std::make_shared<SourceEdit>(std::move(session));
+    set_source_editing(true);
+    set_editor_state(tr(L"Chargement de l’éditeur…"));
+    status(std::wstring(tr(L"Édition de ")) + std::wstring(title));
+    if (source_ready_)
+        open_editor_source();
+    else
+    {
+        code_unavailable_ = false;
+        initialize_code_view();
+    }
 }
 
 fire_and_forget Workspace::initialize_code_view()
@@ -510,7 +638,7 @@ fire_and_forget Workspace::initialize_code_view()
         }
         source_web_ = WebView2();
         source_web_.DefaultBackgroundColor(color(base));
-        Automation::AutomationProperties::SetName(source_web_, tr(L"Éditeur ActionScript 3"));
+        Automation::AutomationProperties::SetName(source_web_, tr(L"Éditeur de code"));
         place(source_editor_, source_web_, 0);
         co_await source_web_.EnsureCoreWebView2Async();
         if (closed_)
@@ -548,6 +676,7 @@ fire_and_forget Workspace::initialize_code_view()
                 {
                     self->code_initializing_ = false;
                     self->source_ready_ = true;
+                    self->apply_theme();
                     if (self->source_session_)
                         self->open_editor_source();
                     else
@@ -561,7 +690,7 @@ fire_and_forget Workspace::initialize_code_view()
                         self->source_save_.IsEnabled(self->source_session_->dirty && !self->source_session_->saving);
                     }
                     else if (action == L"save")
-                        self->save_class(to_string(message.GetNamedString(L"source")));
+                        self->save_editor_source(to_string(message.GetNamedString(L"source")));
                     else if (action == L"editedAfterError" && !self->source_session_->saving)
                         self->set_editor_state(editor_hint());
                     else if (action == L"cancel")
@@ -578,50 +707,83 @@ fire_and_forget Workspace::initialize_code_view()
     catch (const std::exception& error) { code_initializing_ = false; failed(widen(error.what())); }
 }
 
-fire_and_forget Workspace::save_class(std::string source)
+fire_and_forget Workspace::save_editor_source(std::string source)
 {
     const auto session = source_session_;
     if (!session || session->saving || !session->dirty)
         co_return;
     const auto lifetime = shared_from_this();
+    const auto* method = std::get_if<SourceEdit::Method>(&session->target);
+    const auto* script = std::get_if<ScriptEntry>(&session->target);
     std::wstring problem;
     try
     {
         session->saving = true;
-        set_editor_state(tr(L"Compilation et validation du bloc ABC…"));
-        if (has_fallback_bodies(source))
+        set_editor_state(tr(method ? L"Assemblage et validation du P-code…" : L"Compilation et validation du bloc ABC…"));
+        if (script && has_fallback_bodies(source))
             throw std::runtime_error("Replace the fallback blocks in the source before compiling.");
-        if (!find_class_compiler(true))
+        if (script && !find_class_compiler(true))
         {
             session->saving = false;
             set_editor_state(editor_hint());
             co_return;
         }
         const auto compiler = class_compiler_;
-        const auto qualified = to_string(hstring(session->script.qualified));
+        const auto qualified = script ? to_string(hstring(script->qualified)) : std::string{};
         const auto french = language() == Language::french;
         const apartment_context ui_thread;
         co_await resume_background();
         std::shared_ptr<flash::Movie> edited;
         std::vector<Row> rows;
+        bool unchanged = false;
         try
         {
-            edited = std::make_shared<flash::Movie>(session->script.type ?
-                flash::compile_as3_class(*session->movie, session->script.tag, qualified, source, compiler, french) :
-                flash::add_as3_class(*session->movie, qualified, source, compiler, french));
-            rows = index_rows(*edited);
+            if (method)
+            {
+                const auto abc = method->abc->replace_method(method->id, source);
+                unchanged = std::ranges::equal(abc, flash::abc_bytecode(*session->movie, method->tag));
+                if (!unchanged)
+                    edited = std::make_shared<flash::Movie>(flash::replace_abc(*session->movie, method->tag, abc));
+            }
+            else
+                edited = std::make_shared<flash::Movie>(script->type ?
+                    flash::compile_as3_class(*session->movie, script->tag, qualified, source, compiler, french) :
+                    flash::add_as3_class(*session->movie, qualified, source, compiler, french));
+            if (edited)
+                rows = index_rows(*edited);
         }
         catch (const std::exception& error) { problem = widen(error.what()); }
         co_await ui_thread;
-        if (closed_)
+        if (closed_ || source_session_ != session)
             co_return;
-        if (edited && problem.empty())
+        if ((edited || unchanged) && problem.empty())
         {
             session->saving = false;
+            if (method)
+                session->return_view = View::instructions;
             end_source_edit();
-            apply_document_edit(session->movie, std::move(edited), std::move(rows), {}, !session->script.type);
-            open_script_target({session->script.type ? std::optional{session->script.tag} : std::nullopt,
-                {}, session->script.qualified, {}, session->line, View::source});
+            if (unchanged)
+                co_return;
+            if (method)
+            {
+                const auto selected_script = selected_script_ ?
+                    std::optional(script_entries_[*selected_script_].qualified) : std::nullopt;
+                apply_document_edit(session->movie, std::move(edited), std::move(rows), method->tag);
+                if (mode_ == Mode::scripts && selected_script)
+                    open_script_target({method->tag, {}, *selected_script, method->id, session->line, View::instructions});
+                else if (mode_ == Mode::tags && selected_ == method->tag)
+                {
+                    abc_method_ = method->id;
+                    next_code_line_ = session->line;
+                    set_view(View::instructions);
+                }
+            }
+            else
+            {
+                apply_document_edit(session->movie, std::move(edited), std::move(rows), {}, !script->type);
+                open_script_target({script->type ? std::optional{script->tag} : std::nullopt,
+                    {}, script->qualified, {}, session->line, View::source});
+            }
             status(tr(L"Modifications appliquées au SWF"));
             co_return;
         }

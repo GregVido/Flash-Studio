@@ -1,4 +1,5 @@
 #pragma once
+#include <filesystem>
 #include <format>
 #include <string>
 #include <string_view>
@@ -11,6 +12,7 @@ void initialize_language();
 Language language();
 void use_language(Language language);
 void save_language(Language language);
+std::filesystem::path settings_path(std::wstring_view filename);
 const wchar_t* tr(const wchar_t* french);
 std::wstring localized_error(std::wstring_view message);
 

@@ -32,8 +32,14 @@ struct AbcClass
 
 struct AbcClassSource
 {
+    struct MemberRange
+    {
+        std::size_t first_line = 0;
+        std::size_t past_last_line = 0;
+    };
+
     std::string text;
-    std::vector<std::size_t> member_lines;
+    std::vector<MemberRange> members;
 };
 
 struct DeobfuscationReport

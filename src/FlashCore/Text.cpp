@@ -47,7 +47,7 @@ struct Field
     std::size_t flags_offset;
     std::size_t text_offset;
     std::size_t end_offset;
-    std::string initial;
+    std::string initial, variable;
     std::array<int, 4> bounds{};
     unsigned font_height = 240;
     unsigned font_id{};
@@ -90,7 +90,7 @@ Field edit_field(ByteView bytes)
         field.indent = std::bit_cast<std::int16_t>(input.u16());
         field.leading = std::bit_cast<std::int16_t>(input.u16());
     }
-    input.cstring();
+    field.variable = input.cstring();
     field.flags_offset = position;
     field.text_offset = input.position();
     if (flags & 128)
@@ -456,13 +456,14 @@ std::string web::text_field_json(const Movie& movie, std::size_t index)
     return std::format("{{\"text\":{},\"bounds\":[{},{},{},{}],\"height\":{},\"fill\":\"#{:02x}{:02x}{:02x}\","
         "\"alpha\":{:g},\"alignment\":{},\"margins\":[{},{}],\"indent\":{},\"leading\":{},\"html\":{},"
         "\"wrap\":{},\"multiline\":{},\"editable\":{},\"password\":{},\"selectable\":{},\"border\":{},\"maximum\":{},\"autoSize\":{},"
-        "\"fontId\":{},\"fontClass\":{},\"embedFonts\":{}}}",
+        "\"fontId\":{},\"fontClass\":{},\"embedFonts\":{},\"variable\":{}}}",
         json_string(text), left, top, std::max(1, right - left), std::max(1, bottom - top),
         field.font_height, field.color[0], field.color[1], field.color[2], field.color[3] / 255.0,
         field.alignment, field.left_margin, field.right_margin, field.indent, field.leading, bool(field.layout & 2),
         bool(field.flags & 64), bool(field.flags & 32), !(field.flags & 8), bool(field.flags & 16),
         !(field.layout & 16), bool(field.layout & 8), field.maximum,
-        json_string(field.layout & 64 ? "left" : "none"), field.font_id, json_string(field.font_class), bool(field.layout & 1));
+        json_string(field.layout & 64 ? "left" : "none"), field.font_id, json_string(field.font_class), bool(field.layout & 1),
+        json_string(field.variable));
 }
 
 Movie Movie::replace_text(std::size_t index, std::string_view utf8) const

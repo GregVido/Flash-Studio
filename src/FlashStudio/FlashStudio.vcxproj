@@ -50,6 +50,8 @@
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Workspace.cpp" />
+    <ClCompile Include="ResourcePreview.cpp" />
+    <ClCompile Include="UiTheme.cpp" />
     <ClCompile Include="FolderWorkspace.cpp" />
     <ClCompile Include="Shortcuts.cpp" />
     <ClCompile Include="Explorer.cpp" />

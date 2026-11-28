@@ -3528,19 +3528,21 @@ AbcClassSource Abc::render_class(std::size_t index) const
     bool previous_field = false;
     bool previous_static_field = false;
     std::optional<std::size_t> first_static_line;
-    result.member_lines.resize(type.members.size());
+    result.members.resize(type.members.size());
     for (const auto position : order)
     {
         const auto& member = type.members[position];
+        auto& range = result.members[position];
         if (member.declaration.empty())
         {
-            result.member_lines[position] = first_static_line.value_or(line);
+            range.first_line = first_static_line.value_or(line);
             if (!static_code.empty())
             {
                 if (previous_field)
                     add("\n");
-                result.member_lines[position] = line;
+                range.first_line = line;
                 append_body(static_code, "    ");
+                range.past_last_line = line;
                 add("\n");
                 previous_field = false;
             }
@@ -3549,7 +3551,7 @@ AbcClassSource Abc::render_class(std::size_t index) const
         const bool static_field = !member.method && member.declaration.find("static ") != std::string::npos;
         if (previous_field && (member.method || static_field != previous_static_field))
             add("\n");
-        result.member_lines[position] = line;
+        range.first_line = line;
         previous_field = !member.method;
         previous_static_field = static_field;
         add("        " + names.spell(member.declaration));
@@ -3573,6 +3575,7 @@ AbcClassSource Abc::render_class(std::size_t index) const
         if (!member.method || !at(body_by_method_, *member.method) || type.interface_type)
         {
             add(";\n");
+            range.past_last_line = line;
             continue;
         }
         add("\n        {\n");
@@ -3590,7 +3593,9 @@ AbcClassSource Abc::render_class(std::size_t index) const
             add("            // Corps non reconstruit. Consulter la méthode dans Instructions.\n"
                 "            throw new Error(\"Corps AVM2 non reconstruit.\");\n");
         }
-        add("        }\n\n");
+        add("        }\n");
+        range.past_last_line = line;
+        add("\n");
     }
     add("    }\n}\n");
     result.text = std::move(out).take();
@@ -3601,8 +3606,12 @@ AbcClassSource Abc::render_class(std::size_t index) const
             imports += "    import " + symbol + ";\n";
         imports += '\n';
         result.text.insert(result.text.find("{\n") + 2, imports);
-        for (auto& member_line : result.member_lines)
-            member_line += names.imports.size() + 1;
+        for (auto& range : result.members)
+        {
+            range.first_line += names.imports.size() + 1;
+            if (range.past_last_line)
+                range.past_last_line += names.imports.size() + 1;
+        }
     }
     return result;
 }

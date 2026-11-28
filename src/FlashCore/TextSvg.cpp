@@ -201,6 +201,89 @@ Asset font_svg(const Movie& movie, std::size_t index)
     return {L".svg", Bytes(svg.begin(), svg.end())};
 }
 
+FontPreview font_preview(const Movie& movie, std::size_t index)
+{
+    const auto& tag = movie.tags().at(index);
+    if (!tag.character_id || (tag.code != 10 && tag.code != 48 && tag.code != 75 && tag.code != 91))
+        throw std::runtime_error("Tag de police non pris en charge.");
+    FontPreview result;
+    const auto id = *tag.character_id;
+    Reader input(movie.data(index));
+    input.skip(2);
+    if (tag.code == 91)
+    {
+        const auto flags = input.u8();
+        result.name = input.cstring();
+        result.bold = (flags & 1) != 0;
+        result.italic = (flags & 2) != 0;
+        result.cff = (flags & 4) != 0 && input.remaining() != 0;
+    }
+    else
+    {
+        const auto table = font_glyphs(movie, id);
+        result.units = table.units;
+        result.characters = font_glyph_labels(movie, id);
+        result.characters.resize(table.offsets.empty() ? 0 : table.offsets.size() - 1, L'\uFFFD');
+        if (tag.code != 10)
+        {
+            const auto flags = input.u8();
+            input.skip(1);
+            const auto name = input.take(input.u8());
+            result.name.assign(reinterpret_cast<const char*>(name.data()), name.size());
+            result.bold = (flags & 1) != 0;
+            result.italic = (flags & 2) != 0;
+            if (flags & 128)
+            {
+                const auto metrics = web::font_metrics(movie, id);
+                result.metrics = std::array{metrics.ascent, metrics.descent, metrics.leading};
+            }
+        }
+    }
+
+    for (std::size_t i = 0; i < movie.tags().size(); ++i)
+    {
+        const auto code = movie.tags()[i].code;
+        if ((code != 88 && code != 13 && code != 62) || movie.tags()[i].size < 2)
+            continue;
+        Reader info(movie.data(i));
+        if (info.u16() != id)
+            continue;
+        if (code == 88)
+        {
+            result.full_name = info.cstring();
+            result.copyright = info.cstring();
+        }
+        else if (result.name.empty())
+        {
+            const auto name = info.take(info.u8());
+            result.name.assign(reinterpret_cast<const char*>(name.data()), name.size());
+            const auto flags = info.u8();
+            result.bold = (flags & 2) != 0;
+            result.italic = (flags & 4) != 0;
+        }
+    }
+    if (const auto terminator = result.name.find('\0'); terminator != std::string::npos)
+        result.name.resize(terminator);
+    return result;
+}
+
+std::vector<std::string> font_outlines(const Movie& movie, std::size_t index, std::span<const std::size_t> glyphs)
+{
+    const auto& tag = movie.tags().at(index);
+    const auto table = font_glyphs(movie, tag.character_id.value());
+    std::vector<std::string> paths;
+    paths.reserve(glyphs.size());
+    std::size_t bytes = 0;
+    for (const auto glyph : glyphs)
+    {
+        auto path = glyph_path(table, static_cast<unsigned>(glyph));
+        if ((bytes += path.size()) > max_text_size)
+            throw std::runtime_error("Le tracé des glyphes dépasse 2 Mio.");
+        paths.push_back(std::move(path));
+    }
+    return paths;
+}
+
 namespace
 {
 void big16(Bytes& data, int value)

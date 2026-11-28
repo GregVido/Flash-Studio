@@ -4,6 +4,7 @@ import argparse
 import json
 import lzma
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -239,9 +240,50 @@ def check(exe, folder, asc=None):
     scene = json.loads((web_demo / "scene.json").read_text(encoding="utf-8"))
     assert (web_demo / scene["audio"]["11"]).is_file()
     assert scene["audioTiming"]["11"] == [5512, 2, 0]
-    assert 'console.log("Bonjour, Flash Studio !");' in (web_demo / "actions.js").read_text(encoding="utf-8")
+    actions = (web_demo / "actions.js").read_text(encoding="utf-8")
+    assert 's.push("Bonjour, Flash Studio !");' in actions and "console.log(s.pop());" in actions
+    assert (web_demo / "avm1.js").is_file()
     assert list((web_demo / "sources" / "avm1").glob("*.as"))
     assert not list(web_demo.rglob("*.swf"))
+
+    def legacy_action(opcode, operands):
+        return bytes([opcode]) + struct.pack("<H", len(operands)) + operands
+
+    def legacy_push(*values):
+        data = b"".join(b"\0" + value.encode() + b"\0" if isinstance(value, str) else
+                        b"\x07" + struct.pack("<i", value) for value in values)
+        return legacy_action(0x96, data)
+
+    false_branch = legacy_push(9) + b"\x3e"
+    legacy_function = (legacy_push("n") + b"\x1c" + legacy_push(3) + b"\x67" +
+                       legacy_action(0x9d, struct.pack("<h", len(false_branch))) +
+                       false_branch + legacy_push(4) + b"\x3e\0")
+    legacy_actions = (legacy_action(0x9b, b"choose\0\x01\0n\0" + struct.pack("<H", len(legacy_function))) +
+                      legacy_function + legacy_push(2, 1, "choose") + b"\x3d\x26" +
+                      legacy_push(5, 1, "choose") + b"\x3d\x26\0")
+    legacy_movie = folder / "Conditions AVM1.swf"
+    legacy_body = rectangle(880, 880) + struct.pack("<HH", 24 * 256, 1) + tag(12, legacy_actions) + tag(1) + tag(0)
+    legacy_movie.write_bytes(swf(b"FWS", legacy_body, legacy_body))
+    source = run("decompile", legacy_movie, "0")
+    assert "function choose(n)" in source and "if (" in source and "return 9;" in source and "return 4;" in source
+    web_legacy = folder / "html5-avm1-branches"
+    run("export-html5", legacy_movie, web_legacy)
+    if node := shutil.which("node"):
+        script_result = subprocess.run([node, "--input-type=module", "-e", """
+            import assert from "node:assert/strict";
+            import {readFileSync} from "node:fs";
+            const load = name => import("data:text/javascript;base64," + readFileSync(name).toString("base64"));
+            const {createLegacyRuntime} = await load("avm1.js");
+            const {actions} = await load("actions.js");
+            const runtime = createLegacyRuntime({ writeVariable() {}, owner() {} });
+            const clip = { view: {}, variables: Object.create(null), bundle: {}, namedLayer() {} };
+            clip.legacyContext = () => runtime.context(clip);
+            const trace = [];
+            console.log = value => trace.push(value);
+            actions[0](clip);
+            assert.deepEqual(trace, [9, 4]);
+        """], cwd=web_legacy, capture_output=True, timeout=15)
+        assert script_result.returncode == 0, script_result.stderr.decode("utf-8", "replace")
 
     adpcm_movie = folder / "ADPCM.swf"
     adpcm_stereo = struct.pack("<HBI", 1, 0x1f, 3) + bits(

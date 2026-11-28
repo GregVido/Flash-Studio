@@ -9,6 +9,28 @@
   --stroke: #374151;
   --accent: #6fdfc4;
 }
+:root[data-theme=light] {
+  color-scheme: light;
+  background: #f1f5f8;
+  color: #17232d;
+  --panel: #fafcfd;
+  --control: #edf3f7;
+  --muted: #4e6072;
+  --stroke: #c5d2df;
+  --accent: #006784;
+}
+:root[data-theme=light] :is(nav, .zoom, .mark) { background: #e6eff5; }
+:root[data-theme=light] button:hover { background: #e1edf4; }
+:root[data-theme=light] button.primary { background: var(--accent); color: white; }
+:root[data-theme=light] :is(nav button[aria-pressed=true], #elements button[aria-current=true]) {
+  background: #dceef6;
+  border-color: #81b6ca;
+}
+:root[data-theme=light] #stage {
+  background-color: #e5ebf1;
+  background-image: conic-gradient(#f6f9fc 25%, #e5ebf1 0 50%, #f6f9fc 0 75%, #e5ebf1 0);
+}
+:root[data-theme=light] #status[data-error=true] { color: #ab273d; }
 * { box-sizing: border-box; }
 body { height: 100dvh; margin: 0; display: grid; grid-template-rows: 57px 1fr 33px; overflow: hidden; }
 header, footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--panel); padding: 0 16px; }

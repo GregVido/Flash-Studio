@@ -1,5 +1,9 @@
 const tokens = /\/\/.*|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g;
 
+export function sourceMemberAtLine(ranges, line) {
+    return ranges?.find(([, first, end]) => line >= first && line < end)?.[0];
+}
+
 function unquote(value) {
     return value.slice(1, -1).replace(/\\(?:u([\da-f]{4})|x([\da-f]{2})|(["'\\]))/gi,
         (_, unicode, byte, escaped) => escaped ?? String.fromCharCode(parseInt(unicode ?? byte, 16)));

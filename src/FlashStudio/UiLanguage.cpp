@@ -16,15 +16,15 @@ constexpr Translation catalog[]{
 #include "UiTranslations.inc"
 };
 static_assert(std::ranges::is_sorted(catalog, {}, &Translation::french));
+}
 
-std::filesystem::path preference()
+std::filesystem::path settings_path(std::wstring_view filename)
 {
     PWSTR folder{};
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &folder)))
         throw std::runtime_error("Could not locate the Flash Studio settings folder.");
     const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> storage(folder, CoTaskMemFree);
-    return std::filesystem::path(folder) / L"Flash Studio" / L"language.txt";
-}
+    return std::filesystem::path(folder) / L"Flash Studio" / filename;
 }
 
 void initialize_language()
@@ -32,7 +32,7 @@ void initialize_language()
     selected = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_FRENCH ? Language::french : Language::english;
     try
     {
-        const auto path = preference();
+        const auto path = settings_path(L"language.txt");
         if (!std::filesystem::is_regular_file(path) || std::filesystem::file_size(path) != 2)
             return;
         const auto bytes = flash::read_file(path);
@@ -49,7 +49,7 @@ void use_language(Language value) { selected = value; }
 
 void save_language(Language value)
 {
-    const auto path = preference();
+    const auto path = settings_path(L"language.txt");
     std::filesystem::create_directories(path.parent_path());
     flash::write_text(path, value == Language::french ? "fr" : "en");
 }

@@ -272,6 +272,27 @@ void Workspace::close_shape_editor()
     }
 }
 
+void Workspace::sync_shape_theme()
+{
+    const auto session = shape_session_;
+    if (!session || session->closed || !session->web)
+        return;
+    try
+    {
+        if (const auto pane = session->window.Content().try_as<FrameworkElement>())
+            pane.RequestedTheme(element_theme());
+        session->web.DefaultBackgroundColor(color(base));
+        if (const auto web = session->web.CoreWebView2())
+        {
+            JsonObject message;
+            text(message, L"action", L"theme");
+            text(message, L"value", light_theme() ? L"light" : L"dark");
+            web.PostWebMessageAsJson(message.Stringify());
+        }
+    }
+    catch (const hresult_error&) {}
+}
+
 bool Workspace::has_shape_draft() const { return shape_session_ && shape_session_->dirty; }
 bool Workspace::shape_editor_for(std::size_t index) const
 {
@@ -325,7 +346,7 @@ fire_and_forget Workspace::edit_shape()
         session->window.Title(L"Flash Studio — " + title);
         session->window.AppWindow().Resize({1120, 740});
         Grid pane;
-        pane.RequestedTheme(ElementTheme::Dark);
+        pane.RequestedTheme(element_theme());
         pane.Background(brush(base));
         auto loading = label(tr(L"Chargement de l’éditeur de formes…"), 15);
         loading.HorizontalAlignment(HorizontalAlignment::Center);
@@ -401,6 +422,7 @@ fire_and_forget Workspace::edit_shape()
                 const auto action = payload.GetNamedString(L"action", L"");
                 if (action == L"ready")
                 {
+                    owner->sync_shape_theme();
                     edit->web.CoreWebView2().PostWebMessageAsJson(edit->initial);
                     loading.Visibility(Visibility::Collapsed);
                 }

@@ -49,11 +49,14 @@
     <ClCompile Include="ProjectExport.cpp" />
     <ClCompile Include="WebExport.cpp" />
     <ClCompile Include="WebScripts.cpp" />
+    <ClCompile Include="WebAvm1.cpp" />
     <ClCompile Include="WebAs3.cpp" />
     <ClInclude Include="WebExport.hpp" />
     <ClInclude Include="WebClassRuntime.hpp" />
     <ClInclude Include="WebText.hpp" />
     <ClInclude Include="WebMedia.hpp" />
+    <ClInclude Include="WebAvm1.hpp" />
+    <ClInclude Include="Avm1Code.hpp" />
     <ClInclude Include="WebServer.hpp" />
     <ClCompile Include="ActionScript.cpp" />
     <ClCompile Include="ClassEditing.cpp" />

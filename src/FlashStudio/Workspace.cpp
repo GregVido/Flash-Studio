@@ -235,9 +235,10 @@ void Workspace::start(const std::filesystem::path& initial_file, std::optional<s
 
 void Workspace::build()
 {
+    initialize_theme();
     root_ = Grid();
-    root_.RequestedTheme(ElementTheme::Dark);
-    root_.Background(brush(base));
+    root_.RequestedTheme(element_theme());
+    window_.SystemBackdrop(MicaBackdrop());
     root_.AllowDrop(true);
     root_.DragOver([](auto&&, const DragEventArgs& args)
     {
@@ -251,7 +252,6 @@ void Workspace::build()
     row(root_);
 
     Grid title_bar;
-    title_bar.Background(brush(base));
     column(title_bar, 42);
     column(title_bar, 1, GridUnitType::Star);
     const auto caption_padding = column(title_bar, 138);
@@ -267,7 +267,7 @@ void Workspace::build()
     documents_bar_.VerticalAlignment(VerticalAlignment::Bottom);
     place(title_bar, documents_bar_, 0, 1);
     Grid drag_area;
-    drag_area.Background(brush(base));
+    drag_area.Background(SolidColorBrush(Windows::UI::Color{0, 0, 0, 0}));
     drag_area.MinWidth(64);
     documents_bar_.TabStripFooter(drag_area);
     drag_area.Loaded([this](const IInspectable& sender, auto&&) { window_.SetTitleBar(sender.as<UIElement>()); });
@@ -283,24 +283,24 @@ void Workspace::build()
 
     Grid header;
     header.Background(brush(panel));
-    header.Padding(pad(20, 11, 18, 11));
+    header.Padding(pad(12, 8, 12, 8));
     header.ColumnSpacing(16);
+    column(header, 1, GridUnitType::Auto);
     column(header, 1, GridUnitType::Star);
     column(header, 1, GridUnitType::Auto);
-    column(header, 1, GridUnitType::Auto);
     auto document = StackPanel();
-    document.Spacing(4);
-    file_name_ = label(tr(L"Explorateur SWF"), 19, primary, true);
+    document.Spacing(2);
+    document.VerticalAlignment(VerticalAlignment::Center);
+    file_name_ = label(tr(L"Explorateur SWF"), 14, primary, true);
     file_info_ = label(tr(L"Ouvrez une animation Flash"), 12, secondary);
     document.Children().Append(file_name_);
     document.Children().Append(file_info_);
-    place(header, document, 0);
-    build_modes(header);
+    place(header, document, 0, 1);
 
     auto actions = horizontal(8);
     actions.VerticalAlignment(VerticalAlignment::Center);
     open_ = Button();
-    open_.Content(icon_label(L'\uE838', tr(L"Ouvrir"), base));
+    open_.Content(icon_label(L'\uE838', tr(L"Ouvrir"), on_accent));
     open_.Background(brush(accent));
     open_.Padding(pad(14, 8, 14, 8));
     open_.Click([this](auto&&, auto&&) { open_dialog(); });
@@ -312,9 +312,8 @@ void Workspace::build()
     save_.Click([this](auto&&, auto&&) { save_movie(); });
     save_.IsEnabled(false);
     actions.Children().Append(open_);
-    save_as_ = Button();
-    save_as_.Content(box_value(tr(L"Enregistrer sous")));
-    save_as_.Padding(pad(12, 8, 12, 8));
+    save_as_ = MenuFlyoutItem();
+    save_as_.Text(tr(L"Enregistrer sous"));
     save_as_.Click([this](auto&&, auto&&) { save_movie(true); });
     save_as_.IsEnabled(false);
     folder_button_ = Button();
@@ -323,10 +322,24 @@ void Workspace::build()
     Automation::AutomationProperties::SetName(folder_button_, tr(L"Espace de travail"));
     ToolTipService::SetToolTip(folder_button_, box_value(tr(L"Espace de travail (Ctrl+Maj+E)")));
     folder_button_.Click([this](auto&&, auto&&) { toggle_folder_panel(); });
-    actions.Children().Append(folder_button_);
-    actions.Children().Append(recent_);
+    DropDownButton file_commands;
+    file_commands.Content(box_value(tr(L"Fichier")));
+    MenuFlyout file_menu;
+    MenuFlyoutItem open_folder;
+    open_folder.Text(tr(L"Ouvrir un dossier"));
+    open_folder.Click([this](auto&&, auto&&) { open_folder_dialog(); });
+    file_menu.Items().Append(open_folder);
+    file_menu.Items().Append(recent_);
+    file_menu.Items().Append(MenuFlyoutSeparator());
+    file_menu.Items().Append(save_as_);
+    file_menu.Opening([this](auto&&, auto&&) { show_recent(); });
+    file_commands.Flyout(file_menu);
+    actions.Children().Append(file_commands);
     actions.Children().Append(save_);
-    actions.Children().Append(save_as_);
+    place(header, actions, 0);
+    auto utility_actions = horizontal(6);
+    utility_actions.VerticalAlignment(VerticalAlignment::Center);
+    utility_actions.Children().Append(folder_button_);
     global_search_ = Button();
     global_search_.Content(glyph(L'\uE721', 16));
     global_search_.Padding(pad(11, 8, 11, 8));
@@ -334,41 +347,15 @@ void Workspace::build()
     Automation::AutomationProperties::SetName(global_search_, tr(L"Rechercher dans le SWF"));
     ToolTipService::SetToolTip(global_search_, box_value(tr(L"Rechercher dans le SWF (Ctrl+Maj+F)")));
     global_search_.Click([this](auto&&, auto&&) { show_global_search(); });
-    actions.Children().Append(global_search_);
-    DropDownButton language_menu;
-    language_menu.Content(glyph(L'\uE774', 16));
-    language_menu.Padding(pad(9, 8, 9, 8));
-    Automation::AutomationProperties::SetName(language_menu, tr(L"Langue de l’application"));
-    ToolTipService::SetToolTip(language_menu, box_value(tr(L"Langue de l’application")));
-    MenuFlyout languages;
-    for (const auto& [choice, name] : {std::pair{Language::english, L"English"}, std::pair{Language::french, L"Français"}})
-    {
-        RadioMenuFlyoutItem item;
-        item.Text(name);
-        item.GroupName(L"FlashStudioLanguage");
-        item.IsChecked(language() == choice);
-        item.Click([this, choice](auto&&, auto&&)
-        {
-            try
-            {
-                save_language(choice);
-                if (language() != choice)
-                    status(tr(L"Langue enregistrée. Redémarrez Flash Studio pour l’appliquer."));
-            }
-            catch (const std::exception&) { status(tr(L"Impossible d’enregistrer la langue de l’application."), true); }
-        });
-        languages.Items().Append(item);
-    }
-    language_menu.Flyout(languages);
-    actions.Children().Append(language_menu);
-    Button help;
-    help.Content(glyph(L'\uE946', 16));
-    help.Padding(pad(10, 8, 10, 8));
-    Automation::AutomationProperties::SetName(help, tr(L"À propos"));
-    ToolTipService::SetToolTip(help, box_value(tr(L"À propos (F1)")));
-    help.Click([this](auto&&, auto&&) { show_about(); });
-    actions.Children().Append(help);
-    place(header, actions, 0, 2);
+    utility_actions.Children().Append(global_search_);
+    Button preferences;
+    preferences.Content(glyph(L'\uE713', 16));
+    preferences.Padding(pad(10, 8, 10, 8));
+    Automation::AutomationProperties::SetName(preferences, tr(L"Paramètres"));
+    ToolTipService::SetToolTip(preferences, box_value(tr(L"Paramètres")));
+    preferences.Click([this](auto&&, auto&&) { show_settings(); });
+    utility_actions.Children().Append(preferences);
+    place(header, utility_actions, 0, 2);
     place(root_, header, 1);
 
     KeyboardAccelerator shortcut;
@@ -382,7 +369,15 @@ void Workspace::build()
     KeyboardAccelerator save_as_shortcut;
     save_as_shortcut.Key(Windows::System::VirtualKey::S);
     save_as_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control | Windows::System::VirtualKeyModifiers::Shift);
-    save_as_.KeyboardAccelerators().Append(save_as_shortcut);
+    save_as_shortcut.Invoked([this](auto&&, const KeyboardAcceleratorInvokedEventArgs& args)
+    {
+        if (save_as_.IsEnabled())
+        {
+            save_movie(true);
+            args.Handled(true);
+        }
+    });
+    root_.KeyboardAccelerators().Append(save_as_shortcut);
     KeyboardAccelerator find_shortcut;
     find_shortcut.Key(Windows::System::VirtualKey::F);
     find_shortcut.Modifiers(Windows::System::VirtualKeyModifiers::Control);
@@ -390,6 +385,12 @@ void Workspace::build()
     {
         if (!movie_ || source_session_)
             return;
+        if (mode_ == Mode::resources && selected_)
+        {
+            const UpdatingSelection updating(refreshing_);
+            tiles_.SelectedIndex(-1);
+            select_tag({});
+        }
         const auto input = mode_ == Mode::scripts ? script_search_ : mode_ == Mode::resources ? gallery_search_ : search_;
         input.Focus(FocusState::Keyboard);
         input.SelectAll();
@@ -406,23 +407,28 @@ void Workspace::build()
     workarea_ = Border();
     workarea_.BorderThickness(pad(0, 1, 0, 1));
     workarea_.BorderBrush(brush(stroke));
+    Grid workspace;
+    column(workspace, 58);
+    column(workspace, 1, GridUnitType::Star);
+    build_modes(workspace);
     Grid content;
-    const auto side_column = column(content, 246);
-    column(content, 1.42, GridUnitType::Star);
+    const auto side_column = column(content, 232);
+    column(content, 0.65, GridUnitType::Star);
     column(content, 1, GridUnitType::Star);
     root_.SizeChanged([this, side_column](auto&&, const SizeChangedEventArgs& args)
     {
-        side_column.Width({args.NewSize().Width < 975 ? 188.0 : 246.0, GridUnitType::Pixel});
+        side_column.Width({args.NewSize().Width < 975 ? 184.0 : 232.0, GridUnitType::Pixel});
         if (folder_pane_)
-            folder_pane_.DisplayMode(args.NewSize().Width >= 1250 ? SplitViewDisplayMode::Inline : SplitViewDisplayMode::Overlay);
+            folder_pane_.DisplayMode(args.NewSize().Width >= 1450 ? SplitViewDisplayMode::Inline : SplitViewDisplayMode::Overlay);
         update_layout();
     });
-    workarea_.Child(content);
+    place(workspace, content, 0, 1);
+    workarea_.Child(workspace);
     main.Children().Append(workarea_);
 
     Grid sidebar;
     sidebar.Background(brush(panel));
-    sidebar.Padding(pad(12, 19, 12, 12));
+    sidebar.Padding(pad(9, 16, 9, 10));
     row(sidebar);
     row(sidebar, 1, GridUnitType::Star);
     sidebar_title_ = label(tr(L"Bibliothèque"), 15, primary, true);
@@ -511,15 +517,18 @@ void Workspace::build()
     row(inspector_);
     row(inspector_, 1, GridUnitType::Star);
     Grid detail;
-    detail.Padding(pad(19, 16, 16, 13));
+    detail.Padding(pad(14, 12, 14, 10));
+    detail.ColumnSpacing(10);
+    column(detail, 1, GridUnitType::Auto);
     column(detail, 1, GridUnitType::Star);
+    place(detail, gallery_back_, 0);
     auto info = StackPanel();
     info.Spacing(5);
     detail_title_ = label(tr(L"Aperçu du fichier"), 20, primary, true);
     detail_meta_ = label(tr(L"Sélectionnez un tag pour l’inspecter"), 12, secondary);
     info.Children().Append(detail_title_);
     info.Children().Append(detail_meta_);
-    place(detail, info, 0);
+    place(detail, info, 0, 1);
     export_ = DropDownButton();
     export_.Content(box_value(tr(L"Exporter")));
     export_.VerticalAlignment(VerticalAlignment::Center);
@@ -613,7 +622,13 @@ void Workspace::build()
     source_edit_.Content(box_value(tr(L"Éditer le code")));
     source_edit_.FontSize(12);
     source_edit_.Visibility(Visibility::Collapsed);
-    source_edit_.Click([this](auto&&, auto&&) { edit_class(); });
+    source_edit_.Click([this](auto&&, auto&&)
+    {
+        if (view_ == View::instructions)
+            begin_method_source();
+        else
+            edit_class();
+    });
     view_actions.Children().Append(source_edit_);
     script_pin_ = Button();
     script_pin_.FontSize(12);
@@ -685,11 +700,11 @@ void Workspace::build()
     abc_menu.Items().Append(edit_class_);
     edit_pcode_ = MenuFlyoutItem();
     edit_pcode_.Text(tr(L"Éditer le P-code…"));
-    edit_pcode_.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::method); });
+    edit_pcode_.Click([this](auto&&, auto&&) { begin_method_source(); });
     abc_menu.Items().Append(edit_pcode_);
     edit_simplified_ = MenuFlyoutItem();
     edit_simplified_.Text(tr(L"Nettoyer le P-code de la méthode…"));
-    edit_simplified_.Click([this](auto&&, auto&&) { edit_abc(AbcEdit::simplify); });
+    edit_simplified_.Click([this](auto&&, auto&&) { begin_method_source(true); });
     abc_menu.Items().Append(edit_simplified_);
     MenuFlyoutItem clean_movie;
     clean_movie.Text(tr(L"Désobfusquer le SWF…"));
@@ -770,6 +785,9 @@ void Workspace::build()
     preview.Children().Append(picture_view_);
     preview.Children().Append(audio_);
     preview.Children().Append(preview_error_);
+    resource_preview_ = Grid();
+    resource_preview_.Visibility(Visibility::Collapsed);
+    preview.Children().Append(resource_preview_);
     preview.Children().Append(progress_);
     build_source_editor(preview);
     build_outline(preview);
@@ -816,7 +834,7 @@ void Workspace::build()
 
     auto footer = horizontal(8);
     footer.Background(brush(panel));
-    footer.Padding(pad(20, 9, 16, 9));
+    footer.Padding(pad(14, 5, 14, 5));
     status_icon_ = label(L"●", 12, accent);
     status_ = label(tr(L"Prêt"), 12, secondary);
     footer.Children().Append(status_icon_);
@@ -831,6 +849,7 @@ void Workspace::build()
     caption.ButtonInactiveBackgroundColor(Windows::UI::Color{0, 0, 0, 0});
     caption.ButtonHoverBackgroundColor(color(surface));
     window_.Content(root_);
+    apply_theme();
 }
 
 void Workspace::status(std::wstring_view message, bool error)
@@ -1250,7 +1269,7 @@ void Workspace::show_page(std::size_t page)
 
 void Workspace::select_tag(std::optional<std::size_t> index, std::optional<View> desired_view)
 {
-    if (!movie_)
+    if (!movie_ || source_session_)
         return;
     const bool changed = selected_ != index;
     selected_ = index;
@@ -1346,7 +1365,10 @@ void Workspace::update_abc_visibility()
     const auto has_body = abc_ && abc_method_ && abc_->methods().at(*abc_method_).code_size.has_value();
     abc_tools_.Visibility(editing ? Visibility::Visible : Visibility::Collapsed);
     const bool class_open = mode_ == Mode::scripts && selected_script_ && script_entries_[*selected_script_].type;
-    source_edit_.Visibility(class_open && view_ == View::source && !source_session_ ? Visibility::Visible : Visibility::Collapsed);
+    const bool pcode = has_abc && has_body && view_ == View::instructions;
+    source_edit_.Content(box_value(pcode ? tr(L"Éditer le P-code") : tr(L"Éditer le code")));
+    source_edit_.Visibility((pcode || (class_open && view_ == View::source)) && !source_session_ ?
+        Visibility::Visible : Visibility::Collapsed);
     edit_class_.Visibility(class_open ? Visibility::Visible : Visibility::Collapsed);
     abc_owner_.Visibility(class_open ? Visibility::Collapsed : Visibility::Visible);
     abc_method_list_.Visibility(class_open ? Visibility::Collapsed : Visibility::Visible);
@@ -1417,13 +1439,14 @@ fire_and_forget Workspace::show_selection()
     if (source_session_)
         co_return;
     auto lifetime = shared_from_this();
+    const auto version = ++preview_version_;
+    hide_resource_preview();
     if (view_ == View::frame && movie_)
     {
         open_frame_player();
         co_return;
     }
     close_frame_player();
-    const auto version = ++preview_version_;
     const auto target_line = std::exchange(next_code_line_, std::nullopt);
     try
     {
@@ -1464,14 +1487,21 @@ fire_and_forget Workspace::show_selection()
         const auto type = selected_script_ ? script_entries_[*selected_script_].type : std::nullopt;
         if (view == View::hex)
         {
-            output_.Text(widen(flash::hex_dump(movie->data(index))));
+            show_hex(movie, index, false);
             co_return;
         }
+        if (view == View::details && tag.code == 87 && tag.size >= 6)
+        {
+            show_hex(movie, index, true);
+            co_return;
+        }
+        const bool is_font = tag.category == flash::Category::fonts &&
+            (tag.code == 10 || tag.code == 48 || tag.code == 75 || tag.code == 91);
         if (view == View::details)
         {
             output_.Text(widen(flash::inspect(*movie, index)));
             if (tag.category != flash::Category::images && tag.category != flash::Category::shapes &&
-                !is_text(tag.code) && tag.code != 14)
+                !is_text(tag.code) && tag.code != 14 && !is_font)
                 co_return;
         }
         else
@@ -1481,8 +1511,9 @@ fire_and_forget Workspace::show_selection()
         const apartment_context ui;
         co_await resume_background();
         std::optional<flash::Asset> asset;
+        std::optional<flash::FontPreview> font;
         std::string text, failure;
-        std::vector<std::size_t> member_lines;
+        std::vector<flash::AbcClassSource::MemberRange> member_ranges;
         try
         {
             if ((view == View::source || view == View::instructions) && is_abc(tag.code))
@@ -1498,7 +1529,7 @@ fire_and_forget Workspace::show_selection()
                 {
                     auto source = abc->decompile_class(*type);
                     text = std::move(source.text);
-                    member_lines = std::move(source.member_lines);
+                    member_ranges = std::move(source.members);
                 }
                 else if (type && !method)
                     text = "; Choisissez une méthode dans le panneau Membres.";
@@ -1516,10 +1547,8 @@ fire_and_forget Workspace::show_selection()
                 text = flash::decompile(*movie, index);
             else if (view == View::instructions)
                 text = flash::disassemble(*movie, index);
-            else if (tag.code == 87)
-                text = flash::binary_preview(*movie, index);
-            else if (tag.code == 10 || tag.code == 48 || tag.code == 75 || tag.code == 91)
-                asset = flash::font_svg(*movie, index);
+            else if (is_font)
+                font = flash::font_preview(*movie, index);
             else if (is_text(tag.code))
             {
                 const auto extracted = flash::extract_text(*movie, index);
@@ -1548,9 +1577,8 @@ fire_and_forget Workspace::show_selection()
             {
                 if (view == View::source || view == View::instructions)
                 {
+                    member_ranges_ = std::move(member_ranges);
                     show_code(text, view == View::instructions);
-                    if (type && view == View::source)
-                        member_lines_ = std::move(member_lines);
                     root_.DispatcherQueue().TryEnqueue([this, lifetime, version, target_line, class_source = type && view == View::source]
                     {
                         if (!closed_ && version == preview_version_)
@@ -1565,6 +1593,8 @@ fire_and_forget Workspace::show_selection()
                 else
                     output_.Text(widen(text));
             }
+            else if (font)
+                show_font(movie, index, std::move(*font));
             else if (asset && (asset->extension == L".wav" || asset->extension == L".mp3"))
             {
                 InMemoryRandomAccessStream stream;
@@ -2198,7 +2228,6 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
     const auto abc = abc_;
     const auto tag = *selected_;
     const auto method = abc_method_;
-    const auto method_edit = operation == AbcEdit::method || operation == AbcEdit::simplify;
     const auto script = selected_script_ ? std::optional(script_entries_[*selected_script_].qualified) : std::nullopt;
     if (operation != AbcEdit::import && !abc)
         co_return;
@@ -2223,64 +2252,44 @@ fire_and_forget Workspace::edit_abc(AbcEdit operation)
             prompt.XamlRoot(root_.XamlRoot());
             prompt.PrimaryButtonText(tr(L"Valider"));
             prompt.CloseButtonText(tr(L"Annuler"));
-            NumberBox id{nullptr};
+            if (abc->strings().size() < 2)
+            {
+                status(tr(L"Le bloc ABC ne contient pas de constante chaîne modifiable."), true);
+                co_return;
+            }
+            prompt.Title(box_value(tr(L"Modifier une constante ABC")));
+            NumberBox id;
+            id.Header(box_value(tr(L"Index de la constante")));
+            id.Minimum(1);
+            id.Maximum(static_cast<double>(abc->strings().size() - 1));
+            id.Value(1);
+            id.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Compact);
+            editor.Text(widen(abc->strings()[1]));
+            Automation::AutomationProperties::SetName(editor, tr(L"Valeur de la constante"));
+            id.ValueChanged([abc, editor](auto&&, const NumberBoxValueChangedEventArgs& args)
+            {
+                const auto value = args.NewValue();
+                if (std::isfinite(value) && value >= 1 && value < static_cast<double>(abc->strings().size()))
+                    editor.Text(widen(abc->strings()[static_cast<std::size_t>(value)]));
+            });
             StackPanel content_panel;
             content_panel.Spacing(8);
-            if (method_edit)
-            {
-                if (!method)
-                    co_return;
-                editor.IsSpellCheckEnabled(false);
-                editor.IsTextPredictionEnabled(false);
-                prompt.Title(box_value(operation == AbcEdit::simplify ? tr(L"Vérifier le P-code nettoyé") : tr(L"Éditer le P-code")));
-                editor.Text(widen(abc->pcode(*method, operation == AbcEdit::simplify)));
-                Automation::AutomationProperties::SetName(editor, tr(L"Instructions AVM2 assemblables"));
-            }
-            else
-            {
-                if (abc->strings().size() < 2)
-                {
-                    status(tr(L"Le bloc ABC ne contient pas de constante chaîne modifiable."), true);
-                    co_return;
-                }
-                prompt.Title(box_value(tr(L"Modifier une constante ABC")));
-                id = NumberBox();
-                id.Header(box_value(tr(L"Index de la constante")));
-                id.Minimum(1);
-                id.Maximum(static_cast<double>(abc->strings().size() - 1));
-                id.Value(1);
-                id.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Compact);
-                editor.Text(widen(abc->strings()[1]));
-                Automation::AutomationProperties::SetName(editor, tr(L"Valeur de la constante"));
-                id.ValueChanged([abc, editor](auto&&, const NumberBoxValueChangedEventArgs& args)
-                {
-                    const auto value = args.NewValue();
-                    if (std::isfinite(value) && value >= 1 && value < static_cast<double>(abc->strings().size()))
-                        editor.Text(widen(abc->strings()[static_cast<std::size_t>(value)]));
-                });
-                content_panel.Children().Append(id);
-            }
+            content_panel.Children().Append(id);
             auto error = label(L"", 12, danger);
             error.TextWrapping(TextWrapping::Wrap);
             content_panel.Children().Append(editor);
             content_panel.Children().Append(error);
             prompt.Content(content_panel);
-            prompt.PrimaryButtonClick([&compiled, method_edit, abc, method, editor, id, error](
+            prompt.PrimaryButtonClick([&compiled, abc, editor, id, error](
                 auto&&, const ContentDialogButtonClickEventArgs& args)
             {
                 try
                 {
-                    const auto text = to_string(editor.Text());
-                    if (method_edit)
-                        compiled = abc->replace_method(*method, text);
-                    else
-                    {
-                        const auto value = id.Value();
-                        if (!std::isfinite(value) || value < 1 || value >= static_cast<double>(abc->strings().size()) ||
-                            std::trunc(value) != value)
-                            throw std::runtime_error("Sélectionnez un index de constante entier.");
-                        compiled = abc->replace_string(static_cast<unsigned>(value), text);
-                    }
+                    const auto value = id.Value();
+                    if (!std::isfinite(value) || value < 1 || value >= static_cast<double>(abc->strings().size()) ||
+                        std::trunc(value) != value)
+                        throw std::runtime_error("Sélectionnez un index de constante entier.");
+                    compiled = abc->replace_string(static_cast<unsigned>(value), to_string(editor.Text()));
                 }
                 catch (const std::exception& problem)
                 {

@@ -33,7 +33,7 @@ namespace studio
 enum class View { details, source, instructions, hex, frame };
 enum class Mode { resources, scripts, tags };
 enum class Export { asset, raw, source, instructions, pcode, graph };
-enum class AbcEdit { method, simplify, pool_string, import };
+enum class AbcEdit { pool_string, import };
 enum class CodeReferenceKind { call, constructor, type };
 using CodeReference = std::function<std::function<void()>(std::wstring_view, std::wstring_view, CodeReferenceKind)>;
 
@@ -113,6 +113,9 @@ private:
     };
     static std::vector<Row> index_rows(const flash::Movie& movie);
     void build();
+    void apply_theme();
+    void sync_shape_theme();
+    winrt::fire_and_forget show_settings();
     void build_modes(const winrt::Microsoft::UI::Xaml::Controls::Grid& header);
     void build_script_browser(const winrt::Microsoft::UI::Xaml::Controls::Grid& sidebar);
     void build_outline(const winrt::Microsoft::UI::Xaml::Controls::Grid& preview);
@@ -127,6 +130,7 @@ private:
     winrt::Microsoft::UI::Xaml::Controls::TreeViewNode package_node(std::size_t index);
     void select_script(std::size_t index, std::optional<unsigned> method = {}, View view = View::source);
     void jump_to_member();
+    void select_source_member(std::size_t index);
     void jump_to_code_line(std::size_t line);
     CodeReference code_references(std::wstring_view source);
     void open_script_target(ScriptTarget target);
@@ -205,6 +209,11 @@ private:
     winrt::Windows::Foundation::IAsyncAction prompt_deobfuscation(flash::As3Obfuscation detection);
     winrt::Windows::Foundation::IAsyncAction deobfuscate_swf(bool whole_document);
     winrt::fire_and_forget show_selection();
+    void hide_resource_preview();
+    void show_font(std::shared_ptr<const flash::Movie> movie, std::size_t tag, flash::FontPreview font);
+    winrt::fire_and_forget render_glyphs();
+    void show_hex(std::shared_ptr<const flash::Movie> movie, std::size_t tag, bool payload);
+    void render_hex();
     winrt::fire_and_forget export_tag(Export format);
     winrt::fire_and_forget export_all(bool project = false, std::wstring visual_format = {}, bool html5 = false);
     winrt::fire_and_forget export_folder_html5();
@@ -227,7 +236,9 @@ private:
     winrt::fire_and_forget create_class();
     winrt::fire_and_forget edit_class();
     winrt::fire_and_forget begin_class_source(ScriptEntry script);
-    winrt::fire_and_forget save_class(std::string source);
+    winrt::fire_and_forget begin_method_source(bool simplify = false);
+    winrt::fire_and_forget save_editor_source(std::string source);
+    void start_source_edit(SourceEdit session, std::wstring_view title);
     void set_source_editing(bool editing);
     void open_editor_source();
     void end_source_edit();
@@ -239,6 +250,11 @@ private:
 
     winrt::Microsoft::UI::Xaml::Window window_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Grid root_{nullptr}, inspector_{nullptr}, abc_tools_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Grid resource_preview_{nullptr};
+    struct FontView;
+    struct HexView;
+    std::shared_ptr<FontView> font_view_;
+    std::shared_ptr<HexView> hex_view_;
     winrt::Microsoft::UI::Xaml::Controls::Border empty_{nullptr}, workarea_{nullptr}, listing_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock file_name_{nullptr}, file_info_{nullptr},
         status_{nullptr}, status_icon_{nullptr}, list_count_{nullptr}, detail_title_{nullptr},
@@ -261,10 +277,11 @@ private:
     std::shared_ptr<FramePlayback> playback_;
     bool frame_work_running_ = false;
     winrt::Microsoft::UI::Xaml::Controls::ListView categories_{nullptr}, tags_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button open_{nullptr}, save_{nullptr}, save_as_{nullptr}, replace_{nullptr},
+    winrt::Microsoft::UI::Xaml::Controls::Button open_{nullptr}, save_{nullptr}, replace_{nullptr},
         previous_page_{nullptr}, next_page_{nullptr}, global_search_{nullptr}, document_class_{nullptr}, deobfuscate_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::DropDownButton export_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::DropDownButton recent_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem save_as_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutSubItem recent_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::SplitView folder_pane_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button folder_button_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox folder_search_{nullptr};
@@ -311,7 +328,8 @@ private:
     std::vector<flash::Category> category_filters_;
     std::vector<Package> packages_;
     bool expand_filtered_packages_ = false;
-    std::vector<std::size_t> visible_assets_, member_lines_;
+    std::vector<std::size_t> visible_assets_;
+    std::vector<flash::AbcClassSource::MemberRange> member_ranges_;
     std::optional<std::size_t> selected_script_;
     std::optional<std::size_t> previous_script_, previous_asset_;
     std::optional<unsigned> previous_method_;

@@ -1,7 +1,9 @@
 #include "ActionScript.hpp"
+#include "Avm1Code.hpp"
 
 #include <array>
 #include <charconv>
+#include <map>
 
 namespace flash::script
 {
@@ -123,6 +125,65 @@ std::string variable(std::string_view expression)
     return std::format("_root[{}]", expression);
 }
 
+std::string member_expression(std::string_view object, std::string_view key)
+{
+    if (key.starts_with('"') && key.ends_with('"') && key.size() >= 2)
+    {
+        const auto name = identifier(key.substr(1, key.size() - 2), "");
+        if (!name.empty())
+            return std::format("{}.{}", object, name);
+    }
+    return std::format("{}[{}]", object, key);
+}
+
+bool parenthesized(std::string_view text)
+{
+    if (!text.starts_with('(') || !text.ends_with(')'))
+        return false;
+    char quote_mark = 0;
+    bool escaped = false;
+    int depth = 0;
+    for (std::size_t i = 0; i < text.size(); ++i)
+    {
+        const auto c = text[i];
+        if (quote_mark)
+        {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == quote_mark) quote_mark = 0;
+        }
+        else if (c == '"' || c == '\'') quote_mark = c;
+        else if (c == '(') ++depth;
+        else if (c == ')' && --depth == 0) return i + 1 == text.size();
+    }
+    return false;
+}
+
+std::string condition(std::string_view test, bool negate)
+{
+    for (;;)
+    {
+        if (test.starts_with('!') && parenthesized(test.substr(1)))
+        {
+            negate = !negate;
+            test.remove_prefix(1);
+        }
+        else if (parenthesized(test))
+        {
+            test.remove_prefix(1);
+            test.remove_suffix(1);
+        }
+        else break;
+    }
+    return negate ? std::format("!({})", test) : std::string(test);
+}
+
+bool condition_expression(unsigned op)
+{
+    return op == 0x96 || op == 0x1C || op == 0x22 || op == 0x4E || op == 0x4C ||
+        (op >= 0x0A && op <= 0x15) || (op >= 0x47 && op <= 0x4B) || (op >= 0x60 && op <= 0x68);
+}
+
 std::string push_value(Reader& input, const std::vector<std::string>& constants)
 {
     const auto kind = input.u8();
@@ -179,23 +240,79 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
 {
     if (depth > 32)
         throw std::runtime_error("Trop de blocs AVM1 imbriqués.");
-    Reader stream(bytes);
+    const auto actions = avm1_actions(bytes);
     Expressions stack;
     const std::string indent(depth * 4, ' ');
-    auto statement = [&](std::string_view text) { output.add(indent + std::string(text) + '\n'); };
-    while (stream.remaining())
+    struct Conditional
     {
-        const auto offset = stream.position();
-        const auto op = stream.u8();
+        std::size_t end;
+        std::optional<std::size_t> otherwise;
+        Expressions entry;
+        bool in_else{};
+        std::optional<std::size_t> loop_back;
+    };
+    std::vector<Conditional> conditionals;
+    auto statement = [&](std::string_view text)
+    {
+        output.add(indent + std::string(conditionals.size() * 4, ' ') + std::string(text) + '\n');
+    };
+    const auto close = [&](std::size_t at)
+    {
+        while (!conditionals.empty() && conditionals.back().end <= at)
+        {
+            if (stack.size() != conditionals.back().entry.size())
+                stack = conditionals.back().entry;
+            conditionals.pop_back();
+            statement("}");
+        }
+    };
+    const auto at_offset = [&](std::int64_t offset)
+    {
+        return std::ranges::lower_bound(actions, offset, {}, [](const Avm1Action& action)
+        {
+            return static_cast<std::int64_t>(action.offset);
+        });
+    };
+    const auto end = actions.empty() ? 0 : (actions.back().code ? actions.back().next : actions.back().offset);
+    std::map<std::size_t, std::size_t> loops;
+    if (source)
+        for (const auto& action : actions)
+            if (action.code == 0x99)
+            {
+                const auto start = avm1_branch(action);
+                if (start < 0 || start >= static_cast<std::int64_t>(action.offset))
+                    continue;
+                auto test = at_offset(start);
+                if (test == actions.end() || static_cast<std::int64_t>(test->offset) != start)
+                    continue;
+                while (test->offset < action.offset && condition_expression(test->code))
+                    ++test;
+                if (test->code == 0x9D && avm1_branch(*test) == static_cast<std::int64_t>(action.next))
+                    loops.try_emplace(test->offset, action.offset);
+            }
+    for (const auto& action : actions)
+    {
+        const auto offset = action.offset;
+        const auto op = action.code;
+        close(offset);
+        if (!conditionals.empty() && conditionals.back().otherwise == offset)
+        {
+            auto block = std::move(conditionals.back());
+            conditionals.pop_back();
+            statement("} else {");
+            stack = block.entry;
+            block.in_else = true;
+            conditionals.push_back(std::move(block));
+        }
         if (!op)
         {
             if (!source)
                 statement(std::format("{:04X}  End", offset));
             return;
         }
-        Reader args(op >= 128 ? stream.take(stream.u16()) : ByteView{});
+        Reader args(action.args);
         std::string operands;
-        ByteView nested;
+        const auto nested = action.nested;
         unsigned flags = 0, scene_bias = 0;
         if (op == 0x88)
         {
@@ -226,35 +343,22 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
                 }
             }
         }
-        else if (op == 0x8E || op == 0x9B)
+        else if (action.function)
         {
-            const auto name = args.cstring();
-            const auto params = args.u16();
-            if (op == 0x8E)
-                args.skip(3);
-            std::string signature = identifier(name, "fonction_anonyme") + '(';
-            for (unsigned i = 0; i < params; ++i)
+            const auto& fn = *action.function;
+            std::string signature = identifier(fn.name, "fonction_anonyme") + '(';
+            for (std::size_t i = 0; i < fn.parameters.size(); ++i)
             {
-                if (op == 0x8E)
-                    args.skip(1);
                 if (i)
                     signature += ", ";
-                signature += identifier(args.cstring(), std::format("arg{}", i + 1));
+                signature += identifier(fn.parameters[i].first, std::format("arg{}", i + 1));
                 if (signature.size() > 8192)
                     throw std::runtime_error("Signature AVM1 trop longue.");
             }
             operands = signature + ')';
-            const auto size = args.u16();
-            nested = args.remaining() >= size ? args.take(size) : stream.take(size);
-        }
-        else if (op == 0x94)
-        {
-            const auto size = args.u16();
-            nested = args.remaining() >= size ? args.take(size) : stream.take(size);
         }
         else if (op == 0x99 || op == 0x9D)
-            operands = std::format("→ {:04X}", static_cast<std::int64_t>(stream.position()) +
-                std::bit_cast<std::int16_t>(args.u16()));
+            operands = std::format("→ {:04X}", avm1_branch(action));
         else if (op == 0x81)
             operands = std::format("{}", args.u16());
         else if (op == 0x87)
@@ -303,6 +407,8 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             continue;
         }
 
+        try
+        {
         switch (op)
         {
         case 0x04: statement("nextFrame();"); break;
@@ -331,6 +437,7 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
         }
         case 0x17: statement(stack.pop() + ';'); break;
         case 0x18: stack.push("int(" + stack.pop() + ')'); break;
+        case 0x20: statement("setTarget(" + stack.pop() + ");"); break;
         case 0x1C: stack.push(variable(stack.pop())); break;
         case 0x1D: case 0x3C:
         {
@@ -344,7 +451,7 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             const auto value = op == 0x23 ? stack.pop() : std::string{};
             const auto property = movie_property(stack.pop());
             const auto target = stack.pop();
-            const auto object = target == "\"\"" ? "this" : "eval(" + target + ')';
+            const auto object = target == "\"\"" ? "this" : target.starts_with('"') ? "eval(" + target + ')' : target;
             if (op == 0x23)
                 statement(object + '.' + property + " = " + value + ';');
             else
@@ -431,7 +538,7 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
         {
             const auto member = stack.pop(), object = stack.pop();
             const auto count = literal_count(stack.pop());
-            auto callable = member == "\"\"" || member == "undefined" ? object : object + '[' + member + ']';
+            auto callable = member == "\"\"" || member == "undefined" ? object : member_expression(object, member);
             stack.push(std::format("{}{}({})", op == 0x53 ? "new " : "", callable, stack.arguments(count, false)));
             break;
         }
@@ -447,7 +554,7 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             const auto value = op == 0x4F ? stack.pop() : std::string{};
             const auto member = stack.pop();
             const auto object = stack.pop();
-            auto property = std::format("{}[{}]", object, member);
+            auto property = member_expression(object, member);
             if (op == 0x4E)
                 stack.push(std::move(property));
             else
@@ -463,10 +570,11 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             statement(operands + " = " + stack.pop() + ';');
             break;
         case 0x88: case 0x96: break;
+        case 0x8B: statement("setTarget(" + operands + ");"); break;
         case 0x8C: statement("gotoAndStop(" + operands + ");"); break;
         case 0x8E: case 0x9B:
             statement("function " + operands + " {");
-            try { render(nested, true, output, depth + 1, constants); }
+            try { render(nested, true, output, depth + 1 + static_cast<unsigned>(conditionals.size()), constants); }
             catch (const std::runtime_error& error)
             {
                 statement(std::format("    // Décompilation interrompue : {}", error.what()));
@@ -475,9 +583,54 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             break;
         case 0x94:
             statement("with (" + stack.pop() + ") {");
-            render(nested, true, output, depth + 1, constants);
+            render(nested, true, output, depth + 1 + static_cast<unsigned>(conditionals.size()), constants);
             statement("}");
             break;
+        case 0x99:
+            if (avm1_branch(action) != static_cast<std::int64_t>(action.next) &&
+                (conditionals.empty() || (conditionals.back().loop_back != offset &&
+                (conditionals.back().otherwise != action.next || conditionals.back().in_else))))
+                statement("// Saut " + operands);
+            break;
+        case 0x9D:
+        {
+            const auto test = stack.pop();
+            const auto target = avm1_branch(action);
+            const auto destination = at_offset(target);
+            const auto explicit_target = destination != actions.end() && static_cast<std::int64_t>(destination->offset) == target;
+            const auto limit = conditionals.empty() ? end :
+                (conditionals.back().in_else ? conditionals.back().end :
+                    conditionals.back().otherwise.value_or(conditionals.back().end));
+            if (target < static_cast<std::int64_t>(action.next) || target > static_cast<std::int64_t>(limit) ||
+                (!explicit_target && target != static_cast<std::int64_t>(end)) || conditionals.size() >= 64)
+            {
+                statement("if (" + condition(test, false) + ") { /* Saut " + operands + " */ }");
+                break;
+            }
+            auto finish = static_cast<std::size_t>(target);
+            std::optional<std::size_t> otherwise;
+            const auto loop = loops.find(offset);
+            if (loop == loops.end() && destination != actions.begin())
+            {
+                const auto& tail = *std::prev(destination);
+                if (tail.code == 0x99 && tail.offset >= action.next && tail.next == finish)
+                {
+                    const auto after = avm1_branch(tail);
+                    const auto marker = at_offset(after);
+                    if (after > target && after <= static_cast<std::int64_t>(limit) &&
+                        (after == static_cast<std::int64_t>(end) ||
+                            (marker != actions.end() && static_cast<std::int64_t>(marker->offset) == after)))
+                    {
+                        otherwise = finish;
+                        finish = static_cast<std::size_t>(after);
+                    }
+                }
+            }
+            statement(std::string(loop == loops.end() ? "if (" : "while (") + condition(test, true) + ") {");
+            conditionals.push_back({finish, otherwise, stack, false,
+                loop == loops.end() ? std::nullopt : std::optional{loop->second}});
+            break;
+        }
         case 0x9A:
         {
             const auto target = stack.pop(), url = stack.pop();
@@ -499,7 +652,14 @@ void render(ByteView bytes, bool source, Output& output, unsigned depth,
             throw std::runtime_error(std::format("Instruction {} à 0x{:04X}. Voir le désassemblage.",
                 names[op].empty() ? std::format("0x{:02X}", op) : std::string(names[op]), offset));
         }
+        }
+        catch (const std::runtime_error& error)
+        {
+            statement(std::format("// 0x{:04X} : {}", offset, error.what()));
+            stack = Expressions{};
+        }
     }
+    close(end);
 }
 }
 

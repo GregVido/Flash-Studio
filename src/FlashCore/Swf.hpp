@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 
 #include <cstdint>
@@ -166,6 +167,17 @@ Asset convert_image(const Asset& image, std::wstring_view extension, double scal
 std::string extract_text(const Movie& movie, std::size_t index);
 Asset text_svg(const Movie& movie, std::size_t index);
 Asset font_svg(const Movie& movie, std::size_t index);
+struct FontPreview
+{
+    std::string name, full_name, copyright;
+    std::vector<wchar_t> characters;
+    unsigned units = 1024;
+    std::optional<std::array<int, 3>> metrics;
+    bool bold{}, italic{}, cff{};
+};
+FontPreview font_preview(const Movie& movie, std::size_t index);
+std::vector<std::string> font_outlines(const Movie& movie, std::size_t index, std::span<const std::size_t> glyphs);
+std::string binary_swf_summary(ByteView data);
 std::string binary_preview(const Movie& movie, std::size_t index);
 bool is_bitmap_tag(unsigned code) noexcept;
 bool has_avm1_actions(const Movie& movie, std::size_t index);

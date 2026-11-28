@@ -13,27 +13,29 @@ using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
 using namespace Microsoft::UI::Xaml::Media;
 
-inline constexpr auto base = 0x121418u;
-inline constexpr auto panel = 0x191C22u;
-inline constexpr auto surface = 0x20242Cu;
-inline constexpr auto stroke = 0x323842u;
+inline constexpr auto base = 0x14171Cu;
+inline constexpr auto panel = 0x1B1F26u;
+inline constexpr auto surface = 0x242A33u;
+inline constexpr auto stroke = 0x343D49u;
 inline constexpr auto primary = 0xF2F4F8u;
 inline constexpr auto secondary = 0xB0BAC9u;
-inline constexpr auto accent = 0xFFBA72u;
+inline constexpr auto accent = 0x92D8EEu;
 inline constexpr auto danger = 0xFF9299u;
+inline constexpr auto selected_surface = 0x253946u;
+inline constexpr auto on_accent = 0x10272Fu;
+
+void initialize_theme();
+bool light_theme();
+ElementTheme element_theme();
+void set_light_theme(bool light);
 
 inline bool resource(const flash::Tag& tag)
 {
     return tag.character_id && tag.category != flash::Category::timeline && tag.category != flash::Category::scripts;
 }
 
-inline Windows::UI::Color color(unsigned rgb)
-{
-    return {255, static_cast<std::uint8_t>(rgb >> 16), static_cast<std::uint8_t>(rgb >> 8),
-        static_cast<std::uint8_t>(rgb)};
-}
-
-inline SolidColorBrush brush(unsigned rgb) { return SolidColorBrush(color(rgb)); }
+Windows::UI::Color color(unsigned rgb);
+SolidColorBrush brush(unsigned rgb);
 
 inline Thickness pad(double left, double top, double right, double bottom) { return {left, top, right, bottom}; }
 inline Thickness pad(double amount) { return pad(amount, amount, amount, amount); }

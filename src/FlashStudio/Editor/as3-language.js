@@ -90,6 +90,14 @@ export const colors = HighlightStyle.define([
     { tag: [tags.lineComment, tags.blockComment], color: "#9caebe" }
 ]);
 
+export const lightColors = HighlightStyle.define([
+    { tag: tags.keyword, color: "#6232a2" },
+    { tag: tags.typeName, color: "#096855" },
+    { tag: tags.string, color: "#346424" },
+    { tag: [tags.number, tags.atom], color: "#943d0e" },
+    { tag: [tags.lineComment, tags.blockComment], color: "#54687b" }
+]);
+
 function inspect(doc) {
     const previous = documentInfo.get(doc);
     if (previous) return previous;
