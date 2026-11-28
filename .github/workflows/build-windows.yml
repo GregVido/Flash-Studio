@@ -33,4 +33,4 @@ jobs:
           path: |
             artifacts/bin/x64/Release/FlashStudio/
             artifacts/bin/x64/Release/FlashTool/
-          if-no-files-found: error
+          if-no-files-found: error 
