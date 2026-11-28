@@ -51,6 +51,8 @@ $app = ".\artifacts\bin\x64\Release\FlashStudio"
 
 Conservez l’ensemble du dossier de sortie pour distribuer l’application. L’éditeur de code charge ses ressources localement et utilise le runtime Microsoft Edge WebView2.
 
+Pour compiler sur GitHub Actions, ajoutez `[build]` au message du dernier commit du push. Le workflow **Build Windows** compile la version Release x64 et dépose Flash Studio et FlashTool dans l’artefact `FlashStudio-Windows-x64`.
+
 ### Activer la compilation ActionScript
 
 Installez Java et téléchargez le compilateur et les définitions de l’API Flash dans le dossier de sortie :

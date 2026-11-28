@@ -51,6 +51,8 @@ $app = ".\artifacts\bin\x64\Release\FlashStudio"
 
 Keep the output directory together when distributing the app. The embedded code editor loads its assets locally and uses the Microsoft Edge WebView2 Runtime.
 
+To build on GitHub Actions, include `[build]` in the message of the last commit you push. The **Build Windows** workflow builds Release x64 and uploads Flash Studio and FlashTool as `FlashStudio-Windows-x64`.
+
 ### Enable ActionScript compilation
 
 Install Java and download the compiler and Flash API definitions into the output folder:

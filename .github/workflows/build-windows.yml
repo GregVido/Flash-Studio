@@ -1,0 +1,36 @@
+name: Build Windows
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ contains(github.event.head_commit.message, '[build]') }}
+    runs-on: windows-2025-vs2026
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          msbuild-architecture: x64
+
+      - name: Build Release x64
+        run: msbuild FlashStudio.slnx -restore -m -p:Configuration=Release -p:Platform=x64 -verbosity:minimal
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FlashStudio-Windows-x64
+          path: |
+            artifacts/bin/x64/Release/FlashStudio/
+            artifacts/bin/x64/Release/FlashTool/
+          if-no-files-found: error
