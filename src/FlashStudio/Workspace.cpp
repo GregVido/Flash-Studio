@@ -2108,18 +2108,20 @@ fire_and_forget Workspace::export_folder_html5()
             else
                 prepare(sender, args);
         });
-        const auto set_all = [&](bool value)
+        const auto set_visible = [&](bool value)
         {
-            std::fill(checked.begin(), checked.end(), value);
             for (std::size_t index = 0; index < visible.size(); ++index)
+            {
+                checked[visible[index]] = value;
                 if (const auto container = files.ContainerFromIndex(static_cast<int32_t>(index)).try_as<ListViewItem>())
                     if (const auto box = container.ContentTemplateRoot().try_as<CheckBox>())
                         box.IsChecked(value);
+            }
             update_count();
         };
         const auto filter = search.TextChanged(auto_revoke, [&](auto&&, auto&&) { rebuild(); });
-        const auto select_all = all.Click(auto_revoke, [&](auto&&, auto&&) { set_all(true); });
-        const auto deselect_all = none.Click(auto_revoke, [&](auto&&, auto&&) { set_all(false); });
+        const auto select_all = all.Click(auto_revoke, [&](auto&&, auto&&) { set_visible(true); });
+        const auto deselect_all = none.Click(auto_revoke, [&](auto&&, auto&&) { set_visible(false); });
         rebuild();
         if (co_await prompt.ShowAsync() == ContentDialogResult::Primary && !closed_)
         {

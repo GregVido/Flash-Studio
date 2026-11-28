@@ -4,13 +4,16 @@
 
 namespace flash::web
 {
-inline constexpr std::string_view local_server = R"PY(import base64
+inline constexpr std::string_view local_server = R"PY(import argparse
+import base64
 import hashlib
 import http.client
 import json
+import lzma
 import socket
 import struct
 import threading
+import zlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -18,6 +21,8 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parent
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MAX_FRAME = 2 ** 20
+MAX_MOVIE = 256 * 1024 * 1024
+SOURCE_PREFIX = "/__flashstudio_source"
 NETWORK_FILE = ROOT / "__flashstudio" / "network.json"
 if not NETWORK_FILE.exists():
     NETWORK_FILE = ROOT / "network.json"
@@ -33,6 +38,34 @@ def pack_frame(opcode, payload):
     else:
         header = bytes([127]) + struct.pack("!Q", size)
     return bytes([128 | opcode]) + header + payload
+
+
+def unpack_movie(data):
+    if len(data) < 8 or data[:3] not in (b"FWS", b"CWS", b"ZWS"):
+        raise ValueError("Invalid SWF header")
+    size, = struct.unpack_from("<I", data, 4)
+    if not 15 <= size <= MAX_MOVIE:
+        raise ValueError("Invalid SWF length")
+    if data[:3] == b"FWS":
+        if len(data) < size:
+            raise ValueError("Truncated SWF")
+        return data[:size]
+    if data[:3] == b"CWS":
+        decoder = zlib.decompressobj()
+        body = decoder.decompress(memoryview(data)[8:], size - 7)
+        if not decoder.eof:
+            raise ValueError("Invalid compressed SWF")
+    else:
+        if len(data) < 17:
+            raise ValueError("Truncated LZMA header")
+        packed, = struct.unpack_from("<I", data, 8)
+        if packed not in (len(data) - 12, len(data) - 17):
+            raise ValueError("Invalid LZMA length")
+        stream = data[12:17] + b"\xff" * 8 + data[17:]
+        body = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE, memlimit=MAX_MOVIE).decompress(stream, size - 7)
+    if len(body) != size - 8:
+        raise ValueError("Invalid SWF body")
+    return b"FWS" + data[3:8] + body
 
 
 class SiteHandler(SimpleHTTPRequestHandler):
@@ -57,6 +90,8 @@ class SiteHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path.startswith(SOURCE_PREFIX + "/"):
+            return self.serve_movie_source(path.removeprefix(SOURCE_PREFIX))
         if not path.startswith("/__flashstudio_socket/"):
             if self.is_static(path):
                 return super().do_GET()
@@ -138,9 +173,24 @@ class SiteHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         self.forward_http()
 
-    def forward_http(self):
+    def serve_movie_source(self, path):
+        original = unquote(path)
+        if not original.lower().endswith(".swf") or any(
+                part in ("", ".", "..") for part in original[1:].split("/")) or any(
+                c in original for c in "\\\r\n\x00"):
+            return self.send_error(404)
+        try:
+            movies = json.loads(CATALOG_FILE.read_text("utf-8"))["movies"]
+        except (OSError, ValueError, KeyError):
+            return self.send_error(404)
+        if original not in movies:
+            return self.send_error(404)
+        return self.forward_http(movie_source=path)
+
+    def forward_http(self, movie_source=None):
         path = urlsplit(self.path)
-        if path.scheme or path.netloc or not path.path.startswith("/") or path.path.startswith("/__flashstudio"):
+        if path.scheme or path.netloc or not path.path.startswith("/") or (
+                not movie_source and path.path.startswith("/__flashstudio")):
             return self.send_error(404)
         origin = self.headers.get("Origin")
         local_port = self.server.server_port
@@ -163,14 +213,33 @@ class SiteHandler(SimpleHTTPRequestHandler):
         headers = {name: self.headers[name] for name in (
             "Accept", "Authorization", "Content-Type", "Cookie", "If-Modified-Since", "Origin", "Referer"
         ) if name in self.headers}
+        if movie_source:
+            headers.pop("If-Modified-Since", None)
         remote = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         try:
-            remote.request(self.command, self.path, self.rfile.read(size) if size else None, headers)
+            remote.request(self.command, movie_source or self.path, self.rfile.read(size) if size else None, headers)
             response = remote.getresponse()
         except (OSError, ValueError, http.client.HTTPException):
             remote.close()
             return self.send_error(502, "HTTP backend unavailable")
         try:
+            if movie_source:
+                if response.status != 200:
+                    return self.send_error(response.status, "Original SWF unavailable")
+                incoming = response.read(MAX_MOVIE + 1)
+                if len(incoming) > MAX_MOVIE:
+                    return self.send_error(413, "Original SWF too large")
+                try:
+                    movie = unpack_movie(incoming)
+                except (ValueError, zlib.error, lzma.LZMAError) as error:
+                    return self.send_error(502, str(error))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(movie)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(movie)
+                return
             self.send_response(response.status)
             ignore = {"connection", "content-length", "date", "keep-alive", "proxy-authenticate", "proxy-authorization",
                       "server", "te", "trailer", "transfer-encoding", "upgrade"}
@@ -262,8 +331,11 @@ class SiteHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    with ThreadingHTTPServer(("127.0.0.1", 8000), SiteHandler) as server:
-        print("http://127.0.0.1:8000/", flush=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8000)
+    options = parser.parse_args()
+    with ThreadingHTTPServer(("127.0.0.1", options.port), SiteHandler) as server:
+        print(f"http://127.0.0.1:{server.server_port}/", flush=True)
         server.serve_forever()
 )PY";
 }

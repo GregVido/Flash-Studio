@@ -1,9 +1,11 @@
 """Generate small SWFs and exercise the native CLI with Python's standard library."""
 
 import argparse
+from hashlib import sha256
 import json
 import lzma
 from pathlib import Path
+from runpy import run_path
 import shutil
 import struct
 import subprocess
@@ -215,6 +217,8 @@ def check(exe, folder, asc=None):
         '});\napp.listen(config.webServerPort);\n', encoding="utf-8")
     (web_root / "params.xml").write_text("<config/>", encoding="utf-8")
     (web_folder / "config.json").write_text('{"webServerPort":36000,"secret":"must stay private"}', encoding="utf-8")
+    routes = {"/chat/app.swf": {"/data/fx/asset.swf": "/data/skin/7/peau & #.swf"}}
+    (web_folder / "flashstudio-movie-routes.json").write_text(json.dumps(routes), encoding="utf-8")
     web_batch = folder / "html5-workspace"
     run("export-html5-workspace", web_folder, web_batch)
     web_index = json.loads((web_batch / "__flashstudio" / "catalog.json").read_text("utf-8"))
@@ -231,11 +235,20 @@ def check(exe, folder, asc=None):
         bundle = web_batch / web_index["packages"][url].lstrip("/")
         scene = json.loads((bundle / "scene.json").read_text("utf-8"))
         assert web_index["packages"][unquote(scene["workspace"]["source"])] == web_index["packages"][url]
+        assert scene["workspace"]["sha256"] == sha256(animation.read_bytes()).hexdigest()
         shared_shapes.add((bundle / scene["assets"]["10"]["url"]).resolve())
     assert not any(web_batch.rglob("source.bin")) and not any(web_batch.rglob("sources"))
     assert not any(web_batch.rglob("*.swf")) and not any(web_batch.rglob("stage.css"))
     assert len(shared_shapes) == 1 and next(iter(shared_shapes)).is_file()
     assert (web_batch / "params.xml").is_file() and not (web_batch / "config.json").exists()
+    assert json.loads((web_batch / "__flashstudio/movie-routes.json").read_text("utf-8")) == routes
+    unpack_movie = run_path(str(web_batch / "serve.py"))["unpack_movie"]
+    raw = swf(b"FWS", body, body)
+    assert unpack_movie(raw) == raw
+    assert unpack_movie(swf(b"CWS", body, zlib.compress(body))) == raw
+    lzma_payload = lzma.compress(body, format=lzma.FORMAT_ALONE)
+    properties, payload = lzma_payload[:5], lzma_payload[13:]
+    assert unpack_movie(swf(b"ZWS", body, struct.pack("<I", len(payload)) + properties + payload)) == raw
     assert sorted(web_folder.rglob("*.swf")) == sorted([
         deployed, web_root / "data" / "fx" / "asset.swf", web_root / "data" / "skin" / "7" / "peau & #.swf"
     ])
@@ -249,7 +262,8 @@ def check(exe, folder, asc=None):
     assert direct_index["entry"] == "/chat/app_original.html"
     assert direct_index["movies"]["/data/fx/asset.swf"] == "/data/fx/asset.html"
     assert unquote(direct_index["movies"]["/data/skin/7/peau & #.swf"]) == "/data/skin/7/peau & #.html"
-    assert json.loads((direct_batch / "__flashstudio" / "network.json").read_text("utf-8"))["backendPort"] == 36000
+    direct_network = json.loads((direct_batch / "__flashstudio" / "network.json").read_text("utf-8"))
+    assert direct_network["backendPort"] == 36000 and direct_network["projectMovieRoutes"]
     assert (direct_batch / "params.xml").is_file() and not (direct_batch / "test").exists()
 
     web_demo = folder / "html5-demo"

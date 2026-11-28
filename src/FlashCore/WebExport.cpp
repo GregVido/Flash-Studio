@@ -125,6 +125,7 @@ let data, root, mainBundle, catalog, running = false, previous = 0, accumulated 
 let sockets = Object.create(null), httpRoutes = Object.create(null);
 let movieRoutes = Object.create(null);
 let lazyAssetPaths = [];
+let originalMovies = false;
 const movieRequests = new Map();
 const cachedMovieSizes = new WeakMap();
 const movieByteBudget = 24 * 1024 * 1024;
@@ -2313,10 +2314,27 @@ function movieAddress(value, bundle) {
     return url;
 }
 
-function movieReference(page, url, version = 0) {
-    // A signature and identity for loadBytes. The original SWF is not exported.
-    const bytes = new ByteArray(Uint8Array.of(70, 87, 83, version));
-    movieBytes.set(bytes, { page, url });
+async function readMovieSource(scene, page, signal) {
+    if (!originalMovies || !scene.workspace?.source) return null;
+    const origin = new URL(scene.workspace.source, page);
+    if (origin.origin !== projectUrl.origin) return null;
+    const reply = await fetch(new URL("__flashstudio_source" + origin.pathname, projectUrl), { signal });
+    if (!reply.ok) throw new Error("SWF d’origine indisponible (" + reply.status + ") : " + origin.pathname);
+    const bytes = new Uint8Array(await reply.arrayBuffer());
+    if (bytes.length !== scene.byteSize || bytes[0] !== 70 || bytes[1] !== 87 || bytes[2] !== 83 || bytes[3] !== scene.swfVersion)
+        throw new Error("Le SWF d’origine diffère du film converti : " + origin.pathname);
+    if (scene.workspace.sha256 && globalThis.crypto?.subtle) {
+        const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const digest = Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join("");
+        if (digest !== scene.workspace.sha256)
+            throw new Error("Le SWF d’origine a changé depuis l’export : " + origin.pathname);
+    }
+    return bytes;
+}
+
+function movieReference(page, url, scene, original) {
+    const bytes = new ByteArray(original ?? Uint8Array.of(70, 87, 83, scene.swfVersion), Boolean(original));
+    movieBytes.set(bytes, { page, url, original });
     return bytes;
 }
 
@@ -2384,7 +2402,7 @@ async function preloadLinkedPixels(scene, page) {
     }
 }
 
-async function loadMovie(page, address, domain) {
+async function loadMovie(page, address, domain, original) {
     if (page.origin !== documentUrl.origin) throw new Error("Le projet lié doit être sur la même origine.");
     let pending = movieRequests.get(page.href);
     if (pending) {
@@ -2400,17 +2418,20 @@ async function loadMovie(page, address, domain) {
             import(new URL("actions.js", page).href),
         ]).then(async ([{ scene, size }, classes, script]) => {
             const lazy = lazyAssetPaths.some(prefix => address.pathname.startsWith(prefix));
+            const source = original ?? readMovieSource(scene, page);
             const pixels = Promise.all([loadPixelMapImages(scene, page), preloadLinkedPixels(scene, page), loadFonts(scene, page)]);
+            let visuals;
             if (script.actions.length || Object.values(scene.clips).some(clip => clip.legacyInitialize))
-                await Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
+                visuals = Promise.all([pixels, ...Object.values(scene.assets).filter(asset => asset.url).map(asset =>
                     decodeRaster(rasterImage(new URL(asset.url, page).href)).catch(() => {}))]);
-            else await Promise.all([pixels, preloadBitmapSources(scene, classes.definitions, page)]);
-            return { scene, size, definitions: classes.definitions, actions: script.actions, domains: new WeakMap(), lazy };
+            else visuals = Promise.all([pixels, preloadBitmapSources(scene, classes.definitions, page)]);
+            const [bytes] = await Promise.all([source, visuals]);
+            return { scene, size, bytes, definitions: classes.definitions, actions: script.actions, domains: new WeakMap(), lazy };
         });
         movieRequests.set(page.href, pending);
         pending.then(assets => {
             if (movieRequests.get(page.href) !== pending) return;
-            const size = assets.size;
+            const size = assets.size + (assets.bytes?.byteLength ?? 0);
             cachedMovieSizes.set(pending, size);
             cachedMovieBytes += size;
             trimMovieRequests();
@@ -2426,7 +2447,7 @@ async function loadMovie(page, address, domain) {
         assets.domains.set(domain, bundle);
         domain.install(bundle.classes);
     }
-    return bundle;
+    return { bundle, bytes: original ?? assets.bytes };
 }
 
 function scriptLoader(owner = mainBundle) {
@@ -2481,10 +2502,10 @@ function scriptLoader(owner = mainBundle) {
             event("open");
             if (page) {
                 const domain = context?.applicationDomain ?? applicationDomain(mainDomain);
-                const bundle = await loadMovie(page, url, domain);
+                const { bundle, bytes } = await loadMovie(page, url, domain, registered?.original);
                 if (pending !== current) return;
                 info.applicationDomain = domain;
-                info.bytes = movieReference(page, url, bundle.scene.swfVersion);
+                info.bytes = movieReference(page, url, bundle.scene, bytes);
                 info.bytesLoaded = info.bytesTotal = bundle.scene.byteSize;
                 const display = element("g");
                 const layer = { row: [0, 0, [1, 0, 0, 1, 0, 0], 1, "", 0, true],
@@ -2837,7 +2858,7 @@ function bundleNative(bundle, name, args) {
     if (name === "URLLoader")
         value = browserMedia.urlLoader(args[0], address,
             (request, url) => moviePage(String(request?.url ?? request), url, bundle),
-            movieReference);
+            async (page, url, scene, signal) => movieReference(page, url, scene, await readMovieSource(scene, page, signal)));
     else if (name === "Sound") value = browserMedia.sound(args[0], address);
     else return nativeObject(name, ...args);
     displayTypes.set(value, name);
@@ -3626,12 +3647,23 @@ try {
         sockets = Object.assign(Object.create(null), Object.fromEntries(
             Object.entries(config.sockets ?? {}).map(([key, endpoint]) => [key.trim().toLowerCase(), endpoint])));
         httpRoutes = config.http ?? httpRoutes;
-        movieRoutes = config.movieRoutes ?? movieRoutes;
+        if (config.projectMovieRoutes) {
+            try {
+                const routes = await fetch(new URL("movie-routes.json", import.meta.url));
+                if (!routes.ok) throw new Error("movie-routes.json : HTTP " + routes.status);
+                movieRoutes = await routes.json();
+            } catch (error) { scriptProblem(error); }
+        }
+        movieRoutes = Object.assign(Object.create(null), movieRoutes, config.movieRoutes);
+        originalMovies = config.originalMovieBytes === true || (config.originalMovieBytes !== false &&
+            Number.isInteger(config.backendPort) && config.backendPort > 0 && config.backendPort <= 65535 &&
+            ["127.0.0.1", "localhost"].includes(location.hostname));
         lazyAssetPaths = Array.isArray(config.lazyAssetPaths) ?
             config.lazyAssetPaths.filter(path => typeof path === "string" && path.startsWith("/") && path.endsWith("/")) : [];
         loaderInfo.parameters = Object.assign(Object.create(null), config.parameters, loaderInfo.parameters);
     }
-    loaderInfo.bytes = movieReference(bundleUrl, mainBundle.source, data.swfVersion);
+    const [original] = await Promise.all([readMovieSource(data, bundleUrl), bitmapSources]);
+    loaderInfo.bytes = movieReference(bundleUrl, mainBundle.source, data, original);
     loaderInfo.bytesLoaded = loaderInfo.bytesTotal = data.byteSize;
     stage.setAttribute("viewBox", data.viewBox.join(" "));
     const [x, y, width, height] = data.viewBox;
@@ -3640,7 +3672,6 @@ try {
         stageBounds.setAttribute(key, value);
     }
     background.setAttribute("fill", "#fff");
-    await bitmapSources;
     root = new Clip(0, art);
     root.seek(1, false);
     stage.tabIndex = -1;
@@ -3786,18 +3817,23 @@ std::array<UCHAR, 32> asset_digest(ByteView bytes)
     return digest;
 }
 
+std::string digest_text(const std::array<UCHAR, 32>& digest)
+{
+    constexpr std::string_view hex = "0123456789abcdef";
+    std::string text;
+    text.reserve(64);
+    for (const auto value : digest)
+    {
+        text += hex[value >> 4];
+        text += hex[value & 15];
+    }
+    return text;
+}
+
 std::string shared_visual(const Asset& asset, const std::filesystem::path& root,
     const std::filesystem::path& package, std::mutex& mutex, ExportReport& report)
 {
-    const auto digest = asset_digest(asset.bytes);
-    constexpr std::wstring_view hex = L"0123456789abcdef";
-    std::wstring filename;
-    filename.reserve(64 + asset.extension.size());
-    for (const auto value : digest)
-    {
-        filename += hex[value >> 4];
-        filename += hex[value & 15];
-    }
+    auto filename = std::filesystem::path(digest_text(asset_digest(asset.bytes))).wstring();
     filename += asset.extension;
     const auto path = root / "assets" / filename;
     {
@@ -3854,7 +3890,7 @@ std::filesystem::path resolve_swf(const std::filesystem::path& root, const std::
 }
 
 ExportReport write_package(const Movie& movie, const std::filesystem::path& source, const std::filesystem::path& relative,
-    Packages& packages, std::string_view workspace_url = {})
+    Packages& packages, std::string_view workspace_url = {}, std::string_view workspace_digest = {})
 {
     const auto destination = packages.destination / relative;
     std::filesystem::create_directories(destination);
@@ -4004,7 +4040,8 @@ ExportReport write_package(const Movie& movie, const std::filesystem::path& sour
     scene += ",\"fontClasses\":" + font_classes + '}';
     scene += ",\"fonts\":" + fonts + '}';
     if (!workspace_url.empty())
-        scene += ",\"workspace\":{\"source\":" + web::json_string(workspace_url) + "}";
+        scene += ",\"workspace\":{\"source\":" + web::json_string(workspace_url) +
+            ",\"sha256\":" + web::json_string(workspace_digest) + "}";
     scene += "}";
     write_text(destination / "scene.json", scene);
     std::string script = "export const actions = [\n";
@@ -4126,7 +4163,7 @@ void write_web_guide(const std::filesystem::path& root, const std::filesystem::p
             "Main movie: {}\n\n"
             "Each converted movie has an HTML page at the original SWF's relative path.\n"
             "The converted runtime and movie assets are in __flashstudio/.\n"
-            "Scripts that inspect the original SWF bytes require manual porting.\n"
+            "If scripts read the original SWF bytes, serve.py can retrieve the public SWFs from the configured backend.\n"
             "Publish the whole export at the website root to preserve absolute resource URLs.\n"
             "Projects using HTTP or WebSocket services still need their backend.\n"
             "Local connection settings: __flashstudio/network.json\n"
@@ -4136,7 +4173,7 @@ void write_web_guide(const std::filesystem::path& root, const std::filesystem::p
             "Film principal : {}\n\n"
             "Chaque film converti a une page HTML au chemin relatif du SWF d’origine.\n"
             "Le lecteur et les ressources converties se trouvent dans __flashstudio/.\n"
-            "Les scripts qui lisent les octets du SWF d’origine demandent un portage.\n"
+            "Pour les scripts qui lisent les octets d’origine, serve.py peut récupérer les SWF publics depuis le serveur configuré.\n"
             "Publiez l’export entier à la racine du site pour conserver les URL absolues des ressources.\n"
             "Les projets utilisant des services HTTP ou WebSocket ont toujours besoin de leur serveur.\n"
             "Réglages de connexion locale : __flashstudio/network.json\n"
@@ -4204,7 +4241,8 @@ void scan_web_folder(const std::filesystem::path& folder, std::vector<std::files
         incomplete_folders.push_back(folder.filename());
 }
 
-std::string workspace_network(const std::filesystem::path& project, const std::filesystem::path& public_root)
+std::string workspace_network(const std::filesystem::path& project, const std::filesystem::path& public_root,
+    bool project_movie_routes)
 {
     std::string sockets;
     std::string backend = "null";
@@ -4255,7 +4293,8 @@ std::string workspace_network(const std::filesystem::path& project, const std::f
     std::error_code error;
     const auto effects = guest && std::filesystem::is_directory(public_root / "data" / "fx", error) ?
         ",\"lazyAssetPaths\":[\"/data/fx/\",\"/data.old/fx/\"]" : "";
-    return "{\"http\":{},\"sockets\":{" + sockets + "},\"tcp\":{},\"backendPort\":" + backend + parameters + effects + "}\n";
+    const auto routes = project_movie_routes ? ",\"projectMovieRoutes\":true" : "";
+    return "{\"http\":{},\"sockets\":{" + sockets + "},\"tcp\":{},\"backendPort\":" + backend + parameters + effects + routes + "}\n";
 }
 
 void reuse_workspace_movie(const std::filesystem::path& root, const WorkspaceMovie& original, const WorkspaceMovie& job)
@@ -4432,7 +4471,10 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
             details += (english ? "- Could not copy " : "- Copie impossible pour ") + utf8_path(relative) + '\n';
     }
 
-    write_web_runtime(output, workspace_network(plan.project, plan.public_root));
+    const auto movie_routes = read_small_text(plan.project / "flashstudio-movie-routes.json");
+    write_web_runtime(output, workspace_network(plan.project, plan.public_root, !movie_routes.empty()));
+    if (!movie_routes.empty())
+        write_text(shared / "movie-routes.json", movie_routes);
 
     struct Result { std::size_t omissions{}; std::string error; };
     std::vector<Result> results(jobs.size());
@@ -4467,7 +4509,7 @@ WebWorkspaceReport export_html5_workspace(const WebWorkspacePlan& plan, const st
                 const auto write = [&]
                 {
                     Packages packages{plan.project, shared, {}, 0, 0, &visual_lock};
-                    return write_package(*movie, job.path, job.package, packages, url_path(job.url)).failed;
+                    return write_package(*movie, job.path, job.package, packages, url_path(job.url), digest_text(signature)).failed;
                 };
                 if (previous.valid())
                 {

@@ -204,7 +204,7 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
         return [url, { method, headers, body: body ?? undefined, credentials: "same-origin" }];
     };
 
-    function urlLoader(request, address, movieForUrl, movieReference) {
+)JS" R"JS(    function urlLoader(request, address, movieForUrl, movieReference) {
         const view = dispatcher();
         let pending;
         const loader = Object.assign(view, {
@@ -225,7 +225,9 @@ export function mediaAdapters({ dispatcher, emit, resolve, socketEndpoint, probl
                         if (!response.ok) throw new Error("HTTP " + response.status + " · " + url);
                         const scene = await response.json();
                         if (pending !== operation) return;
-                        loader.data = movieReference(movie, url, scene.swfVersion);
+                        const bytes = await movieReference(movie, url, scene, operation.signal);
+                        if (pending !== operation) return;
+                        loader.data = bytes;
                         loader.bytesLoaded = loader.bytesTotal = scene.byteSize;
                         emit(view, "open");
                         emit(view, "httpStatus", { status: response.status });
